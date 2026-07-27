@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Brasaland: El sabor de la brasa, en cada bocado</title>
+</head>
+<body>
+
+    <header>
+         <!-- Barra de navegación responsiva fijada-->
+    <nav class="fixed top-0 left-0 right-0 z-50 w-full border-b border-red-200 bg-white">
+        <input id="menu-toggle" type="checkbox" class="peer hidden" />
+
+        <div class="mx-auto flex h-12 items-center justify-between px-3 md:h-14 md:px-4 lg:h-16 lg:max-w-6xl lg:px-8">
+            <img src="aie-company-project-monorepo-juan-gouveia/uis/website/media/logo-brasaland.png" alt="Logo Brasaland" class="h-6 w-auto md:h-8 lg:h-10" />
+            <span class="text-sm font-semibold text-red-700 md:text-base lg:text-lg">Daya Edita</span>
+
+            <label for="menu-toggle" class="cursor-pointer rounded p-2 hover:bg-red-100 md:hidden">
+                <span class="sr-only">Abrir Menú</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </label>
+
+            <ul class="hidden md:flex md:items-center md:gap-1 lg:gap-3">
+                <li><a href="#inicio" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Inicio</a></li>
+                <li><a href="#ubicaciones" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Ubicaciones</a></li>
+                <li><a href="#menu" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Menú</a></li>
+                <li><a href="#brasapoints" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Brasa Points</a></li>
+                <li><a href="#contacto" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Contacto</a></li>
+            </ul>
+        </div>
+
+            <ul class="hidden border-t border-red-200 bg-white peer-checked:block md:hidden">
+                <li><a href="#kpis" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">KPI's</a></li>
+                <li><a href="#drivers" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Drivers</a></li>
+                <li><a href="#detalles" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Detalles</a></li>
+            </ul>
+    </nav>
+    
+</body>
+</html>>
