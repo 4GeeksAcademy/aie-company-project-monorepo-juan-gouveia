@@ -10,40 +10,51 @@
 
     <header>
         
-    <!-- Barra de navegación responsiva fijada -->
-    <nav class="fixed top-0 left-0 right-0 z-50 w-full border-b border-red-200 bg-white">
-        <input id="menu-toggle" type="checkbox" class="peer hidden" />
+        <!-- Barra de navegación responsiva fijada -->
+        <nav class="fixed top-0 left-0 right-0 z-50 w-full border-b border-red-200 bg-white">
+            <input id="menu-toggle" type="checkbox" class="peer hidden" />
 
-        <div class="mx-auto flex h-auto items-center justify-between px-3 md:px-4 lg:max-w-6xl lg:px-8">
-            <img src="media/logo-brasaland.png" alt="Logo Brasaland" class="h-18 w-auto mt-1.5" />
-            
-            <!-- Botón hamburguesa para dispositivos móviles -->
-            <label for="menu-toggle" class="cursor-pointer rounded p-2 hover:bg-red-100 md:hidden">
-                <span class="sr-only">Abrir Menú</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
-                </svg>
-            </label>
+            <div class="mx-auto flex h-auto items-center justify-between px-3 md:px-4 lg:max-w-6xl lg:px-8">
+                <img src="media/logo-brasaland.png" alt="Logo Brasaland" class="h-18 w-auto mt-1.5" />
+                
+                <!-- Botón hamburguesa para dispositivos móviles -->
+                <label for="menu-toggle" class="cursor-pointer rounded p-2 hover:bg-red-100 md:hidden">
+                    <span class="sr-only">Abrir Menú</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </label>
 
-            <!-- Items menú móvil -->
-            <ul class="hidden md:flex md:items-center md:gap-1 lg:gap-3">
-                <li><a href="#inicio" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Inicio</a></li>
-                <li><a href="#ubicaciones" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Ubicaciones</a></li>
-                <li><a href="#menu" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Menú</a></li>
-                <li><a href="#brasapoints" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Brasa Points</a></li>
-                <li><a href="#contacto" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Contacto</a></li>
-            </ul>
-        </div>
+                <!-- Items menú móvil -->
+                <ul class="hidden md:flex md:items-center md:gap-1 lg:gap-3">
+                    <li><a href="#inicio" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Inicio</a></li>
+                    <li><a href="#ubicaciones" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Ubicaciones</a></li>
+                    <li><a href="#menu" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Menú</a></li>
+                    <li><a href="#brasapoints" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Brasa Points</a></li>
+                    <li><a href="#contacto" class="rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100 md:text-sm lg:px-5 lg:text-base">Contacto</a></li>
+                </ul>
+            </div>
 
-            <!-- Items menú grande -->
-            <ul class="hidden border-t border-red-200 bg-white peer-checked:block md:hidden">
-                <li><a href="#inicio" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Inicio</a></li>
-                <li><a href="#ubicaciones" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Ubicaciones</a></li>
-                <li><a href="#menu" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Menú</a></li>
-                <li><a href="#brasapoints" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Brasa Points</a></li>
-                <li><a href="#contacto" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Contacto</a></li>
-            </ul>
-    </nav>
+                <!-- Items menú grande -->
+                <ul class="hidden border-t border-red-200 bg-white peer-checked:block md:hidden">
+                    <li><a href="#inicio" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Inicio</a></li>
+                    <li><a href="#ubicaciones" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Ubicaciones</a></li>
+                    <li><a href="#menu" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Menú</a></li>
+                    <li><a href="#brasapoints" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Brasa Points</a></li>
+                    <li><a href="#contacto" class="block w-full border-b border-red-100 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100">Contacto</a></li>
+                </ul>
+        </nav>
+
+    </header>
+
+    <!-- Sección Hero -->
+
+    <main id="main-top" class="mx-auto border-b border-red-200 pt-24 max-w-6xl px-3 py-4 md:px-4 lg:px-8">
+        <h1 class="mb-4 text-xl font-semibold text-black md:text-2xl lg:text-3xl"><span class="whitespace-nowrap">El sabor de la brasa,</span><br class="md:hidden"><span class="whitespace-nowrap"> en cada bocado</span></h1>
+        <p class="mb-6 text-sm text-black md:text-base lg:text-lg">Desde 2008 sirviendo las mejores carnes a la brasa en Colombia y Estados Unidos. 14 ubicaciones, una misma pasión por la calidad y el sabor.</p>
+    </main>
+
+    
     
 </body>
 </html>
