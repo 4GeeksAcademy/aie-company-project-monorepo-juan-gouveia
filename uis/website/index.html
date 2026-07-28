@@ -220,19 +220,46 @@
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 
                 <!-- Ubicaciones Colombia -->
-                <article class="bg-white rounded-lg p-4 shadow-md">
-                    <h3 class="mb-4 text-md font-semibold text-red-700 md:text-lg lg:text-xl">Colombia</h3>
-                    
-                    <h4 class="mb-2 text-md font-semibold text-red-700 md:text-lg lg:text-xl">Medellín</h4>
-                    <p class="mb-2 font-semibold">Sede Medellín 01</p>
-                    <p class="mb-2">Cra. 43A #10A - 50, Medellín, Antioquia, Colombia</p>
-                    <p class="mb-2">Teléfono: +57 4 1234567</p>
-                    <a href="https://goo.gl/maps/medellin-location" target="_blank" rel="noopener noreferrer" class="text-red-700 hover:underline">Ver en Google Maps</a>
+                <article class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
+                    <h3 class="mb-4 text-md font-semibold text-red-700 md:text-lg lg:text-xl" id="ubic-colombia-title">Colombia</h3>
 
+                    <h4 class="mb-2 text-md font-semibold text-red-700 md:text-md lg:text-lg">Medellín</h4>
+
+                        <div class="border border-red-200 rounded-lg p-3 mb-4" role="group" aria-labelledby="sede-med-01-title">
+                            <p class="mb-1 font-semibold" id="sede-med-01-title">Sede Medellín 01</p>
+                            <p class="mb-1">Cra. 43A #10A - 50, Medellín, Antioquia, Colombia</p>
+                            <p class="mb-1">Teléfono: +57 4 1234567</p>
+                            <a href="https://goo.gl/maps/medellin-location" aria-describedby="maps-new-tab-note" target="_blank" rel="noopener noreferrer" class="text-red-700 hover:underline">Ver en Google Maps</a>
+                            <span id="maps-new-tab-note" class="sr-only">Se abre en pestaña nueva.</span>
+                        </div>
+
+                        <div class="border border-red-200 rounded-lg p-3 mb-4" role="group" aria-labelledby="sede-med-02-title">
+                            <p class="mb-1 font-semibold" id="sede-med-02-title">Sede Medellín 02</p>
+                            <p class="mb-1">Av. El Poblado #15-80, Medellín, Antioquia, Colombia</p>
+                            <p class="mb-1">Teléfono: +57 4 2345678</p>
+                            <a href="https://goo.gl/maps/medellin-location-2" aria-describedby="maps-new-tab-note-2" target="_blank" rel="noopener noreferrer" class="text-red-700 hover:underline">Ver en Google Maps</a>
+                            <span id="maps-new-tab-note-2" class="sr-only">Se abre en pestaña nueva.</span>
+                        </div>
+
+                        <div class="border border-red-200 rounded-lg p-3 mb-4" role="group" aria-labelledby="sede-med-03-title">
+                            <p class="mb-1 font-semibold" id="sede-med-03-title">Sede Medellín 03</p>
+                            <p class="mb-1">Calle 10 #40-22, Medellín, Antioquia, Colombia</p>
+                            <p class="mb-1">Teléfono: +57 4 3456789</p>
+                            <a href="https://goo.gl/maps/medellin-location-3" aria-describedby="maps-new-tab-note-3" target="_blank" rel="noopener noreferrer" class="text-red-700 hover:underline">Ver en Google Maps</a>
+                            <span id="maps-new-tab-note-3" class="sr-only">Se abre en pestaña nueva.</span>
+                        </div>
+
+                        <div class="border border-red-200 rounded-lg p-3 mb-4" role="group" aria-labelledby="sede-med-04-title">
+                            <p class="mb-1 font-semibold" id="sede-med-04-title">Sede Medellín 04</p>
+                            <p class="mb-1">Cra. 70 #45-12, Medellín, Antioquia, Colombia</p>
+                            <p class="mb-1">Teléfono: +57 4 4567890</p>
+                            <a href="https://goo.gl/maps/medellin-location-4" aria-describedby="maps-new-tab-note-4" target="_blank" rel="noopener noreferrer" class="text-red-700 hover:underline">Ver en Google Maps</a>
+                            <span id="maps-new-tab-note-4" class="sr-only">Se abre en pestaña nueva.</span>
+                        </div>
                 </article>
 
             </div>
-
+        </section>
     
 </body>
 </html>
