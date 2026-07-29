@@ -94,7 +94,7 @@
         </nav>
     </header>
 
-    <main class="mt-20">
+    <main class="mt-12">
 
         <section class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8">
             <div class="flex flex-col items-center justify-center gap-4 py-12 text-center">
@@ -154,7 +154,6 @@
                     <option value="bra-orl-01">Brasaland Orlando 01</option>
                     <option value="bra-orl-02">Brasaland Orlando 02</option>
                 </select>
-               
                 <input type="tel" name="telefono" placeholder="Número telefónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
 
                     <div class="grid grid-cols-2 gap-4 md:grid-cols-2">
@@ -168,10 +167,20 @@
     <!-- Tercer paso registro -->
     <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
         <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
-            <div class="flex flex-col gap-4 py-12">
-                <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <div class="flex flex-col gap-2 py-4">
+                    <p class="text-gray-700">Selecciona tus restricciones alimenticias</p>
+                <input type="checkbox" name="sin-restricciones" checked class="rounded border border-red-200 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <label for="sin-restricciones" class="text-gray-700">Sin restricciones</label>
+                <input type="checkbox" name="vegano" class="rounded border border-red-200 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <label for="vegano" class="text-gray-700">Vegano</label>
+                <input type="checkbox" name="sin-gluten" class="rounded border border-red-200 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <label for="sin-gluten" class="text-gray-700">Sin gluten</label>
+
                 <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
-                <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
+                    <div class="grid grid-cols-2 gap-4 md:grid-cols-2">
+                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
+                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
+                    </div>
             </div>
         </form>
     </section>
