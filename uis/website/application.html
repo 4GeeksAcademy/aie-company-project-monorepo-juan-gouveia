@@ -121,21 +121,64 @@
     <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
         <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
             <div class="flex flex-col gap-4 py-12">
-                <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
-                <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
-                <div class="grid grid-cols-2 gap-4 md:grid-cols-2">
-                <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
-                <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
-                </div>
+                
+                <select name="pais" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
+                    <option value="">Selecciona un país</option>
+                    <option value="colombia">Colombia</option>
+                    <option value="estados-unidos">Estados Unidos</option>
+                </select>
+                
+                <select name="ciudad" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
+                    <option value="">Selecciona tu ciudad</option>
+                    <option value="medellin">Medellín</option>
+                    <option value="bogota">Bogotá</option>
+                    <option value="cali">Cali</option>
+                    <option value="miami">Miami</option>
+                    <option value="orlando">Orlando</option>
+                </select>
+                
+                <select name="ubicacion-favorita" class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
+                    <option value="">Selecciona tu Brasaland favorito</option>
+                    <option value="bra-med-01">Sede Medellín 01</option>
+                    <option value="bra-med-02">Sede Medellín 02</option>
+                    <option value="bra-med-03">Sede Medellín 03</option>
+                    <option value="bra-med-04">Sede Medellín 04</option>
+                    <option value="bra-bog-01">Brasaland Bogotá 01</option>
+                    <option value="bra-bog-02">Brasaland Bogotá 02</option>
+                    <option value="bra-bog-03">Brasaland Bogotá 03</option>
+                    <option value="bra-bog-04">Brasaland Bogotá 04</option>
+                    <option value="bra-cal-01">Brasaland Cali 01</option>
+                    <option value="bra-cal-02">Brasaland Cali 02</option>
+                    <option value="bra-mia-01">Brasaland Miami 01</option>
+                    <option value="bra-mia-02">Brasaland Miami 02</option>
+                    <option value="bra-orl-01">Brasaland Orlando 01</option>
+                    <option value="bra-orl-02">Brasaland Orlando 02</option>
+                </select>
+               
+                <input type="tel" name="telefono" placeholder="Número telefónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+
+                    <div class="grid grid-cols-2 gap-4 md:grid-cols-2">
+                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
+                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
+                    </div>
             </div>
         </form>
     </section>
 
     <!-- Tercer paso registro -->
+    <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
+        <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
+            <div class="flex flex-col gap-4 py-12">
+                <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
+            </div>
+        </form>
+    </section>
 
     <footer class="bg-gray-100 border-t border-red-200 mx-auto max-w-6xl px-3 py-4 md:px-4 lg:px-8">
         <div class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8 text-center text-white">
-            <p>&copy; 2024 Brasaland. Todos los derechos reservados.</p>
+            <p>&copy; 2026 Brasaland. Todos los derechos reservados.</p>
         </div>
     </footer>
 
