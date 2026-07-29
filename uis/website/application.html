@@ -21,7 +21,7 @@
                 "@type": "WebPage",
                 "@id": "https://brasaland.com/#webpage",
                 "url": "https://brasaland.com/",
-                "name": "Brasaland: El sabor de la brasa, en cada bocado",
+                "name": "Brasaland: Registrate en Brasa Points",
                 "isPartOf": {
                     "@id": "https://brasaland.com/#website"
                 },
@@ -80,7 +80,64 @@
         }
     </script>
 
-    <title>Brasaland: El sabor de la brasa, en cada bocado</title>
+    <title>Brasaland: Registrate en Brasa Points</title>
 
 </head>
 
+<body class="bg-gray-100">
+
+    <header>
+        <nav aria-label="Navegación principal" class="fixed top-0 left-0 right-0 z-50 w-full border-b border-red-200 bg-white">
+            <div class="mx-auto flex h-auto items-center justify-between px-3 md:px-4 lg:max-w-6xl lg:px-8">
+                <img src="media/logo-brasaland.png" alt="Logo Brasaland" class="h-18 w-auto mt-1.5" />
+            </div>
+        </nav>
+    </header>
+
+    <main class="mt-20">
+
+        <section class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8">
+            <div class="flex flex-col items-center justify-center gap-4 py-12 text-center">
+                <h1 class="text-3xl font-bold text-gray-800 sm:text-4xl">¡Bienvenido a Brasa Points!</h1>
+                <p class="text-lg text-gray-600 sm:text-xl">Regístrate y empieza a disfrutar de los beneficios de ser parte de nuestra familia.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Primer paso registro -->
+    <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
+        <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
+            <div class="flex flex-col gap-4 py-12">
+                <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Segundo paso registro -->
+
+    <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
+        <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
+            <div class="flex flex-col gap-4 py-12">
+                <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+                <div class="grid grid-cols-2 gap-4 md:grid-cols-2">
+                <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
+                <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <!-- Tercer paso registro -->
+
+    <footer class="bg-gray-100 border-t border-red-200 mx-auto max-w-6xl px-3 py-4 md:px-4 lg:px-8">
+        <div class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8 text-center text-white">
+            <p>&copy; 2024 Brasaland. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+
+</body>
+</html>
