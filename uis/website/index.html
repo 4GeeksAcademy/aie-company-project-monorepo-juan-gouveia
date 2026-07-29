@@ -8,70 +8,38 @@
     <!-- Schema para SEO-->
     <script type="application/ld+json">
         {
-        "@context": "https://schema.org",
-        "@graph": [
-            {
-            "@type": "WebSite",
-            "@id": "https://www.brasaland.com/#website",
-            "url": "https://www.brasaland.com/",
+            "@context": "https://schema.org",
+            "@type": "Restaurant",
             "name": "Brasaland",
-            "inLanguage": "es",
-            "publisher": {
-                "@id": "https://www.brasaland.com/#organization"
-            },
-            "potentialAction": {
-                "@type": "SearchAction",
-                "target": "https://www.brasaland.com/?s={search_term_string}",
-                "query-input": "required name=search_term_string"
-            }
-            },
-            {
-            "@type": "WebPage",
-            "@id": "https://www.brasaland.com/#webpage",
-            "url": "https://www.brasaland.com/",
-            "name": "Brasaland: El sabor de la brasa, en cada bocado",
-            "description": "Cadena de restaurantes especializada en carnes a la brasa con presencia en Colombia y Estados Unidos.",
-            "isPartOf": {
-                "@id": "https://www.brasaland.com/#website"
-            },
-            "mainEntity": {
-                "@id": "https://www.brasaland.com/#organization"
-            },
-            "primaryImageOfPage": {
-                "@type": "ImageObject",
-                "url": "https://www.brasaland.com/media/fachada-brasaland-medellin.jpg"
-            },
-            "inLanguage": "es"
-            },
-            {
-            "@type": ["Organization", "Restaurant"],
-            "@id": "https://www.brasaland.com/#organization",
-            "name": "Brasaland",
-            "url": "https://www.brasaland.com/",
-            "logo": "https://www.brasaland.com/media/logo-brasaland.png",
-            "image": "https://www.brasaland.com/media/fachada-brasaland-medellin.jpg",
-            "description": "Cadena de restaurantes especializada en carnes a la brasa con presencia en Colombia y Estados Unidos.",
+            "description": "Cadena de restaurantes de comida a la brasa en Colombia y Estados Unidos",
+            "url": "https://brasaland.com",
             "foundingDate": "2008",
-            "servesCuisine": ["Carnes a la brasa", "Parrilla", "Steakhouse"],
-            "areaServed": [
-                { "@type": "Country", "name": "Colombia" },
-                { "@type": "Country", "name": "United States" }
-            ],
-            "hasMenu": "https://www.brasaland.com/menu",
-            "contactPoint": [
+            "servesCuisine": "Grilled food, Colombian cuisine",
+            "priceRange": "$$",
+            "address": [
                 {
-                "@type": "ContactPoint",
-                "contactType": "customer support",
-                "telephone": "+1-000-000-0000",
-                "availableLanguage": ["es", "en"]
+                "@type": "PostalAddress",
+                "addressCountry": "CO",
+                "addressLocality": "Medellín",
+                "addressRegion": "Antioquia"
+                },
+                {
+                "@type": "PostalAddress",
+                "addressCountry": "US",
+                "addressLocality": "Miami",
+                "addressRegion": "FL"
                 }
             ],
+            "contactPoint": {
+                "@type": "ContactPoint",
+                "telephone": "+57-4-123-4567",
+                "contactType": "customer service",
+                "availableLanguage": ["Spanish", "English"]
+            },
             "sameAs": [
-                "https://www.instagram.com/tu-cuenta-real",
-                "https://www.facebook.com/tu-cuenta-real"
+                "https://instagram.com/brasaland",
+                "https://facebook.com/brasaland"
             ]
-            }
-        ]
         }
     </script>
 
