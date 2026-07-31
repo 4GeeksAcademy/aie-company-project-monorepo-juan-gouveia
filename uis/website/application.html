@@ -94,17 +94,17 @@
         </nav>
     </header>
 
-    <main class="mt-12">
+    
 
-        <section class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8">
+        <section class="mx-auto max-w-6xl px-3 mt-12 md:px-4 lg:px-8">
             <div class="flex flex-col items-center justify-center gap-4 py-12 text-center">
                 <h1 class="text-3xl font-bold text-gray-800 sm:text-4xl">¡Bienvenido a Brasa Points!</h1>
                 <p class="text-lg text-gray-600 sm:text-xl">Regístrate y empieza a disfrutar de los beneficios de ser parte de nuestra familia.</p>
             </div>
         </section>
 
-    </main>
-
+    
+    <main>
     <!-- Registro multi-paso -->
     <section class="bg-white rounded-lg p-4 shadow-md">
       <form id="registration-form" class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST" novalidate>
@@ -125,7 +125,7 @@
             </ol>
         </div>
     
-        <section id="step-1" data-step-panel="1" class="py-2">
+        <div id="step-1" data-step-panel="1" class="py-2">
             <fieldset class="flex flex-col gap-4 py-4">
             <legend class="text-md text-center font-semibold text-gray-800">Datos básicos</legend>
             <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
@@ -145,9 +145,9 @@
                 <input type="date" id="birth-year" name="birth-year" required class="rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
             </div>
             </fieldset>
-        </section>
+        </div>
     
-        <section id="step-2" data-step-panel="2" class="hidden py-2">
+        <div id="step-2" data-step-panel="2" class="hidden py-2">
             <fieldset class="flex flex-col gap-4 py-4">
             <legend class="text-md text-center font-semibold text-gray-800">Sobre tu ubicación</legend>
             <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
@@ -180,9 +180,9 @@
                 <input id="telefono" type="tel" name="telefono" placeholder="+573001234567" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
             </div>
             </fieldset>
-        </section>
+        </div>
     
-        <section id="step-3" data-step-panel="3" class="hidden py-2">
+        <div id="step-3" data-step-panel="3" class="hidden py-2">
             <fieldset class="flex flex-col gap-4 py-4">
             <legend class="text-md text-center font-semibold text-gray-800">Sobre ti</legend>
             <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
@@ -210,10 +210,13 @@
 
                 <label for="ofertas-email" class="flex items-center gap-2 text-gray-700"><input id="ofertas-email" type="checkbox" name="ofertas-email" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Quiero recibir ofertas por email</span></label>
 
-                <label for="acepto-terminos" class="flex items-center gap-2 text-gray-700"><input id="acepto-terminos" type="checkbox" name="acepto-terminos" required class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Acepto términos del programa <span class="text-red-600" aria-hidden="true">*</span> <button type="button" id="open-terms-modal" class="text-red-600 underline hover:text-red-700">Ver términos</button></span></label>
+                <div class="flex flex-col gap-2">
+                    <label for="acepto-terminos" class="flex items-center gap-2 text-gray-700"><input id="acepto-terminos" type="checkbox" name="acepto-terminos" required class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Acepto términos del programa <span class="text-red-600" aria-hidden="true">*</span></span></label>
+                    <p class="text-sm text-gray-600">Consulta los <button type="button" id="open-terms-modal" class="text-red-600 underline hover:text-red-700">términos del programa</button>.</p>
+                </div>
             </div>
             </fieldset>
-        </section>
+        </div>
     
         <div class="grid grid-cols-2 gap-4 py-2 md:grid-cols-2">
           <button id="prev-step-btn" type="button" data-nav="prev" class="hidden w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
@@ -222,11 +225,12 @@
         </div>
       </form>
     </section>
+    </main>
 
     <footer class="bg-gray-100 border-t border-red-200 mx-auto max-w-6xl px-3 py-4 md:px-4 lg:px-8">
-        <div class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8 text-center text-white">
-            <p>&copy; 2026 Brasaland. Todos los derechos reservados.</p>
-        </div>
+    <div class="flex items-center justify-between gap-3">
+        <p class="text-sm text-gray-600">&copy; 2026 Brasaland. <span class="block sm:inline sm:ml-1">Todos los derechos reservados.</span></p>
+    </div>
     </footer>
 
     <script src="validation.js"></script>
