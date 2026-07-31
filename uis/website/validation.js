@@ -172,12 +172,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function validateName(report) {
     const value = fields.name.value.trim();
     if (!value) {
-      setError(fields.name, "El nombre es obligatorio.");
+      setError(fields.name, "Ingresa tu nombre completo (nombre y apellido).");
       reportIfNeeded(fields.name, report);
       return false;
     }
     if (!hasAtLeastTwoWords(value)) {
-      setError(fields.name, "Ingresa al menos nombre y apellido.");
+      setError(fields.name, "Ingresa tu nombre completo (nombre y apellido).");
       reportIfNeeded(fields.name, report);
       return false;
     }
@@ -193,7 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
     if (!isValidEmail(value)) {
-      setError(fields.email, "Ingresa un correo válido.");
+      setError(fields.email, "Ingresa un email válido (ejemplo: nombre@correo.com).");
       reportIfNeeded(fields.email, report);
       return false;
     }
@@ -209,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
     if (!isAdultOver18(value)) {
-      setError(fields.birthYear, "Debes ser mayor de 18 años.");
+      setError(fields.birthYear, "Debes ser mayor de 18 años para registrarte en Brasa Points.");
       reportIfNeeded(fields.birthYear, report);
       return false;
     }
@@ -219,7 +219,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function validateCountry(report) {
     if (!fields.pais.value) {
-      setError(fields.pais, "Selecciona un país.");
+      setError(fields.pais, "Selecciona tu país.");
       reportIfNeeded(fields.pais, report);
       return false;
     }
@@ -233,7 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const allowed = getCitiesForCountry(country).map((c) => c.value);
 
     if (!city) {
-      setError(fields.ciudad, "Selecciona una ciudad.");
+      setError(fields.ciudad, "Selecciona tu ciudad.");
       reportIfNeeded(fields.ciudad, report);
       return false;
     }
@@ -275,7 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
     if (!isValidPhoneIntl(value)) {
-      setError(fields.telefono, "Usa formato internacional: +[código país][número].");
+      setError(fields.telefono, "Usa formato internacional: +[código país][10 dígitos].");
       reportIfNeeded(fields.telefono, report);
       return false;
     }
