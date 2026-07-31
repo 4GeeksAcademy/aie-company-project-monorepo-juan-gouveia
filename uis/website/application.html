@@ -126,66 +126,93 @@
         </div>
     
         <section id="step-1" data-step-panel="1" class="py-2">
-          <fieldset class="flex flex-col gap-4 py-4">
+            <fieldset class="flex flex-col gap-4 py-4">
             <legend class="text-md text-center font-semibold text-gray-800">Datos básicos</legend>
-            <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
-            <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
-            <div class="flex items-center gap-3">
-              <label for="birth-year" class="text-gray-700 whitespace-nowrap">Año de nacimiento:</label>
-              <input type="date" id="birth-year" name="birth-year" required class="rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+            <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
+
+            <div class="flex flex-col gap-2">
+                <label for="name" class="text-gray-700">Nombre completo <span class="text-red-600" aria-hidden="true">*</span></label>
+                <input id="name" type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
             </div>
-          </fieldset>
+
+            <div class="flex flex-col gap-2">
+                <label for="email" class="text-gray-700">Correo electrónico <span class="text-red-600" aria-hidden="true">*</span></label>
+                <input id="email" type="email" name="email" placeholder="correo@electronico.com" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+            </div>
+
+            <div class="flex items-center gap-3">
+                <label for="birth-year" class="text-gray-700 whitespace-nowrap">Fecha de nacimiento <span class="text-red-600" aria-hidden="true">*</span></label>
+                <input type="date" id="birth-year" name="birth-year" required class="rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+            </div>
+            </fieldset>
         </section>
     
         <section id="step-2" data-step-panel="2" class="hidden py-2">
             <fieldset class="flex flex-col gap-4 py-4">
-                <legend class="text-md text-center font-semibold text-gray-800">Sobre tu ubicación</legend>
+            <legend class="text-md text-center font-semibold text-gray-800">Sobre tu ubicación</legend>
+            <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
 
+            <div class="flex flex-col gap-2">
+                <label for="pais" class="text-gray-700">País <span class="text-red-600" aria-hidden="true">*</span></label>
                 <select id="pais" name="pais" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
                 <option value="">Selecciona un país</option>
                 <option value="colombia">Colombia</option>
                 <option value="estados-unidos">Estados Unidos</option>
                 </select>
+            </div>
 
+            <div class="flex flex-col gap-2">
+                <label for="ciudad" class="text-gray-700">Ciudad <span class="text-red-600" aria-hidden="true">*</span></label>
                 <select id="ciudad" name="ciudad" required disabled class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
                 <option value="">Selecciona tu ciudad</option>
                 </select>
+            </div>
 
+            <div class="flex flex-col gap-2">
+                <label for="ubicacion-favorita" class="text-gray-700">Brasaland favorito</label>
                 <select id="ubicacion-favorita" name="ubicacion-favorita" disabled class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
                 <option value="">Selecciona tu Brasaland favorito</option>
                 </select>
+            </div>
 
+            <div class="flex flex-col gap-2">
+                <label for="telefono" class="text-gray-700">Número telefónico <span class="text-red-600" aria-hidden="true">*</span></label>
                 <input id="telefono" type="tel" name="telefono" placeholder="+573001234567" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+            </div>
             </fieldset>
         </section>
     
         <section id="step-3" data-step-panel="3" class="hidden py-2">
-          <fieldset class="flex flex-col gap-4 py-4">
+            <fieldset class="flex flex-col gap-4 py-4">
             <legend class="text-md text-center font-semibold text-gray-800">Sobre ti</legend>
+            <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
+
             <p class="text-gray-700">Selecciona tus restricciones alimenticias</p>
             <div class="grid grid-cols-2 gap-4">
-              <label for="sin-restricciones" class="flex items-center gap-2 text-gray-700"><input id="sin-restricciones" type="checkbox" name="sin-restricciones" checked class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Sin restricciones</span></label>
-              <label for="vegano" class="flex items-center gap-2 text-gray-700"><input id="vegano" type="checkbox" name="vegano" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Vegano</span></label>
-              <label for="sin-gluten" class="flex items-center gap-2 text-gray-700"><input id="sin-gluten" type="checkbox" name="sin-gluten" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Sin gluten</span></label>
-              <label for="otros" class="flex items-center gap-2 text-gray-700"><input id="otros" type="checkbox" name="otros" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Otros</span></label>
+                <label for="sin-restricciones" class="flex items-center gap-2 text-gray-700"><input id="sin-restricciones" type="checkbox" name="sin-restricciones" checked class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Sin restricciones</span></label>
+                <label for="vegano" class="flex items-center gap-2 text-gray-700"><input id="vegano" type="checkbox" name="vegano" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Vegano</span></label>
+                <label for="sin-gluten" class="flex items-center gap-2 text-gray-700"><input id="sin-gluten" type="checkbox" name="sin-gluten" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Sin gluten</span></label>
+                <label for="otros" class="flex items-center gap-2 text-gray-700"><input id="otros" type="checkbox" name="otros" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Otros</span></label>
             </div>
-    
+
             <div class="flex flex-col gap-4">
-              <div class="flex flex-col gap-2">
-                <label for="como-nos-conociste" class="text-gray-700">¿Cómo nos conociste?</label>
+                <div class="flex flex-col gap-2">
+                <label for="como-nos-conociste" class="text-gray-700">¿Cómo nos conociste? <span class="text-red-600" aria-hidden="true">*</span></label>
                 <select id="como-nos-conociste" name="como-nos-conociste" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
-                  <option value="">Selecciona una opción</option>
-                  <option value="redes-sociales">Redes sociales</option>
-                  <option value="recomendacion">Recomendación</option>
-                  <option value="pasando-por-el-local">Pasando por el local</option>
-                  <option value="busqueda-en-internet">Búsqueda en internet</option>
-                  <option value="otro">Otro</option>
+                    <option value="">Selecciona una opción</option>
+                    <option value="redes-sociales">Redes sociales</option>
+                    <option value="recomendacion">Recomendación</option>
+                    <option value="pasando-por-el-local">Pasando por el local</option>
+                    <option value="busqueda-en-internet">Búsqueda en internet</option>
+                    <option value="otro">Otro</option>
                 </select>
-              </div>
-              <label for="ofertas-email" class="flex items-center gap-2 text-gray-700"><input id="ofertas-email" type="checkbox" name="ofertas-email" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Quiero recibir ofertas por email</span></label>
-              <label for="acepto-terminos" class="flex items-center gap-2 text-gray-700"><input id="acepto-terminos" type="checkbox" name="acepto-terminos" required class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Acepto términos del programa <button type="button" id="open-terms-modal" class="text-red-600 underline hover:text-red-700">Ver términos</button></span></label>
+                </div>
+
+                <label for="ofertas-email" class="flex items-center gap-2 text-gray-700"><input id="ofertas-email" type="checkbox" name="ofertas-email" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Quiero recibir ofertas por email</span></label>
+
+                <label for="acepto-terminos" class="flex items-center gap-2 text-gray-700"><input id="acepto-terminos" type="checkbox" name="acepto-terminos" required class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Acepto términos del programa <span class="text-red-600" aria-hidden="true">*</span> <button type="button" id="open-terms-modal" class="text-red-600 underline hover:text-red-700">Ver términos</button></span></label>
             </div>
-          </fieldset>
+            </fieldset>
         </section>
     
         <div class="grid grid-cols-2 gap-4 py-2 md:grid-cols-2">
