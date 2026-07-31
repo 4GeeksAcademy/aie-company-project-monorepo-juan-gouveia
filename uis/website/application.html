@@ -109,20 +109,20 @@
     <section class="bg-white rounded-lg p-4 shadow-md">
       <form id="registration-form" class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST" novalidate>
         <div class="py-4">
-          <ol id="progress-steps" class="grid grid-cols-3 items-center gap-2" aria-label="Progreso del registro">
-            <li class="flex items-center gap-2" data-progress-step="1" aria-current="step">
-              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-semibold text-white">1</span>
-              <span class="text-sm font-medium text-gray-800">Datos básicos</span>
+            <ol id="progress-steps" class="grid grid-cols-3 gap-4" aria-label="Progreso del registro">
+            <li class="flex flex-col items-center gap-2 text-center" data-progress-step="1" aria-current="step">
+                <span class="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-semibold text-white">1</span>
+                <span class="text-sm font-medium text-gray-800">Datos básicos</span>
             </li>
-            <li class="flex items-center gap-2" data-progress-step="2">
-              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">2</span>
-              <span class="text-sm font-medium text-gray-500">Ubicación</span>
+            <li class="flex flex-col items-center gap-2 text-center" data-progress-step="2">
+                <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">2</span>
+                <span class="text-sm font-medium text-gray-500">Ubicación</span>
             </li>
-            <li class="flex items-center gap-2" data-progress-step="3">
-              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">3</span>
-              <span class="text-sm font-medium text-gray-500">Sobre ti</span>
+            <li class="flex flex-col items-center gap-2 text-center" data-progress-step="3">
+                <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">3</span>
+                <span class="text-sm font-medium text-gray-500">Sobre ti</span>
             </li>
-          </ol>
+            </ol>
         </div>
     
         <section id="step-1" data-step-panel="1" class="py-2">
