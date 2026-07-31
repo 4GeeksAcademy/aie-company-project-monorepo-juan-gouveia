@@ -78,14 +78,50 @@ document.addEventListener("DOMContentLoaded", () => {
     3: [validateHowDidYouKnow, validateDietaryRules, validateTerms]
   };
 
+  const errorElements = new WeakMap();
+
   function setError(input, message) {
     if (!input) return false;
+
     input.setCustomValidity(message || "");
+
+    let errorEl = errorElements.get(input);
+    const isCheckbox = input.type === "checkbox";
+    const host = isCheckbox && input.closest("label") ? input.closest("label") : input;
+
+    if (message && !errorEl) {
+      errorEl = document.createElement("p");
+      errorEl.className = "mt-1 text-sm text-red-600";
+      errorEl.setAttribute("aria-live", "polite");
+
+      const key = input.id || input.name || `field-${Math.random().toString(36).slice(2, 8)}`;
+      errorEl.id = `${key}-error`;
+      host.insertAdjacentElement("afterend", errorEl);
+      errorElements.set(input, errorEl);
+
+      const describedBy = input.getAttribute("aria-describedby");
+      if (!describedBy) {
+        input.setAttribute("aria-describedby", errorEl.id);
+      }
+    }
+
+    if (errorEl) {
+      if (message) {
+        errorEl.textContent = message;
+        errorEl.classList.remove("hidden");
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        errorEl.textContent = "";
+        errorEl.classList.add("hidden");
+        input.removeAttribute("aria-invalid");
+      }
+    }
+
     return !message;
   }
 
   function reportIfNeeded(input, shouldReport) {
-    if (shouldReport && input) input.reportValidity();
+    // Sin pop-up nativo; los errores se muestran debajo del campo.
   }
 
   function renderOptions(select, placeholder, options) {
