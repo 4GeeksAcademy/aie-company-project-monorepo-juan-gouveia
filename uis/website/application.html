@@ -94,7 +94,7 @@
         </nav>
     </header>
 
-    
+    <main>    
 
         <section class="mx-auto max-w-6xl px-3 mt-12 md:px-4 lg:px-8">
             <div class="flex flex-col items-center justify-center gap-4 py-12 text-center">
@@ -104,10 +104,11 @@
         </section>
 
     
-    <main>
+
     <!-- Registro multi-paso -->
-    <section class="bg-white rounded-lg p-4 shadow-md">
-      <form id="registration-form" class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST" novalidate>
+    <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="registro-title">
+        <h2 id="registro-title" class="sr-only">Formulario de registro Brasa Points</h2>
+        <form id="registration-form" class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST" novalidate>
         <div class="py-4">
             <ol id="progress-steps" class="grid grid-cols-3 gap-4" aria-label="Progreso del registro">
             <li class="flex flex-col items-center gap-2 text-center" data-progress-step="1" aria-current="step">
@@ -125,9 +126,9 @@
             </ol>
         </div>
     
-        <div id="step-1" data-step-panel="1" class="py-2">
+        <div id="step-1" data-step-panel="1" class="py-2" role="group" aria-labelledby="step-1-title">
             <fieldset class="flex flex-col gap-4 py-4">
-            <legend class="text-md text-center font-semibold text-gray-800">Datos básicos</legend>
+            <legend id="step-1-title" class="text-md text-center font-semibold text-gray-800">Datos básicos</legend>
             <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
 
             <div class="flex flex-col gap-2">
@@ -147,9 +148,9 @@
             </fieldset>
         </div>
     
-        <div id="step-2" data-step-panel="2" class="hidden py-2">
+        <div id="step-2" data-step-panel="2" class="py-2" role="group" aria-labelledby="step-2-title">
             <fieldset class="flex flex-col gap-4 py-4">
-            <legend class="text-md text-center font-semibold text-gray-800">Sobre tu ubicación</legend>
+            <legend id="step-2-title" class="text-md text-center font-semibold text-gray-800">Sobre tu ubicación</legend>
             <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
 
             <div class="flex flex-col gap-2">
@@ -182,9 +183,9 @@
             </fieldset>
         </div>
     
-        <div id="step-3" data-step-panel="3" class="hidden py-2">
+        <div id="step-3" data-step-panel="3" class="py-2" role="group" aria-labelledby="step-3-title">
             <fieldset class="flex flex-col gap-4 py-4">
-            <legend class="text-md text-center font-semibold text-gray-800">Sobre ti</legend>
+            <legend id="step-3-title" class="text-md text-center font-semibold text-gray-800">Sobre ti</legend>
             <p class="text-sm text-gray-500"><span class="text-red-600">*</span> Campo obligatorio</p>
 
             <p class="text-gray-700">Selecciona tus restricciones alimenticias</p>
@@ -223,6 +224,12 @@
           <button id="next-step-btn" type="button" data-nav="next" class="col-start-2 w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
           <button id="submit-step-btn" type="submit" data-nav="submit" class="hidden w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Confirmar</button>
         </div>
+        <noscript>
+            <div class="mt-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                JavaScript está desactivado. Se muestra el formulario completo en una sola página.
+            </div>
+            <button type="submit" class="mt-4 w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Enviar registro</button>
+        </noscript>
       </form>
     </section>
     </main>
