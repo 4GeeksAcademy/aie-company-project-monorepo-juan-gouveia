@@ -105,127 +105,95 @@
 
     </main>
 
-    <!-- Primer paso registro -->
-    <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
-        <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
-            
+    <!-- Registro multi-paso -->
+    <section class="bg-white rounded-lg p-4 shadow-md">
+      <form id="registration-form" class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST" novalidate>
+        <div class="py-4">
+          <ol id="progress-steps" class="grid grid-cols-3 items-center gap-2" aria-label="Progreso del registro">
+            <li class="flex items-center gap-2" data-progress-step="1" aria-current="step">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-semibold text-white">1</span>
+              <span class="text-sm font-medium text-gray-800">Datos básicos</span>
+            </li>
+            <li class="flex items-center gap-2" data-progress-step="2">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">2</span>
+              <span class="text-sm font-medium text-gray-500">Ubicación</span>
+            </li>
+            <li class="flex items-center gap-2" data-progress-step="3">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">3</span>
+              <span class="text-sm font-medium text-gray-500">Sobre ti</span>
+            </li>
+          </ol>
+        </div>
+    
+        <section id="step-1" data-step-panel="1" class="py-2">
+          <fieldset class="flex flex-col gap-4 py-4">
+            <legend class="text-md text-center font-semibold text-gray-800">Datos básicos</legend>
+            <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+            <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+            <div class="flex items-center gap-3">
+              <label for="birth-year" class="text-gray-700 whitespace-nowrap">Año de nacimiento:</label>
+              <input type="date" id="birth-year" name="birth-year" required class="rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+            </div>
+          </fieldset>
+        </section>
+    
+        <section id="step-2" data-step-panel="2" class="hidden py-2">
             <fieldset class="flex flex-col gap-4 py-4">
-                <legend class="text-md font-semibold text-gray-800 text-center">Datos básicos</legend>
-                <input type="text" name="name" placeholder="Nombre completo" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
-                <input type="email" name="email" placeholder="Correo electrónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
-                <div class="flex items-center gap-3">
-                <label for="birth-year">Año de nacimiento:</label>
-                    <input type="date" id="birth-year" name="birth-year" required class="rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none"/>
-                </div>
-            </fieldset>    
-                
-            <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
-            
-            
-        </form>
-    </section>
+                <legend class="text-md text-center font-semibold text-gray-800">Sobre tu ubicación</legend>
 
-    <!-- Segundo paso registro -->
+                <select id="pais" name="pais" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
+                <option value="">Selecciona un país</option>
+                <option value="colombia">Colombia</option>
+                <option value="estados-unidos">Estados Unidos</option>
+                </select>
 
-    <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
-        <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
-            
-            <fieldset class="flex flex-col gap-4 py-4">
-                <legend class="text-md font-semibold text-gray-800 text-center">Sobre tu ubicación</legend>
-                <select name="pais" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
-                    <option value="">Selecciona un país</option>
-                    <option value="colombia">Colombia</option>
-                    <option value="estados-unidos">Estados Unidos</option>
+                <select id="ciudad" name="ciudad" required disabled class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
+                <option value="">Selecciona tu ciudad</option>
                 </select>
-                
-                <select name="ciudad" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
-                    <option value="">Selecciona tu ciudad</option>
-                    <option value="medellin">Medellín</option>
-                    <option value="bogota">Bogotá</option>
-                    <option value="cali">Cali</option>
-                    <option value="miami">Miami</option>
-                    <option value="orlando">Orlando</option>
+
+                <select id="ubicacion-favorita" name="ubicacion-favorita" disabled class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
+                <option value="">Selecciona tu Brasaland favorito</option>
                 </select>
-                
-                <select name="ubicacion-favorita" class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
-                    <option value="">Selecciona tu Brasaland favorito</option>
-                    <option value="bra-med-01">Sede Medellín 01</option>
-                    <option value="bra-med-02">Sede Medellín 02</option>
-                    <option value="bra-med-03">Sede Medellín 03</option>
-                    <option value="bra-med-04">Sede Medellín 04</option>
-                    <option value="bra-bog-01">Brasaland Bogotá 01</option>
-                    <option value="bra-bog-02">Brasaland Bogotá 02</option>
-                    <option value="bra-bog-03">Brasaland Bogotá 03</option>
-                    <option value="bra-bog-04">Brasaland Bogotá 04</option>
-                    <option value="bra-cal-01">Brasaland Cali 01</option>
-                    <option value="bra-cal-02">Brasaland Cali 02</option>
-                    <option value="bra-mia-01">Brasaland Miami 01</option>
-                    <option value="bra-mia-02">Brasaland Miami 02</option>
-                    <option value="bra-orl-01">Brasaland Orlando 01</option>
-                    <option value="bra-orl-02">Brasaland Orlando 02</option>
-                </select>
-                <input type="tel" name="telefono" placeholder="Número telefónico" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
+
+                <input id="telefono" type="tel" name="telefono" placeholder="+573001234567" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none" />
             </fieldset>
-
-                <div class="grid grid-cols-2 gap-4 md:grid-cols-2">
-                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
-                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
-                </div>
-           
-        </form>
-    </section>
-
-    <!-- Tercer paso registro -->
-    <section class="bg-white rounded-lg p-4 shadow-md" aria-labelledby="ubic-colombia-title">
-        <form class="mx-auto max-w-6xl px-3 md:px-4 lg:px-8" action="/register" method="POST">
-                <fieldset class="flex flex-col gap-4 py-4">
-                    
-                    <legend class="text-md font-semibold text-gray-800 text-center">Sobre ti</legend>
-                    <p class="text-gray-700">Selecciona tus restricciones alimenticias</p>
-                    <div class="grid grid-cols-2 gap-4">
-                        <label for="sin-restricciones" class="flex items-center gap-2 text-gray-700">
-                            <input id="sin-restricciones" type="checkbox" name="sin-restricciones" checked class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500"/>
-                            <span>Sin restricciones</span>
-                        </label>
-
-                        <label for="vegano" class="flex items-center gap-2 text-gray-700">
-                            <input id="vegano" type="checkbox" name="vegano" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500"/>
-                            <span>Vegano</span>
-                        </label>
-
-                        <label for="sin-gluten" class="flex items-center gap-2 text-gray-700">
-                            <input id="sin-gluten" type="checkbox" name="sin-gluten" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500"/>
-                            <span>Sin gluten</span>
-                        </label>
-
-                        <label for="otros" class="flex items-center gap-2 text-gray-700">
-                            <input id="otros" type="checkbox" name="otros" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500"/>
-                            <span>Otros</span>
-                        </label>
-                    </div>
-                    <div class="flex flex-col gap-4">
-                    <div class="flex flex-col gap-2">
-                        <label for="como-nos-conociste" class="text-gray-700">¿Cómo nos conociste?</label>
-                        <select id="como-nos-conociste" name="como-nos-conociste" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
-                        <option value="">Selecciona una opción</option>
-                        <option value="redes-sociales">Redes sociales</option>
-                        <option value="recomendacion">Recomendación</option>
-                        <option value="pasando-por-el-local">Pasando por el local</option>
-                        <option value="busqueda-en-internet">Búsqueda en internet</option>
-                        <option value="otro">Otro</option>
-                        </select>
-                    </div>
-                    <label for="ofertas-email" class="flex items-center gap-2 text-gray-700"><input id="ofertas-email" type="checkbox" name="ofertas-email" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Quiero recibir ofertas por email</span></label>
-                    <label for="acepto-terminos" class="flex items-center gap-2 text-gray-700"><input id="acepto-terminos" type="checkbox" name="acepto-terminos" required class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Acepto términos del programa <a href="/terminos-programa" target="_blank" rel="noopener noreferrer" class="text-red-600 underline hover:text-red-700">Ver términos</a></span></label>
-                    </div>
-                </fieldset>
-                
-                    <div class="grid grid-cols-2 gap-4 md:grid-cols-2">
-                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
-                        <button type="submit" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
-                    </div>
-                
-        </form>
+        </section>
+    
+        <section id="step-3" data-step-panel="3" class="hidden py-2">
+          <fieldset class="flex flex-col gap-4 py-4">
+            <legend class="text-md text-center font-semibold text-gray-800">Sobre ti</legend>
+            <p class="text-gray-700">Selecciona tus restricciones alimenticias</p>
+            <div class="grid grid-cols-2 gap-4">
+              <label for="sin-restricciones" class="flex items-center gap-2 text-gray-700"><input id="sin-restricciones" type="checkbox" name="sin-restricciones" checked class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Sin restricciones</span></label>
+              <label for="vegano" class="flex items-center gap-2 text-gray-700"><input id="vegano" type="checkbox" name="vegano" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Vegano</span></label>
+              <label for="sin-gluten" class="flex items-center gap-2 text-gray-700"><input id="sin-gluten" type="checkbox" name="sin-gluten" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Sin gluten</span></label>
+              <label for="otros" class="flex items-center gap-2 text-gray-700"><input id="otros" type="checkbox" name="otros" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Otros</span></label>
+            </div>
+    
+            <div class="flex flex-col gap-4">
+              <div class="flex flex-col gap-2">
+                <label for="como-nos-conociste" class="text-gray-700">¿Cómo nos conociste?</label>
+                <select id="como-nos-conociste" name="como-nos-conociste" required class="w-full rounded border border-gray-300 px-3 py-2 focus:border-red-500 focus:outline-none">
+                  <option value="">Selecciona una opción</option>
+                  <option value="redes-sociales">Redes sociales</option>
+                  <option value="recomendacion">Recomendación</option>
+                  <option value="pasando-por-el-local">Pasando por el local</option>
+                  <option value="busqueda-en-internet">Búsqueda en internet</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <label for="ofertas-email" class="flex items-center gap-2 text-gray-700"><input id="ofertas-email" type="checkbox" name="ofertas-email" class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Quiero recibir ofertas por email</span></label>
+              <label for="acepto-terminos" class="flex items-center gap-2 text-gray-700"><input id="acepto-terminos" type="checkbox" name="acepto-terminos" required class="h-4 w-4 rounded border border-red-200 text-red-600 focus:ring-red-500" /><span>Acepto términos del programa <button type="button" id="open-terms-modal" class="text-red-600 underline hover:text-red-700">Ver términos</button></span></label>
+            </div>
+          </fieldset>
+        </section>
+    
+        <div class="grid grid-cols-2 gap-4 py-2 md:grid-cols-2">
+          <button id="prev-step-btn" type="button" data-nav="prev" class="hidden w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Anterior</button>
+          <button id="next-step-btn" type="button" data-nav="next" class="w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Siguiente</button>
+          <button id="submit-step-btn" type="submit" data-nav="submit" class="hidden w-full rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">Confirmar</button>
+        </div>
+      </form>
     </section>
 
     <footer class="bg-gray-100 border-t border-red-200 mx-auto max-w-6xl px-3 py-4 md:px-4 lg:px-8">
@@ -234,5 +202,6 @@
         </div>
     </footer>
 
+    <script src="validation.js"></script>
 </body>
 </html>
