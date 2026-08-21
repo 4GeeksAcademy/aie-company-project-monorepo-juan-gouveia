@@ -108,4 +108,17 @@ type WasteReason =
 
 // --------------------------------------------------------
 
+// Interfaz para métricas de país (CountryMetrics) de Brasaland
+// Reglas de validación:
+    // No se recibieron reglas de validación específicas para CountryMetrics, pero se asume que:
+        // Todos los valores numéricos deben ser >= 0
+
+interface CountryMetrics {
+  totalLocations: number;
+  totalRevenue: Price;
+  averageRevenuePerLocation: Price;
+  totalSales: number;
+}
+
+// --------------------------------------------------------
 
