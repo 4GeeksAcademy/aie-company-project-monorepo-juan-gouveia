@@ -25,9 +25,24 @@ export function filterActiveLocations(locations: Location[]): Location[] {
 
 // Ordena las locaciones por capacidad de asientos
 export function sortLocationsBySeatingCapacity(locations: Location[], order: "asc" | "desc"): Location[] {
-    if (order === "asc") {
-        return locations.sort((a, b) => a.seatingCapacity - b.seatingCapacity);
-    }
-    return locations.sort((a, b) => b.seatingCapacity - a.seatingCapacity);
+  const sortedLocations = [...locations];
+
+  if (order === "asc") {
+    return sortedLocations.sort((a, b) => a.seatingCapacity - b.seatingCapacity);
+  }
+
+  return sortedLocations.sort((a, b) => b.seatingCapacity - a.seatingCapacity);
+}
+
+// Ordena los ítems del menú por precio en la moneda seleccionada (USD o COP)
+// !!! PENDIENTE DE RESOLVER: PRECIO DISTINTO POR LOCACIÓN. POR AHORA SE USA EL PRECIO BASE !!!
+export function sortMenuItemsByPrice(items: MenuItem[], currency: "USD" | "COP", order: "asc" | "desc"): MenuItem[] {
+  const sortedItems = [...items];
+
+  if (order === "asc") {
+    return sortedItems.sort((a, b) => a.basePrice[currency] - b.basePrice[currency]);
+  }
+
+  return sortedItems.sort((a, b) => b.basePrice[currency] - a.basePrice[currency]);
 }
 
