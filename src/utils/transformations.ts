@@ -1,4 +1,4 @@
-// Funciones para cálculos diversos en Brasaland
+// Funciones para cálculos financieros en Brasaland
 
 // Calcular el ingreso total diario en una fecha específica y en una moneda específica (USD o COP)
 export function calculateDailyRevenue(sales: SaleTransaction[], date: Date, currency: "USD" | "COP"): number {
@@ -61,3 +61,41 @@ export function convertCurrency(amount: number, fromCurrency: "USD" | "COP", toC
   return Math.round((converted + Number.EPSILON) * 100) / 100;
 }
 
+
+// Funciones para puntuar el performance de las locaciones de Brasaland
+
+//Función para puntuar el performance de una locación basada en ingresos, eficiencia, desperdicio y margen de ganancia
+export function scoreLocationPerformance(location: Location, sales: SaleTransaction[], wasteRecords: WasteRecord[], menuItems: MenuItem[]): number {
+  const locationCurrency: "USD" | "COP" = location.country === "Colombia" ? "COP" : "USD";
+  const locationSales = sales.filter((sale) => sale.locationId === location.id);
+  const totalRevenue = locationSales.reduce((sum, sale) => sum + sale.totalPrice[locationCurrency], 0);
+
+  const operatingStartDate = new Date(location.openingYear, 0, 1);
+  const now = new Date();
+  const millisecondsPerDay = 1000 * 60 * 60 * 24;
+  const operatingDays = Math.max(1, Math.floor((now.getTime() - operatingStartDate.getTime()) / millisecondsPerDay) + 1);
+
+  const averageDailyRevenue = totalRevenue / operatingDays;
+  const revenueBenchmark = locationCurrency === "USD" ? 1000 : convertCurrency(1000, "USD", "COP");
+  const revenueScore = Math.min((averageDailyRevenue / revenueBenchmark) * 40, 40);
+
+  const efficiencyScore = Math.min((locationSales.length / location.seatingCapacity) * 30, 30);
+
+  const totalWasteCost = wasteRecords.filter((wasteRecord) => wasteRecord.locationId === location.id).reduce((sum, wasteRecord) => sum + wasteRecord.cost[locationCurrency], 0);
+
+  const wastePercentage = totalRevenue > 0 ? (totalWasteCost / totalRevenue) * 100 : 100;
+  const wasteScore = Math.max(20 - wastePercentage * 2, 0);
+
+  const margin = calculateLocationMargin(locationSales, menuItems, location.id, locationCurrency);
+  const marginScore = Math.min(margin / 10, 10);
+
+  const rawTotalScore = revenueScore + efficiencyScore + wasteScore + marginScore;
+  const boundedTotalScore = Math.min(100, Math.max(0, rawTotalScore));
+
+  return Math.round((boundedTotalScore + Number.EPSILON) * 100) / 100;
+}
+
+// Función para obtener un ranking de locaciones basado en su puntaje de performance (reutilizando la función scoreLocationPerformance)
+export function rankLocationsByPerformance(locations: Location[], sales: SaleTransaction[], wasteRecords: WasteRecord[], menuItems: MenuItem[]): Array<{ location: Location, score: number }> {
+  return locations.map((location) => ({location, score: scoreLocationPerformance(location, sales, wasteRecords, menuItems),})).sort((a, b) => b.score - a.score);
+}
