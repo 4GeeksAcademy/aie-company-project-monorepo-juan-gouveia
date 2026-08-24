@@ -1,5 +1,7 @@
+import type { Location, MenuItem, SaleTransaction, WasteRecord } from "../types/models.js";
+
 // Ítems de Menú de Ejemplo
-const sampleMenuItems: MenuItem[] = [
+export const sampleMenuItems: MenuItem[] = [
   {
     id: "ITEM-PICANHA-250",
     name: "Picanha 250g",
@@ -39,7 +41,7 @@ const sampleMenuItems: MenuItem[] = [
 ];
 
 // Locaciones de Ejemplo
-const sampleLocations: Location[] = [
+export const sampleLocations: Location[] = [
   {
     id: "LOC-MEDELLIN-01",
     name: "Brasaland Medellín Centro",
@@ -70,7 +72,7 @@ const sampleLocations: Location[] = [
 
 
 // Ventas de Ejemplo
-const sampleSales: SaleTransaction[] = [
+export const sampleSales: SaleTransaction[] = [
   {
     id: "TXN-2024-15482",
     locationId: "LOC-MEDELLIN-01",
@@ -92,3 +94,70 @@ const sampleSales: SaleTransaction[] = [
     waiterName: "John Smith",
   },
 ];
+
+
+// Registros de desperdicio de ejemplo
+export const sampleWasteRecords: WasteRecord[] = [
+  {
+    id: "WST-2024-2001",
+    locationId: "LOC-MEDELLIN-01",
+    itemId: "ITEM-FRIES",
+    quantity: 1,
+    reason: "Expired",
+    cost: { USD: 1.2, COP: 4800 },
+    timestamp: new Date("2024-03-15T22:00:00"),
+    reportedBy: "Ana López",
+  },
+  {
+    id: "WST-2024-2002",
+    locationId: "LOC-MIAMI-01",
+    itemId: "ITEM-COKE",
+    quantity: 2,
+    reason: "Damage",
+    cost: { USD: 1.6, COP: 6400 },
+    timestamp: new Date("2024-03-16T10:00:00"),
+    reportedBy: "Mike Brown",
+  },
+];
+
+
+// Casos inválidos para pruebas de validación
+export const invalidMenuItem: MenuItem = {
+  id: "ITEM-INVALID",
+  name: "   ",
+  category: "Meat",
+  basePrice: { USD: 0, COP: -1000 },
+  ingredientCost: { USD: 0, COP: -500 },
+  prepTimeMinutes: 0,
+  isAvailableInColombia: false,
+  isAvailableInUSA: false,
+  allergens: [],
+  status: "Active",
+};
+
+
+export const invalidSale: SaleTransaction = {
+  id: "TXN-INVALID-01",
+  locationId: "LOC-MEDELLIN-01",
+  itemId: "ITEM-PICANHA-250",
+  quantity: 0,
+  totalPrice: { USD: -10, COP: 0 },
+  paymentMethod: "Cash",
+  timestamp: new Date("2024-03-15T21:30:00"),
+  waiterName: "   ",
+};
+
+
+export const invalidLocation: Location = {
+  id: "LOC-INVALID-01",
+  name: "Locación Inválida",
+  city: "Bogotá",
+  country: "Colombia",
+  openingYear: 2007,
+  seatingCapacity: 0,
+  staffCount: 0,
+  monthlyRentCost: { USD: 0, COP: -100 },
+  averageMonthlyUtilities: { USD: 0, COP: -100 },
+  manager: "N/A",
+  status: "Active",
+};
