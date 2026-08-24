@@ -1,5 +1,7 @@
 
 // Función para validar ítems del menú
+import type { Location, MenuItem, SaleTransaction } from "../types/models.js";
+
 export function validateMenuItem(item: MenuItem): { valid: boolean, errors: string[] } {
   const errors: string[] = [];
 

@@ -1,5 +1,7 @@
 // Funciones para operaciones de búsqueda en Brasaland
 
+import type { Location, MenuItem } from "../types/models.js";
+
 // Buscar una locación por su ID
 export function findLocationById(locations: Location[], id: string): Location | null {
   return locations.find((location) => location.id === id) || null;

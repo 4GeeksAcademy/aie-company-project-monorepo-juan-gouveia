@@ -1,5 +1,7 @@
 // Funciones para filtrar datos de Brasaland
 
+import type { Location, MenuCategory, MenuItem, SaleTransaction } from "../types/models.js";
+
 // Filtrar las ventas por locación
 export function filterSalesByLocation(sales: SaleTransaction[], locationId: string): SaleTransaction[] {
 	return sales.filter((sale) => sale.locationId === locationId);

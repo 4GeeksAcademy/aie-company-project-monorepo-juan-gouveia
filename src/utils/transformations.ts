@@ -1,5 +1,7 @@
 // Funciones para cálculos financieros en Brasaland
 
+import type { CountryMetrics, Location, MenuItem, PaymentMethod, SaleTransaction, WasteReason, WasteRecord } from "../types/models.js";
+
 // Calcular el ingreso total diario en una fecha específica y en una moneda específica (USD o COP)
 export function calculateDailyRevenue(sales: SaleTransaction[], date: Date, currency: "USD" | "COP"): number {
   const startOfDay = new Date(date);
