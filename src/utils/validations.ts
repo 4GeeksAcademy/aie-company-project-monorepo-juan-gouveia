@@ -77,3 +77,52 @@ export function validateSaleTransaction(sale: SaleTransaction): { valid: boolean
 }
 
 
+// Función para validar locaciones
+export function validateLocation(location: Location): { valid: boolean, errors: string[] } {
+  const errors: string[] = [];
+  const currentYear = new Date().getFullYear();
+
+  // Validar openingYear
+  if (location.openingYear < 2008) {
+    errors.push("openingYear debe ser mayor o igual a 2008");
+  }
+
+  if (location.openingYear > currentYear) {
+    errors.push("openingYear debe ser menor o igual al año actual");
+  }
+
+  // Validar seatingCapacity
+  if (location.seatingCapacity <= 0) {
+    errors.push("seatingCapacity debe ser mayor que 0");
+  }
+
+  // Validar staffCount
+  if (location.staffCount <= 0) {
+    errors.push("staffCount debe ser mayor que 0");
+  }
+
+  // Validar monthlyRentCost en ambas monedas
+  if (location.monthlyRentCost.USD <= 0) {
+    errors.push("monthlyRentCost.USD debe ser mayor que 0");
+  }
+
+  if (location.monthlyRentCost.COP <= 0) {
+    errors.push("monthlyRentCost.COP debe ser mayor que 0");
+  }
+
+  // Validar averageMonthlyUtilities en ambas monedas
+  if (location.averageMonthlyUtilities.USD <= 0) {
+    errors.push("averageMonthlyUtilities.USD debe ser mayor que 0");
+  }
+
+  if (location.averageMonthlyUtilities.COP <= 0) {
+    errors.push("averageMonthlyUtilities.COP debe ser mayor que 0");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+
