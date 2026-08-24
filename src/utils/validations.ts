@@ -1,7 +1,9 @@
+
+// Función para validar ítems del menú
 export function validateMenuItem(item: MenuItem): { valid: boolean, errors: string[] } {
   const errors: string[] = [];
 
-  // Validar precios base en ambas monedas
+  // Validar basePrice en ambas monedas
   if (item.basePrice.USD <= 0) {
     errors.push("basePrice.USD debe ser mayor que 0");
   }
@@ -10,7 +12,7 @@ export function validateMenuItem(item: MenuItem): { valid: boolean, errors: stri
     errors.push("basePrice.COP debe ser mayor que 0");
   }
 
-  // Validar costo de ingredientes en ambas monedas
+  // Validar ingredientCost en ambas monedas
   if (item.ingredientCost.USD <= 0) {
     errors.push("ingredientCost.USD debe ser mayor que 0");
   }
@@ -19,7 +21,7 @@ export function validateMenuItem(item: MenuItem): { valid: boolean, errors: stri
     errors.push("ingredientCost.COP debe ser mayor que 0");
   }
 
-  // Validar tiempo de preparación
+  // Validar prepTimeMinutes
   if (item.prepTimeMinutes <= 0) {
     errors.push("prepTimeMinutes debe ser mayor que 0");
   }
@@ -43,3 +45,35 @@ export function validateMenuItem(item: MenuItem): { valid: boolean, errors: stri
     errors,
   };
 }
+
+
+// Función para validar ventas
+export function validateSaleTransaction(sale: SaleTransaction): { valid: boolean, errors: string[] } {
+  const errors: string[] = [];
+
+  // Validar quantity
+  if (sale.quantity <= 0) {
+    errors.push("quantity debe ser mayor que 0");
+  }
+
+  // Validar totalPrice en ambas monedas
+  if (sale.totalPrice.USD <= 0) {
+    errors.push("totalPrice.USD debe ser mayor que 0");
+  }
+
+  if (sale.totalPrice.COP <= 0) {
+    errors.push("totalPrice.COP debe ser mayor que 0");
+  }
+
+  // Validar waiterName no vacío
+  if (sale.waiterName.trim().length === 0) {
+    errors.push("waiterName no debe estar vacío");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+
