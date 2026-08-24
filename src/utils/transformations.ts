@@ -122,3 +122,19 @@ export function countSalesByPaymentMethod(sales: SaleTransaction[]): Record<Paym
   return sales.reduce((counts, sale) => {counts[sale.paymentMethod] += 1; return counts;}, initialCounts);
 }
 
+// Función para encontrar los ítems de menú más vendidos
+export function findTopSellingItems(sales: SaleTransaction[], menuItems: MenuItem[], topN: number): Array<{item: MenuItem, totalSold: number}> {
+  const itemById = new Map(menuItems.map((item) => [item.id, item]));
+  const totalSoldByItemId = sales.reduce((totals, sale) => {
+    if (!itemById.has(sale.itemId)) {
+      return totals;
+    }
+
+    totals.set(sale.itemId, (totals.get(sale.itemId) ?? 0) + sale.quantity);
+
+    return totals;
+  }, new Map<string, number>());
+
+  return Array.from(totalSoldByItemId.entries()).map(([itemId, totalSold]) => ({item: itemById.get(itemId) as MenuItem, totalSold,})).sort((a, b) => b.totalSold - a.totalSold).slice(0, Math.max(0, topN));
+}
+
