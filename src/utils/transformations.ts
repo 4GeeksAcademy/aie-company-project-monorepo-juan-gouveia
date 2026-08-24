@@ -99,3 +99,26 @@ export function scoreLocationPerformance(location: Location, sales: SaleTransact
 export function rankLocationsByPerformance(locations: Location[], sales: SaleTransaction[], wasteRecords: WasteRecord[], menuItems: MenuItem[]): Array<{ location: Location, score: number }> {
   return locations.map((location) => ({location, score: scoreLocationPerformance(location, sales, wasteRecords, menuItems),})).sort((a, b) => b.score - a.score);
 }
+
+
+// Funciones de agregación y reportes
+
+// Función para calcular el ticket promedio en una moneda específica (USD o COP)
+export function calculateAverageTicket(sales: SaleTransaction[], currency: "USD" | "COP"): number {
+  if (sales.length === 0) {
+    return 0;
+  }
+
+  const total = sales.reduce((sum, sale) => sum + sale.totalPrice[currency], 0);
+  const average = total / sales.length;
+
+  return Math.round((average + Number.EPSILON) * 100) / 100;
+}
+
+// Función para conteo de ventas por método de pago
+export function countSalesByPaymentMethod(sales: SaleTransaction[]): Record<PaymentMethod, number> {
+  const initialCounts: Record<PaymentMethod, number> = {Cash: 0, "Credit card": 0, "Debit card": 0, "Digital wallet": 0,};
+
+  return sales.reduce((counts, sale) => {counts[sale.paymentMethod] += 1; return counts;}, initialCounts);
+}
+
