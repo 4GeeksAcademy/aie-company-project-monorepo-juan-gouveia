@@ -3,18 +3,23 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import StageBadge from "@/components/StageBadge";
-import StatusBadge from "@/components/StatusBadge";
-import { getRecordById } from "@/lib/api";
-import type { RecordDetail } from "@/types/record";
+import { getRecordById, patchRecord } from "@/lib/api";
+import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
+import type { RecordDetail, RecordStage, RecordStatus } from "@/types/record";
 
 type FetchStatus = "loading" | "success" | "error";
+type UpdateStatus = "idle" | "loading" | "error";
 
 export default function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [status, setStatus] = useState<FetchStatus>("loading");
   const [record, setRecord] = useState<RecordDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [statusUpdate, setStatusUpdate] = useState<UpdateStatus>("idle");
+  const [statusUpdateError, setStatusUpdateError] = useState<string | null>(null);
+  const [stageUpdate, setStageUpdate] = useState<UpdateStatus>("idle");
+  const [stageUpdateError, setStageUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadRecord() {
@@ -31,6 +36,32 @@ export default function CandidateDetailPage() {
 
     loadRecord();
   }, [id]);
+
+  async function handleStatusChange(newStatus: RecordStatus) {
+    try {
+      setStatusUpdate("loading");
+      setStatusUpdateError(null);
+      const updated = await patchRecord(id, { status: newStatus });
+      setRecord(updated);
+      setStatusUpdate("idle");
+    } catch (err) {
+      setStatusUpdateError(err instanceof Error ? err.message : "Error desconocido");
+      setStatusUpdate("error");
+    }
+  }
+
+  async function handleStageChange(newStage: RecordStage) {
+    try {
+      setStageUpdate("loading");
+      setStageUpdateError(null);
+      const updated = await patchRecord(id, { stage: newStage });
+      setRecord(updated);
+      setStageUpdate("idle");
+    } catch (err) {
+      setStageUpdateError(err instanceof Error ? err.message : "Error desconocido");
+      setStageUpdate("error");
+    }
+  }
 
   return (
     <main className="px-3 py-6 md:px-4 lg:mx-auto lg:max-w-6xl lg:px-8">
@@ -57,9 +88,54 @@ export default function CandidateDetailPage() {
             {record.full_name}
           </h1>
 
-          <div className="mb-4 flex flex-wrap gap-2 text-xs md:text-sm">
-            <StatusBadge status={record.status} />
-            <StageBadge stage={record.stage} />
+          <div className="mb-4 flex items-start gap-3 md:gap-4">
+            <label className="flex min-w-0 flex-col items-start gap-1 text-sm text-black">
+              <span className="font-semibold text-red-700">Status</span>
+              <select
+                value={record.status}
+                onChange={(e) => handleStatusChange(e.target.value as RecordStatus)}
+                disabled={statusUpdate === "loading"}
+                className="w-auto max-w-full rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:opacity-60"
+              >
+                {(Object.entries(STATUS_LABELS) as [RecordStatus, string][]).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  )
+                )}
+              </select>
+              {statusUpdate === "loading" && (
+                <span className="text-xs text-black">Actualizando...</span>
+              )}
+              {statusUpdate === "error" && (
+                <span className="text-xs text-red-700">{statusUpdateError}</span>
+              )}
+            </label>
+
+            <label className="flex min-w-0 flex-col items-start gap-1 text-sm text-black">
+              <span className="font-semibold text-red-700">Stage</span>
+              <select
+                value={record.stage}
+                onChange={(e) => handleStageChange(e.target.value as RecordStage)}
+                disabled={stageUpdate === "loading"}
+                className="w-auto max-w-full rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:opacity-60"
+              >
+                {(Object.entries(STAGE_LABELS) as [RecordStage, string][]).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  )
+                )}
+              </select>
+              {stageUpdate === "loading" && (
+                <span className="text-xs text-black">Actualizando...</span>
+              )}
+              {stageUpdate === "error" && (
+                <span className="text-xs text-red-700">{stageUpdateError}</span>
+              )}
+            </label>
           </div>
 
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
