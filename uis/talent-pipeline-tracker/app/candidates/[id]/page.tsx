@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getRecordById, patchRecord } from "@/lib/api";
+import NotesSection from "@/components/NotesSection";
 import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { RecordDetail, RecordStage, RecordStatus } from "@/types/record";
 
@@ -196,6 +197,8 @@ export default function CandidateDetailPage() {
               </div>
             )}
           </dl>
+
+          <NotesSection recordId={id} />
         </article>
       )}
     </main>
