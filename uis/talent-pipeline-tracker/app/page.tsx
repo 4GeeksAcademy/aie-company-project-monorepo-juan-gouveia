@@ -4,8 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CandidateCard from "@/components/CandidateCard";
 import FilterBar from "@/components/FilterBar";
-import { getRecords } from "@/lib/api";
-import type { RecordListItem, RecordStage, RecordStatus } from "@/types/record";
+import NewCandidateModal from "@/components/NewCandidateModal";
+import { createRecord, getRecords } from "@/lib/api";
+import type { RecordCreateInput, RecordListItem, RecordStage, RecordStatus } from "@/types/record";
 
 type FetchStatus = "loading" | "success" | "error";
 
@@ -24,6 +25,8 @@ function CandidateList() {
   const stageFilter = (searchParams.get("stage") as RecordStage | null) ?? "";
 
   const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [status, setStatus] = useState<FetchStatus>("loading");
   const [records, setRecords] = useState<RecordListItem[]>([]);
@@ -47,13 +50,23 @@ function CandidateList() {
     }
 
     loadRecords();
-  }, [statusFilter, stageFilter, search]);
+  }, [statusFilter, stageFilter, search, reloadKey]);
+
+  async function handleCreate(input: RecordCreateInput) {
+    await createRecord(input);
+    setModalOpen(false);
+    setReloadKey((k) => k + 1);
+  }
 
   const hasActiveFilters = Boolean(statusFilter || stageFilter || search);
 
   return (
     <>
-      <FilterBar onSearchChange={setSearch} />
+      <FilterBar onSearchChange={setSearch} onAddCandidate={() => setModalOpen(true)} />
+
+      {modalOpen && (
+        <NewCandidateModal onClose={() => setModalOpen(false)} onSubmit={handleCreate} />
+      )}
 
       <main className="px-3 py-6 md:px-4 lg:mx-auto lg:max-w-6xl lg:px-8">
         <h1 className="mb-6 text-xl font-semibold text-red-700 md:text-2xl lg:text-3xl">
