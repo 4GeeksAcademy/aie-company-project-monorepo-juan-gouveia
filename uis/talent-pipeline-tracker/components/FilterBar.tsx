@@ -47,10 +47,10 @@ export default function FilterBar({
   const hasActiveFilters = Boolean(statusFilter || stageFilter || searchInput);
 
   return (
-    // 89px = altura del header (logo h-18 + py-2 + border-b), para anclar justo debajo
-    <div className="sticky top-[89px] z-40 border-b border-red-200 bg-white">
-      <div className="mx-auto flex flex-col gap-3 px-3 py-3 md:flex-row md:items-center md:px-4 lg:max-w-6xl lg:px-8">
-        <label className="flex flex-col gap-1 text-sm text-black md:flex-1">
+    // 57px = altura del header en móvil (logo h-10 + py-2 + border-b), 89px en md+ (logo h-18)
+    <div className="sticky top-[57px] z-40 border-b border-red-200 bg-white md:top-[89px]">
+      <div className="mx-auto grid grid-cols-2 gap-2 px-3 py-3 md:flex md:flex-row md:items-center md:gap-3 md:px-4 lg:max-w-6xl lg:px-8">
+        <label className="col-span-2 flex flex-col gap-1 text-sm text-black md:flex-1">
           <span className="sr-only">Buscar por nombre o correo</span>
           <input
             type="search"
@@ -66,7 +66,7 @@ export default function FilterBar({
           <select
             value={statusFilter}
             onChange={(e) => updateFilter("status", e.target.value)}
-            className="rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700"
+            className="w-full rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700"
           >
             <option value="">Todos los status</option>
             {(Object.entries(STATUS_LABELS) as [RecordStatus, string][]).map(([value, label]) => (
@@ -82,7 +82,7 @@ export default function FilterBar({
           <select
             value={stageFilter}
             onChange={(e) => updateFilter("stage", e.target.value)}
-            className="rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700"
+            className="w-full rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700"
           >
             <option value="">Todos los stages</option>
             {(Object.entries(STAGE_LABELS) as [RecordStage, string][]).map(([value, label]) => (
@@ -97,7 +97,7 @@ export default function FilterBar({
           type="button"
           onClick={clearFilters}
           disabled={!hasActiveFilters}
-          className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
+          className="col-span-2 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
         >
           Limpiar filtros
         </button>
