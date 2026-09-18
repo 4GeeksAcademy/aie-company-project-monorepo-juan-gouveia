@@ -1,4 +1,7 @@
 import type {
+  Note,
+  NoteCreate,
+  NoteListResponse,
   RecordDetail,
   RecordListItem,
   RecordListResponse,
@@ -53,4 +56,39 @@ export async function patchRecord(id: string, patch: RecordPatch): Promise<Recor
   }
 
   return res.json();
+}
+
+export async function getNotes(recordId: string): Promise<Note[]> {
+  const res = await fetch(`${API_BASE_URL}/records/${recordId}/notes`);
+
+  if (!res.ok) {
+    throw new Error(`Error ${res.status}: no se pudieron obtener las notas`);
+  }
+
+  const body: NoteListResponse = await res.json();
+  return body.data;
+}
+
+export async function createNote(recordId: string, note: NoteCreate): Promise<Note> {
+  const res = await fetch(`${API_BASE_URL}/records/${recordId}/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(note),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error ${res.status}: no se pudo crear la nota`);
+  }
+
+  return res.json();
+}
+
+export async function deleteNote(recordId: string, noteId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/records/${recordId}/notes/${noteId}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error ${res.status}: no se pudo eliminar la nota`);
+  }
 }
