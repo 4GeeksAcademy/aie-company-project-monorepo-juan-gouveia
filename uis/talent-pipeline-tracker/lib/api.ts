@@ -2,6 +2,7 @@ import type {
   Note,
   NoteCreate,
   NoteListResponse,
+  RecordCreateInput,
   RecordDetail,
   RecordListItem,
   RecordListResponse,
@@ -91,4 +92,22 @@ export async function deleteNote(recordId: string, noteId: string): Promise<void
   if (!res.ok) {
     throw new Error(`Error ${res.status}: no se pudo eliminar la nota`);
   }
+}
+
+export async function createRecord(input: RecordCreateInput): Promise<RecordDetail> {
+  const res = await fetch(`${API_BASE_URL}/records`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error ${res.status}: no se pudo crear el candidato`);
+  }
+
+  const created: RecordDetail = await res.json();
+  if (created.status !== input.status || created.stage !== input.stage) {
+    return patchRecord(created.id, { status: input.status, stage: input.stage });
+  }
+  return created;
 }
