@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getRecords } from "@/lib/api";
 import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { RecordListItem } from "@/types/record";
@@ -53,7 +54,11 @@ export default function Home() {
       {status === "success" && records.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {records.map((record) => (
-            <article key={record.id} className="rounded-lg bg-white p-4 shadow-md">
+            <Link
+              key={record.id}
+              href={`/candidates/${record.id}`}
+              className="rounded-lg bg-white p-4 shadow-md transition hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2"
+            >
               <h2 className="mb-2 text-md font-semibold text-red-700 md:text-lg">
                 {record.full_name}
               </h2>
@@ -71,7 +76,7 @@ export default function Home() {
                   {STAGE_LABELS[record.stage]}
                 </span>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
       )}
