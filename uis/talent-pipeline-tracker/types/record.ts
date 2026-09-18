@@ -76,3 +76,10 @@ export interface ValidationError {
 export interface HTTPValidationError {
   detail: ValidationError[];
 }
+
+// La API solo declara RecordCreate en el POST; status y stage se envían igualmente y,
+// si el servidor los ignora, createRecord los corrige con un PATCH.
+export interface RecordCreateInput extends RecordCreate {
+  status: RecordStatus;
+  stage: RecordStage;
+}
