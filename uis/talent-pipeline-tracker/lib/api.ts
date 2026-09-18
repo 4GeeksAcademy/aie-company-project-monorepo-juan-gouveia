@@ -1,9 +1,26 @@
-import type { RecordDetail, RecordListItem, RecordListResponse } from "@/types/record";
+import type {
+  RecordDetail,
+  RecordListItem,
+  RecordListResponse,
+  RecordStage,
+  RecordStatus,
+} from "@/types/record";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-export async function getRecords(): Promise<RecordListItem[]> {
-  const res = await fetch(`${API_BASE_URL}/records?limit=200`);
+export interface RecordFilters {
+  status?: RecordStatus;
+  stage?: RecordStage;
+  search?: string;
+}
+
+export async function getRecords(filters: RecordFilters = {}): Promise<RecordListItem[]> {
+  const params = new URLSearchParams({ limit: "200" });
+  if (filters.status) params.set("status", filters.status);
+  if (filters.stage) params.set("stage", filters.stage);
+  if (filters.search) params.set("search", filters.search);
+
+  const res = await fetch(`${API_BASE_URL}/records?${params.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Error ${res.status}: no se pudieron obtener los candidatos`);
