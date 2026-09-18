@@ -1,4 +1,4 @@
-import type { RecordListItem, RecordListResponse } from "@/types/record";
+import type { RecordDetail, RecordListItem, RecordListResponse } from "@/types/record";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -11,4 +11,14 @@ export async function getRecords(): Promise<RecordListItem[]> {
 
   const body: RecordListResponse = await res.json();
   return body.data;
+}
+
+export async function getRecordById(id: string): Promise<RecordDetail> {
+  const res = await fetch(`${API_BASE_URL}/records/${id}`);
+
+  if (!res.ok) {
+    throw new Error(`Error ${res.status}: no se pudo obtener el candidato`);
+  }
+
+  return res.json();
 }
