@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import StageBadge from "@/components/StageBadge";
+import StatusBadge from "@/components/StatusBadge";
 import { getRecordById } from "@/lib/api";
-import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { RecordDetail } from "@/types/record";
 
 type FetchStatus = "loading" | "success" | "error";
@@ -57,12 +58,8 @@ export default function CandidateDetailPage() {
           </h1>
 
           <div className="mb-4 flex flex-wrap gap-2 text-xs md:text-sm">
-            <span className="rounded border border-red-200 px-2 py-1 text-red-700">
-              {STATUS_LABELS[record.status]}
-            </span>
-            <span className="rounded border border-red-200 px-2 py-1 text-red-700">
-              {STAGE_LABELS[record.stage]}
-            </span>
+            <StatusBadge status={record.status} />
+            <StageBadge stage={record.stage} />
           </div>
 
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
