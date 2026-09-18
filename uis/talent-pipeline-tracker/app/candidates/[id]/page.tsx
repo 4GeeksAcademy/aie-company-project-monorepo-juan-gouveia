@@ -72,6 +72,16 @@ export default function CandidateDetailPage() {
               <dd className="text-black">{record.experience_years} años</dd>
             </div>
             <div>
+              <dt className="text-sm font-semibold text-red-700">Fecha de aplicación</dt>
+              <dd className="text-black">
+                {new Date(record.applied_at).toLocaleDateString("es", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </dd>
+            </div>
+            <div>
               <dt className="text-sm font-semibold text-red-700">Email</dt>
               <dd className="text-black">{record.email}</dd>
             </div>
