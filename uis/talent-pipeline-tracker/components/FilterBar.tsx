@@ -9,8 +9,10 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 export default function FilterBar({
   onSearchChange,
+  onAddCandidate,
 }: {
   onSearchChange: (search: string) => void;
+  onAddCandidate: () => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -50,6 +52,14 @@ export default function FilterBar({
     // 57px = altura del header en móvil (logo h-10 + py-2 + border-b), 89px en md+ (logo h-18)
     <div className="sticky top-[57px] z-40 border-b border-red-200 bg-white md:top-[89px]">
       <div className="mx-auto grid grid-cols-2 gap-2 px-3 py-3 md:flex md:flex-row md:items-center md:gap-3 md:px-4 lg:max-w-6xl lg:px-8">
+        <button
+          type="button"
+          onClick={onAddCandidate}
+          className="col-span-2 rounded-md bg-red-700 px-3 py-2 text-sm font-semibold whitespace-nowrap text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2"
+        >
+          Añadir candidato
+        </button>
+
         <label className="col-span-2 flex flex-col gap-1 text-sm text-black md:flex-1">
           <span className="sr-only">Buscar por nombre o correo</span>
           <input
