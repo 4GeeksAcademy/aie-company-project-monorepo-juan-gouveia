@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CandidateCard from "@/components/CandidateCard";
 import FilterBar from "@/components/FilterBar";
-import NewCandidateModal from "@/components/NewCandidateModal";
+import CandidateFormModal from "@/components/CandidateFormModal";
 import { createRecord, getRecords } from "@/lib/api";
 import type { RecordCreateInput, RecordListItem, RecordStage, RecordStatus } from "@/types/record";
 
@@ -65,7 +65,13 @@ function CandidateList() {
       <FilterBar onSearchChange={setSearch} onAddCandidate={() => setModalOpen(true)} />
 
       {modalOpen && (
-        <NewCandidateModal onClose={() => setModalOpen(false)} onSubmit={handleCreate} />
+        <CandidateFormModal
+          title="Añadir candidato"
+          submitLabel="Enviar"
+          submittingLabel="Enviando..."
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleCreate}
+        />
       )}
 
       <main className="px-3 py-6 md:px-4 lg:mx-auto lg:max-w-6xl lg:px-8">

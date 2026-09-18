@@ -111,3 +111,24 @@ export async function createRecord(input: RecordCreateInput): Promise<RecordDeta
   }
   return created;
 }
+
+// PUT solo declara los campos de RecordCreate; como reemplaza el registro, se restauran
+// status y stage con un PATCH si el servidor los reinicia.
+export async function updateRecord(id: string, input: RecordCreateInput): Promise<RecordDetail> {
+  const { status, stage, ...fields } = input;
+  const res = await fetch(`${API_BASE_URL}/records/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error ${res.status}: no se pudo actualizar el candidato`);
+  }
+
+  const updated: RecordDetail = await res.json();
+  if (updated.status !== status || updated.stage !== stage) {
+    return patchRecord(id, { status, stage });
+  }
+  return updated;
+}

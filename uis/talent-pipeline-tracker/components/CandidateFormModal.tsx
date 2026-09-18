@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
-import type { RecordCreateInput, RecordStage, RecordStatus } from "@/types/record";
+import type { RecordCreateInput, RecordDetail, RecordStage, RecordStatus } from "@/types/record";
 
-interface NewCandidateModalProps {
+interface CandidateFormModalProps {
+  title: string;
+  submitLabel: string;
+  submittingLabel: string;
+  // Valores iniciales (edición); si se omite, el formulario arranca vacío (alta).
+  initialRecord?: RecordDetail;
   onClose: () => void;
   onSubmit: (input: RecordCreateInput) => Promise<void>;
 }
@@ -33,6 +38,20 @@ const EMPTY_FORM: FormState = {
   stage: "pending",
 };
 
+function toFormState(record: RecordDetail): FormState {
+  return {
+    full_name: record.full_name,
+    position: record.position,
+    experience_years: String(record.experience_years),
+    email: record.email,
+    phone: record.phone,
+    linkedin_url: record.linkedin_url ?? "",
+    cv_url: record.cv_url ?? "",
+    status: record.status,
+    stage: record.stage,
+  };
+}
+
 const REQUIRED_FIELDS = [
   "full_name",
   "position",
@@ -58,8 +77,18 @@ function getFieldError(form: FormState, field: RequiredField): string | null {
   return null;
 }
 
-export default function NewCandidateModal({ onClose, onSubmit }: NewCandidateModalProps) {
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+export default function CandidateFormModal({
+  title,
+  submitLabel,
+  submittingLabel,
+  initialRecord,
+  onClose,
+  onSubmit,
+}: CandidateFormModalProps) {
+  const isEditing = Boolean(initialRecord);
+  const [form, setForm] = useState<FormState>(
+    initialRecord ? toFormState(initialRecord) : EMPTY_FORM
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,7 +169,7 @@ export default function NewCandidateModal({ onClose, onSubmit }: NewCandidateMod
       <form
         role="dialog"
         aria-modal="true"
-        aria-labelledby="new-candidate-title"
+        aria-labelledby="candidate-form-title"
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
         noValidate
@@ -157,10 +186,10 @@ export default function NewCandidateModal({ onClose, onSubmit }: NewCandidateMod
         </button>
 
         <h2
-          id="new-candidate-title"
+          id="candidate-form-title"
           className="mb-4 pr-8 text-lg font-semibold text-red-700 md:text-xl"
         >
-          Añadir candidato
+          {title}
         </h2>
 
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
@@ -175,6 +204,8 @@ export default function NewCandidateModal({ onClose, onSubmit }: NewCandidateMod
           {renderField("linkedin_url", "LinkedIn", "url")}
           {renderField("cv_url", "CV", "url")}
 
+          {!isEditing && (
+            <>
           <label className="flex flex-col gap-1 text-sm text-black">
             <span className="font-semibold text-red-700">Status</span>
             <select
@@ -210,25 +241,38 @@ export default function NewCandidateModal({ onClose, onSubmit }: NewCandidateMod
               )}
             </select>
           </label>
+            </>
+          )}
         </div>
 
         {error && <p className="mt-3 text-xs text-red-700">{error}</p>}
 
         <div className="mt-4 flex flex-wrap justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => setForm(EMPTY_FORM)}
-            disabled={!hasInput || submitting}
-            className="rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
-          >
-            Limpiar
-          </button>
+          {isEditing ? (
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setForm(EMPTY_FORM)}
+              disabled={!hasInput || submitting}
+              className="rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
+            >
+              Limpiar
+            </button>
+          )}
           <button
             type="submit"
             disabled={!isValid || submitting}
             className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "Enviando..." : "Enviar"}
+            {submitting ? submittingLabel : submitLabel}
           </button>
         </div>
       </form>

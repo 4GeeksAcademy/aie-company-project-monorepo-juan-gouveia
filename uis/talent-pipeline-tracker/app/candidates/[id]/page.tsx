@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { getRecordById, patchRecord } from "@/lib/api";
+import { getRecordById, patchRecord, updateRecord } from "@/lib/api";
+import CandidateFormModal from "@/components/CandidateFormModal";
 import NotesSection from "@/components/NotesSection";
 import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
-import type { RecordDetail, RecordStage, RecordStatus } from "@/types/record";
+import type { RecordCreateInput, RecordDetail, RecordStage, RecordStatus } from "@/types/record";
 
 type FetchStatus = "loading" | "success" | "error";
 type UpdateStatus = "idle" | "loading" | "error";
@@ -16,6 +17,7 @@ export default function CandidateDetailPage() {
   const [status, setStatus] = useState<FetchStatus>("loading");
   const [record, setRecord] = useState<RecordDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const [statusUpdate, setStatusUpdate] = useState<UpdateStatus>("idle");
   const [statusUpdateError, setStatusUpdateError] = useState<string | null>(null);
@@ -37,6 +39,12 @@ export default function CandidateDetailPage() {
 
     loadRecord();
   }, [id]);
+
+  async function handleEdit(input: RecordCreateInput) {
+    const updated = await updateRecord(id, input);
+    setRecord(updated);
+    setEditOpen(false);
+  }
 
   async function handleStatusChange(newStatus: RecordStatus) {
     try {
@@ -85,9 +93,18 @@ export default function CandidateDetailPage() {
 
       {status === "success" && record && (
         <article className="rounded-lg bg-white p-4 shadow-md md:p-6">
-          <h1 className="mb-4 text-xl font-semibold text-red-700 md:text-2xl lg:text-3xl">
-            {record.full_name}
-          </h1>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h1 className="min-w-0 break-words text-xl font-semibold text-red-700 md:text-2xl lg:text-3xl">
+              {record.full_name}
+            </h1>
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="shrink-0 rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2"
+            >
+              Editar candidato
+            </button>
+          </div>
 
           <div className="mb-4 flex items-start gap-3 md:gap-4">
             <label className="flex min-w-0 flex-col items-start gap-1 text-sm text-black">
@@ -199,6 +216,17 @@ export default function CandidateDetailPage() {
           </dl>
 
           <NotesSection recordId={id} />
+
+          {editOpen && (
+            <CandidateFormModal
+              title="Editar candidato"
+              submitLabel="Guardar"
+              submittingLabel="Guardando..."
+              initialRecord={record}
+              onClose={() => setEditOpen(false)}
+              onSubmit={handleEdit}
+            />
+          )}
         </article>
       )}
     </main>
