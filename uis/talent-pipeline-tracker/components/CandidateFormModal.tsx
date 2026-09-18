@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Button from "@/components/Button";
+import FormField from "@/components/FormField";
+import LabeledSelect from "@/components/LabeledSelect";
+import Modal from "@/components/Modal";
 import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { RecordCreateInput, RecordDetail, RecordStage, RecordStatus } from "@/types/record";
 
@@ -63,9 +67,7 @@ const REQUIRED_FIELDS = [
 const TEXT_FIELDS = [...REQUIRED_FIELDS, "linkedin_url", "cv_url"] as const;
 
 type RequiredField = (typeof REQUIRED_FIELDS)[number];
-
-const INPUT_CLASS =
-  "w-full rounded-md border border-red-200 px-3 py-2 text-sm text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:opacity-60";
+type TextField = (typeof TEXT_FIELDS)[number];
 
 function getFieldError(form: FormState, field: RequiredField): string | null {
   const value = form[field].trim();
@@ -91,14 +93,6 @@ export default function CandidateFormModal({
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !submitting) onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, submitting]);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -133,114 +127,53 @@ export default function CandidateFormModal({
     }
   }
 
-  function renderField(
-    field: RequiredField | "linkedin_url" | "cv_url",
-    label: string,
-    type = "text",
-    extra: React.InputHTMLAttributes<HTMLInputElement> = {}
-  ) {
-    const fieldError = field in errors ? errors[field as RequiredField] : null;
-    const required = field in errors;
-    return (
-      <label className="flex flex-col gap-1 text-sm text-black">
-        <span className="font-semibold text-red-700">
-          {label}
-          {required && " *"}
-        </span>
-        <input
-          type={type}
-          value={form[field]}
-          onChange={(e) => setField(field, e.target.value)}
-          disabled={submitting}
-          aria-invalid={Boolean(fieldError)}
-          className={INPUT_CLASS}
-          {...extra}
-        />
-        {fieldError && <span className="text-xs text-red-700">{fieldError}</span>}
-      </label>
-    );
+  // Props comunes de FormField para cada campo de texto; solo los obligatorios tienen error.
+  function fieldProps(field: TextField) {
+    const isRequired = field in errors;
+    return {
+      value: form[field],
+      onChange: (value: string) => setField(field, value),
+      required: isRequired,
+      error: isRequired ? errors[field as RequiredField] : null,
+      disabled: submitting,
+    };
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={() => !submitting && onClose()}
-    >
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="candidate-form-title"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={handleSubmit}
-        noValidate
-        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-4 shadow-md md:p-6"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={submitting}
-          aria-label="Cerrar"
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md text-xl leading-none text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:opacity-60"
-        >
-          ×
-        </button>
-
-        <h2
-          id="candidate-form-title"
-          className="mb-4 pr-8 text-lg font-semibold text-red-700 md:text-xl"
-        >
-          {title}
-        </h2>
-
+    <Modal title={title} onClose={onClose} busy={submitting} size="lg">
+      <form onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-          {renderField("full_name", "Nombre")}
-          {renderField("position", "Posición")}
-          {renderField("experience_years", "Experiencia (años)", "number", {
-            min: 0,
-            step: "any",
-          })}
-          {renderField("email", "Email", "email")}
-          {renderField("phone", "Teléfono", "tel")}
-          {renderField("linkedin_url", "LinkedIn", "url")}
-          {renderField("cv_url", "CV", "url")}
+          <FormField label="Nombre" {...fieldProps("full_name")} />
+          <FormField label="Posición" {...fieldProps("position")} />
+          <FormField
+            label="Experiencia (años)"
+            type="number"
+            inputProps={{ min: 0, step: "any" }}
+            {...fieldProps("experience_years")}
+          />
+          <FormField label="Email" type="email" {...fieldProps("email")} />
+          <FormField label="Teléfono" type="tel" {...fieldProps("phone")} />
+          <FormField label="LinkedIn" type="url" {...fieldProps("linkedin_url")} />
+          <FormField label="CV" type="url" {...fieldProps("cv_url")} />
 
           {!isEditing && (
             <>
-          <label className="flex flex-col gap-1 text-sm text-black">
-            <span className="font-semibold text-red-700">Status</span>
-            <select
-              value={form.status}
-              onChange={(e) => setField("status", e.target.value as RecordStatus)}
-              disabled={submitting}
-              className={INPUT_CLASS}
-            >
-              {(Object.entries(STATUS_LABELS) as [RecordStatus, string][]).map(
-                ([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                )
-              )}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm text-black">
-            <span className="font-semibold text-red-700">Stage</span>
-            <select
-              value={form.stage}
-              onChange={(e) => setField("stage", e.target.value as RecordStage)}
-              disabled={submitting}
-              className={INPUT_CLASS}
-            >
-              {(Object.entries(STAGE_LABELS) as [RecordStage, string][]).map(
-                ([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                )
-              )}
-            </select>
-          </label>
+              <LabeledSelect
+                label="Status"
+                value={form.status}
+                options={STATUS_LABELS}
+                onChange={(value) => setField("status", value)}
+                disabled={submitting}
+                fullWidth
+              />
+              <LabeledSelect
+                label="Stage"
+                value={form.stage}
+                options={STAGE_LABELS}
+                onChange={(value) => setField("stage", value)}
+                disabled={submitting}
+                fullWidth
+              />
             </>
           )}
         </div>
@@ -249,33 +182,24 @@ export default function CandidateFormModal({
 
         <div className="mt-4 flex flex-wrap justify-end gap-3">
           {isEditing ? (
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <Button variant="secondary" size="md" onClick={onClose} disabled={submitting}>
               Cancelar
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="md"
               onClick={() => setForm(EMPTY_FORM)}
               disabled={!hasInput || submitting}
-              className="rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
             >
               Limpiar
-            </button>
+            </Button>
           )}
-          <button
-            type="submit"
-            disabled={!isValid || submitting}
-            className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <Button type="submit" size="md" disabled={!isValid || submitting}>
             {submitting ? submittingLabel : submitLabel}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

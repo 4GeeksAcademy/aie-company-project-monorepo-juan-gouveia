@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Button from "@/components/Button";
+import LabeledSelect from "@/components/LabeledSelect";
 import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { RecordStage, RecordStatus } from "@/types/record";
 
@@ -52,13 +54,9 @@ export default function FilterBar({
     // 57px = altura del header en móvil (logo h-10 + py-2 + border-b), 89px en md+ (logo h-18)
     <div className="sticky top-[57px] z-40 border-b border-red-200 bg-white md:top-[89px]">
       <div className="mx-auto grid grid-cols-2 gap-2 px-3 py-3 md:flex md:flex-row md:items-center md:gap-3 md:px-4 lg:max-w-6xl lg:px-8">
-        <button
-          type="button"
-          onClick={onAddCandidate}
-          className="col-span-2 rounded-md bg-red-700 px-3 py-2 text-sm font-semibold whitespace-nowrap text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2"
-        >
+        <Button onClick={onAddCandidate} className="col-span-2 whitespace-nowrap">
           Añadir candidato
-        </button>
+        </Button>
 
         <label className="col-span-2 flex flex-col gap-1 text-sm text-black md:flex-1">
           <span className="sr-only">Buscar por nombre o correo</span>
@@ -71,46 +69,34 @@ export default function FilterBar({
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-black">
-          <span className="sr-only">Filtrar por status</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => updateFilter("status", e.target.value)}
-            className="w-full rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700"
-          >
-            <option value="">Todos los status</option>
-            {(Object.entries(STATUS_LABELS) as [RecordStatus, string][]).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <LabeledSelect
+          label="Filtrar por status"
+          value={statusFilter}
+          options={STATUS_LABELS}
+          onChange={(value) => updateFilter("status", value)}
+          placeholder="Todos los status"
+          hideLabel
+          fullWidth
+        />
 
-        <label className="flex flex-col gap-1 text-sm text-black">
-          <span className="sr-only">Filtrar por stage</span>
-          <select
-            value={stageFilter}
-            onChange={(e) => updateFilter("stage", e.target.value)}
-            className="w-full rounded-md border border-red-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700"
-          >
-            <option value="">Todos los stages</option>
-            {(Object.entries(STAGE_LABELS) as [RecordStage, string][]).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <LabeledSelect
+          label="Filtrar por stage"
+          value={stageFilter}
+          options={STAGE_LABELS}
+          onChange={(value) => updateFilter("stage", value)}
+          placeholder="Todos los stages"
+          hideLabel
+          fullWidth
+        />
 
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={clearFilters}
           disabled={!hasActiveFilters}
-          className="col-span-2 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
+          className="col-span-2"
         >
           Limpiar filtros
-        </button>
+        </Button>
       </div>
     </div>
   );

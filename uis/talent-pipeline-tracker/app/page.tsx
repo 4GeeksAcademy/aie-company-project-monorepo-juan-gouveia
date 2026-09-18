@@ -5,6 +5,9 @@ import { useSearchParams } from "next/navigation";
 import CandidateCard from "@/components/CandidateCard";
 import FilterBar from "@/components/FilterBar";
 import CandidateFormModal from "@/components/CandidateFormModal";
+import EmptyMessage from "@/components/EmptyMessage";
+import ErrorMessage from "@/components/ErrorMessage";
+import LoadingMessage from "@/components/LoadingMessage";
 import { createRecord, getRecords } from "@/lib/api";
 import type { RecordCreateInput, RecordListItem, RecordStage, RecordStatus } from "@/types/record";
 
@@ -12,7 +15,13 @@ type FetchStatus = "loading" | "success" | "error";
 
 export default function Home() {
   return (
-    <Suspense fallback={<p className="px-3 py-6 text-center text-black">Cargando candidatos...</p>}>
+    <Suspense
+      fallback={
+        <div className="px-3 py-6">
+          <LoadingMessage>Cargando candidatos...</LoadingMessage>
+        </div>
+      }
+    >
       <CandidateList />
     </Suspense>
   );
@@ -79,22 +88,16 @@ function CandidateList() {
           Candidatos
         </h1>
 
-        {status === "loading" && (
-          <p className="text-center text-black md:text-base lg:text-lg">Cargando candidatos...</p>
-        )}
+        {status === "loading" && <LoadingMessage>Cargando candidatos...</LoadingMessage>}
 
-        {status === "error" && (
-          <p className="rounded-lg border border-red-200 bg-white p-4 text-red-700 shadow-md">
-            {error}
-          </p>
-        )}
+        {status === "error" && <ErrorMessage>{error}</ErrorMessage>}
 
         {status === "success" && records.length === 0 && (
-          <p className="rounded-lg border border-red-200 bg-white p-4 text-center text-black shadow-md">
+          <EmptyMessage>
             {hasActiveFilters
               ? "Ningún candidato cumple con estas condiciones."
               : "No hay candidatos registrados."}
-          </p>
+          </EmptyMessage>
         )}
 
         {status === "success" && records.length > 0 && (
