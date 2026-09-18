@@ -2,6 +2,7 @@ import type {
   RecordDetail,
   RecordListItem,
   RecordListResponse,
+  RecordPatch,
   RecordStage,
   RecordStatus,
 } from "@/types/record";
@@ -35,6 +36,20 @@ export async function getRecordById(id: string): Promise<RecordDetail> {
 
   if (!res.ok) {
     throw new Error(`Error ${res.status}: no se pudo obtener el candidato`);
+  }
+
+  return res.json();
+}
+
+export async function patchRecord(id: string, patch: RecordPatch): Promise<RecordDetail> {
+  const res = await fetch(`${API_BASE_URL}/records/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error ${res.status}: no se pudo actualizar el candidato`);
   }
 
   return res.json();
