@@ -5,9 +5,17 @@ import Button from "@/components/Button";
 import FormField from "@/components/FormField";
 import LabeledSelect from "@/components/LabeledSelect";
 import Modal from "@/components/Modal";
+import { useAutoClose } from "@/hooks/useAutoClose";
 import { STAGE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { RecordCreateInput, RecordDetail, RecordStage, RecordStatus } from "@/types/record";
 
+// Tiempo que se muestra el mensaje de éxito antes de cerrar el modal.
+const RESULT_MESSAGE_MS = 5000;
+
+type SubmitResult = "success" | "error";
+
+// onSubmit no debe cerrar el modal: si tiene éxito lo cierra el propio modal tras el mensaje;
+// si falla, el modal permanece abierto.
 interface CandidateFormModalProps {
   title: string;
   submitLabel: string;
@@ -92,7 +100,12 @@ export default function CandidateFormModal({
     initialRecord ? toFormState(initialRecord) : EMPTY_FORM
   );
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SubmitResult | null>(null);
+  // Bloquea el formulario mientras se envía y mientras se muestra el éxito (antes de cerrar).
+  // Tras un error el formulario queda editable y el modal abierto para poder reintentar.
+  const locked = submitting || result === "success";
+
+  useAutoClose(result === "success", RESULT_MESSAGE_MS, onClose);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -109,7 +122,7 @@ export default function CandidateFormModal({
     if (!isValid) return;
     try {
       setSubmitting(true);
-      setError(null);
+      setResult(null);
       await onSubmit({
         full_name: form.full_name.trim(),
         position: form.position.trim(),
@@ -121,8 +134,10 @@ export default function CandidateFormModal({
         status: form.status,
         stage: form.stage,
       });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
+      setResult("success");
+    } catch {
+      setResult("error");
+    } finally {
       setSubmitting(false);
     }
   }
@@ -135,7 +150,7 @@ export default function CandidateFormModal({
       onChange: (value: string) => setField(field, value),
       required: isRequired,
       error: isRequired ? errors[field as RequiredField] : null,
-      disabled: submitting,
+      disabled: locked,
     };
   }
 
@@ -163,7 +178,7 @@ export default function CandidateFormModal({
                 value={form.status}
                 options={STATUS_LABELS}
                 onChange={(value) => setField("status", value)}
-                disabled={submitting}
+                disabled={locked}
                 fullWidth
               />
               <LabeledSelect
@@ -171,14 +186,23 @@ export default function CandidateFormModal({
                 value={form.stage}
                 options={STAGE_LABELS}
                 onChange={(value) => setField("stage", value)}
-                disabled={submitting}
+                disabled={locked}
                 fullWidth
               />
             </>
           )}
         </div>
 
-        {error && <p className="mt-3 text-xs text-red-700">{error}</p>}
+        {result === "success" && (
+          <p role="status" className="mt-3 text-sm font-semibold text-green-700">
+            Candidato guardado con éxito
+          </p>
+        )}
+        {result === "error" && (
+          <p role="alert" className="mt-3 text-sm font-semibold text-red-700">
+            No se pudo {isEditing ? "modificar" : "añadir"} el candidato
+          </p>
+        )}
 
         <div className="mt-4 flex flex-wrap justify-end gap-3">
           {isEditing ? (
@@ -190,12 +214,12 @@ export default function CandidateFormModal({
               variant="secondary"
               size="md"
               onClick={() => setForm(EMPTY_FORM)}
-              disabled={!hasInput || submitting}
+              disabled={!hasInput || locked}
             >
               Limpiar
             </Button>
           )}
-          <Button type="submit" size="md" disabled={!isValid || submitting}>
+          <Button type="submit" size="md" disabled={!isValid || locked}>
             {submitting ? submittingLabel : submitLabel}
           </Button>
         </div>

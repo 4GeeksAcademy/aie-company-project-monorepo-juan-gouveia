@@ -63,7 +63,6 @@ function CandidateList() {
 
   async function handleCreate(input: RecordCreateInput) {
     await createRecord(input);
-    setModalOpen(false);
     setReloadKey((k) => k + 1);
   }
 

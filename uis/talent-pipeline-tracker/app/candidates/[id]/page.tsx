@@ -41,7 +41,6 @@ export default function CandidateDetailPage() {
   async function handleEdit(input: RecordCreateInput) {
     const updated = await updateRecord(id, input);
     setRecord(updated);
-    setEditOpen(false);
   }
 
   return (
