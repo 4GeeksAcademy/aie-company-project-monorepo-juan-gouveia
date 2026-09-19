@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <title>Brasaland - Pruebas Manuales de Funciones</title>
+</head>
+<body class="bg-gray-100">
+  <header>
+    <nav aria-label="Navegación principal" class="fixed top-0 left-0 right-0 z-50 w-full border-b border-red-200 bg-white">
+      <div class="mx-auto flex h-auto items-center justify-between px-3 md:px-4 lg:max-w-6xl lg:px-8">
+        <img src="media/logo-brasaland.png" alt="Logo Brasaland" class="h-18 w-auto mt-1.5" />
+      </div>
+    </nav>
+  </header>
+
+  <main class="mx-auto mt-20 mb-8 max-w-6xl px-3 md:px-4 lg:px-8">
+    <section class="rounded-lg border border-red-200 bg-white p-4 shadow-md md:p-6" aria-labelledby="manual-tests-title">
+      <div class="mb-5">
+        <h1 id="manual-tests-title" class="text-2xl font-bold text-gray-800">Pruebas del Sistema (Manual)</h1>
+        <p class="mt-2 text-sm text-gray-600">Ejecuta filtros, búsquedas, ordenamientos, reportes y validaciones con los datos de prueba definidos en TypeScript.</p>
+      </div>
+
+      <div class="grid gap-4 lg:grid-cols-2">
+        <article class="rounded-lg border border-gray-200 p-4">
+          <h2 class="text-lg font-semibold text-gray-800">Filtrar</h2>
+          <div class="mt-3 grid gap-2">
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input id="mt-location-id" type="text" value="LOC-MEDELLIN-01" class="w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+              <button id="mt-run-sales-by-location" type="button" class="rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Ventas por locación</button>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input id="mt-start-date" type="datetime-local" value="2024-03-15T00:00" class="rounded border border-gray-300 px-3 py-2 text-sm" />
+              <input id="mt-end-date" type="datetime-local" value="2024-03-15T23:59" class="rounded border border-gray-300 px-3 py-2 text-sm" />
+              <button id="mt-run-sales-by-range" type="button" class="rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Ventas por rango</button>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <select id="mt-category" class="rounded border border-gray-300 px-3 py-2 text-sm">
+                <option value="Meat">Meat</option>
+                <option value="Side">Side</option>
+                <option value="Beverage">Beverage</option>
+                <option value="Dessert">Dessert</option>
+                <option value="Combo">Combo</option>
+              </select>
+              <button id="mt-run-menu-by-category" type="button" class="rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Items por categoría</button>
+              <button id="mt-run-active-locations" type="button" class="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-800">Locaciones activas</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="rounded-lg border border-gray-200 p-4">
+          <h2 class="text-lg font-semibold text-gray-800">Buscar y Ordenar</h2>
+          <div class="mt-3 grid gap-2">
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input id="mt-search-location-id" type="text" value="LOC-MIAMI-01" class="w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+              <button id="mt-run-location-by-id" type="button" class="rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Buscar locación</button>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input id="mt-search-item-name" type="text" value="Coca-Cola" class="w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+              <button id="mt-run-item-by-name" type="button" class="rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Buscar ítem</button>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input id="mt-target-capacity" type="number" value="100" class="rounded border border-gray-300 px-3 py-2 text-sm" />
+              <button id="mt-run-binary-capacity" type="button" class="rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Búsqueda binaria</button>
+              <button id="mt-run-sort-locations" type="button" class="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-800">Ordenar locaciones</button>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <select id="mt-currency-sort" class="rounded border border-gray-300 px-3 py-2 text-sm">
+                <option value="USD">USD</option>
+                <option value="COP">COP</option>
+              </select>
+              <select id="mt-order-sort" class="rounded border border-gray-300 px-3 py-2 text-sm">
+                <option value="asc">asc</option>
+                <option value="desc">desc</option>
+              </select>
+              <button id="mt-run-sort-menu" type="button" class="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-800">Ordenar ítems</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="rounded-lg border border-gray-200 p-4 lg:col-span-2">
+          <h2 class="text-lg font-semibold text-gray-800">Reportes y Validaciones</h2>
+          <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded border border-gray-200 p-3">
+              <label for="mt-report-date" class="mb-1 block text-xs font-semibold text-gray-600">Revenue diario</label>
+              <input id="mt-report-date" type="date" value="2024-03-15" class="mb-2 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+              <select id="mt-report-currency" class="mb-2 w-full rounded border border-gray-300 px-3 py-2 text-sm"><option value="USD">USD</option><option value="COP">COP</option></select>
+              <button id="mt-run-daily-revenue" type="button" class="w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Ejecutar</button>
+            </div>
+            <div class="rounded border border-gray-200 p-3">
+              <p class="mb-2 text-xs font-semibold text-gray-600">Ticket promedio / Método de pago</p>
+              <button id="mt-run-average-ticket" type="button" class="mb-2 w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Ticket promedio</button>
+              <button id="mt-run-payment-method" type="button" class="w-full rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-800">Ventas por método</button>
+            </div>
+            <div class="rounded border border-gray-200 p-3">
+              <label for="mt-top-n" class="mb-1 block text-xs font-semibold text-gray-600">Top items vendidos</label>
+              <input id="mt-top-n" type="number" value="2" min="0" class="mb-2 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+              <button id="mt-run-top-items" type="button" class="w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Ejecutar</button>
+            </div>
+            <div class="rounded border border-gray-200 p-3">
+              <p class="mb-2 text-xs font-semibold text-gray-600">Comparativa país / Ranking</p>
+              <button id="mt-run-country-comparison" type="button" class="mb-2 w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Comparativa país</button>
+              <button id="mt-run-location-ranking" type="button" class="w-full rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-800">Ranking locaciones</button>
+            </div>
+            <div class="rounded border border-gray-200 p-3">
+              <p class="mb-2 text-xs font-semibold text-gray-600">Validaciones de datos inválidos</p>
+              <button id="mt-run-validate-menu" type="button" class="mb-2 w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Validar menu item</button>
+              <button id="mt-run-validate-sale" type="button" class="mb-2 w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Validar venta</button>
+              <button id="mt-run-validate-location" type="button" class="w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700">Validar locación</button>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded-lg bg-gray-900 p-4 text-gray-100">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <p id="mt-result-title" class="text-sm font-semibold">Resultado</p>
+              <span id="mt-result-meta" class="text-xs text-gray-300"></span>
+            </div>
+            <pre id="mt-result-json" class="max-h-80 overflow-auto whitespace-pre-wrap text-xs"></pre>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bg-gray-100 border-t border-red-200 mx-auto max-w-6xl px-3 py-4 md:px-4 lg:px-8">
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-sm text-gray-600">&copy; 2026 Brasaland. <span class="block sm:inline sm:ml-1">Todos los derechos reservados.</span></p>
+    </div>
+  </footer>
+
+  <script type="module" src="../../src/utils/dist/utils/manual-runner.js"></script>
+  <script type="module" src="manual-tests.js"></script>
+</body>
+</html>
