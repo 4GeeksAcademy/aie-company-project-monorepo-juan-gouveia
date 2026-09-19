@@ -117,7 +117,7 @@ export default function CandidateFormModal({
   const isValid = REQUIRED_FIELDS.every((field) => !errors[field]);
   const hasInput = TEXT_FIELDS.some((field) => form[field].trim() !== "");
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!isValid) return;
     try {

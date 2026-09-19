@@ -14,7 +14,7 @@ export default function NewNoteModal({ onClose, onSubmit }: NewNoteModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!content.trim()) return;
     try {
