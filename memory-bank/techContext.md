@@ -51,7 +51,7 @@
 
 ### Sitio Web Estático
 
-- HTML/CSS/JS vanilla en `website/` — sitio corporativo de Brasaland (index.html, funciones-brasaland.html, application.html).
+- HTML/CSS/JS vanilla en `uis/website/` — sitio corporativo de Brasaland (index.html, funciones-brasaland.html, application.html).
 
 ### Infraestructura y Datos
 
@@ -76,6 +76,17 @@ Basada en el template oficial de 4Geeks Academy. Cada carpeta de primer nivel ti
 | Reutilización | `packages/`, `shared/` | Tipos compartidos, SDKs, esquemas |
 | Operaciones | `infra/`, `scripts/`, `internal/` | Docker, configs de deploy, scripts internos |
 | Documentación | `docs/` | Arquitectura, decisiones, convenciones |
+
+### 1.1 Ubicación de frontends y backend
+
+| Ruta | Qué va aquí cuando se cree |
+|---|---|
+| `uis/` | Proyectos frontend de la empresa. |
+| `uis/website/` | Web corporativa de cara al público (ruta `/`, marca y texto alineados con `CONTEXT.md`). |
+| `uis/backoffice/` | App interna de la empresa, con layout propio y separado del sitio público (vista de entrada en `/`). |
+| `services/` | APIs y servicios backend. |
+
+**Estado actual:** `uis/website/` existe. `uis/backoffice/` aún no existe; el único proyecto interno actual es `uis/talent-pipeline-tracker/` (seguimiento de candidatos). Decisión del desarrollador: de momento se mantiene en esa ubicación y se moverá a `uis/backoffice/` más adelante. No lo muevas sin confirmación explícita.
 
 ### 2. Backend Centralizado (Recomendación)
 
@@ -170,4 +181,4 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ---
 
-_Actualizado: 2026-10-09_
+_Actualizado: 2026-10-14_

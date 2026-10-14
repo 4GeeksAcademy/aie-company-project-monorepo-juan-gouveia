@@ -11,7 +11,9 @@
 | `memory-bank/projectbrief.md` — Descripción del negocio, problema y objetivos | ✅ Completado |
 | `memory-bank/techContext.md` — Stack tecnológico, decisiones de arquitectura, restricciones | ✅ Completado |
 | `memory-bank/progress.md` — Este archivo | ✅ Completado |
-| `AGENTS.md` raíz | ❌ Pendiente |
+| `AGENTS.md` raíz | ✅ Completado |
+| `.agents/rules/` — reglas de desarrollo (`brasaland-domain`, `monorepo-structure`) | ✅ Completado |
+| `.agents/skills/` — skills de desarrollo (`update-memory-bank`, `new-module-scaffold`, `validate-domain-model`) | ✅ Completado |
 
 ### 2. Frontend — Talent Pipeline Tracker (`uis/talent-pipeline-tracker/`)
 
@@ -74,7 +76,7 @@ Módulos completos con modelos de dominio, lógica de negocio y validaciones esp
 | `mcps/` — carpeta preparada | ❌ Vacío |
 | `workflows/` — carpeta preparada | ❌ Vacío |
 
-### 6. Website Corporativo
+### 6. Website Corporativo (`uis/website/`; las rutas de la tabla son relativas a esa carpeta)
 
 | Elemento | Estado |
 |---|---|
@@ -115,7 +117,7 @@ Módulos completos con modelos de dominio, lógica de negocio y validaciones esp
 
 ### Inmediatos (Sprint Actual)
 
-1. **AGENTS.md raíz** — Crear el archivo de directrices para agentes de IA en el proyecto, definiendo:
+1. ✅ **AGENTS.md raíz** — Completado (junto con `.agents/rules/` y `.agents/skills/`). Define:
    - Convenciones de código y estilo.
    - Instrucciones sobre qué herramientas usar y cómo.
    - Reglas para la generación y modificación de código.
@@ -161,4 +163,4 @@ Módulos completos con modelos de dominio, lógica de negocio y validaciones esp
 
 ---
 
-_Actualizado: 2026-10-09_
+_Actualizado: 2026-10-14_
