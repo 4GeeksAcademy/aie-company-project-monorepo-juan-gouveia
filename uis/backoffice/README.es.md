@@ -12,7 +12,7 @@ Next.js 16 (App Router), React 19, TypeScript y Tailwind CSS 4. Es un proyecto i
 
 ## Cómo ejecutarlo
 
-Crea `.env.local` con la URL de la API:
+Copia `.env.example` como `.env.local` e indica la URL de la API:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=<url-base-de-la-api>
@@ -43,6 +43,8 @@ npm run build
 2. Pon sus archivos propios en `components/<herramienta>/` y `lib/<herramienta>/`. Las piezas reutilizables van directamente en `components/`.
 3. Añade una entrada en `lib/tools.ts`. La portada y la navegación se generan desde esa lista.
 
+Las áreas internas, incluida la formación, se incorporan aquí como herramientas, no como aplicaciones aparte. Cuando exista la autenticación, cada entrada de `lib/tools.ts` declarará el permiso que necesita y la lista se filtrará con `GET /auth/me`. Ese filtro solo afecta a la interfaz: la autorización real está en la API.
+
 ## Estructura
 
 - `app/`: layout raíz, portada y una carpeta por herramienta.
@@ -54,5 +56,6 @@ npm run build
 ## Limitaciones conocidas
 
 - **Sin autenticación:** no debe publicarse hasta que exista el login.
+- **`/funciones` es temporal:** prueba las reglas de `@repo/brasa-core`, un paquete transitorio. Cuando esas reglas pasen al backend, debe retirarse o llamar a la API. No añadas cálculos de negocio a los frontends.
 - **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). En móvil no se muestran los enlaces a herramientas; se navega desde la portada.
 - **API compartida:** el tracker usa una API de playground compartida, así que evita escrituras de prueba.

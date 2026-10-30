@@ -34,11 +34,12 @@
 ### Paquetes Compartidos
 
 - **`@repo/shared-types`** (`packages/shared/`) — tipos base compartidos (`Id`, `BaseEntity`) para uso transversal entre proyectos. Aún sin consumidores.
-- **`@repo/brasa-core`** (`packages/brasa-core/`) — modelos y lógica de negocio de Brasaland. Lo consume `uis/backoffice`.
+- **`@repo/brasa-core`** (`packages/brasa-core/`) — modelos y lógica de negocio de Brasaland. Paquete transitorio; lo consume `uis/backoffice`.
 
 ### Utilidades Core (`packages/brasa-core/`)
 
-- **TypeScript** sin compilar: cada aplicación Next.js lo enlaza con una dependencia `file:`, `transpilePackages` y `turbopack.root` en la raíz del repositorio.
+- **Transitorio:** el backend será la fuente de verdad de las reglas de negocio. El paquete no admite reglas ni consumidores nuevos, sirve de referencia para portar la lógica a Python y se eliminará cuando deje de usarse.
+- **TypeScript** sin compilar: `uis/backoffice` lo enlaza con una dependencia `file:`, `transpilePackages` y `turbopack.root` en la raíz del repositorio.
 - Módulos:
   - `types/models.ts` — modelos de dominio de Brasaland (`MenuItem`, `Location`, `SaleTransaction`, `WasteRecord`, `CountryMetrics`, etc.)
   - `utils/collections.ts` — filtros y ordenamiento (por locación, fechas, categoría, precio, capacidad)
@@ -85,7 +86,7 @@ Basada en el template oficial de 4Geeks Academy. Cada carpeta de primer nivel ti
 | `uis/backoffice/` | App interna de la empresa, con layout propio y separado del sitio público (vista de entrada en `/`). |
 | `services/` | APIs y servicios backend. |
 
-**Estado actual:** `uis/website/` y `uis/backoffice/` existen como proyectos Next.js independientes. El Talent Pipeline Tracker es un módulo de `uis/backoffice/`, en `/talento`. Cada herramienta interna nueva se registra en `uis/backoffice/lib/tools.ts`.
+**Estado actual:** `uis/website/` y `uis/backoffice/` existen como proyectos Next.js independientes. El Talent Pipeline Tracker es un módulo de `uis/backoffice/`, en `/talento`. Cada herramienta interna nueva se registra en `uis/backoffice/lib/tools.ts`, y eso incluye la formación y el resto de áreas internas. Con la autenticación, esa lista se filtrará por permisos con `GET /auth/me`; la autorización real vive en la API.
 
 ### 2. Backend Centralizado (Recomendación)
 
@@ -110,7 +111,7 @@ Los modelos de datos están diseñados específicamente para el dominio de Brasa
 
 ### 5. Pruebas Manuales de Funciones
 
-La herramienta `/funciones` de `uis/backoffice` ejecuta las utilidades de `@repo/brasa-core` (filtros, búsqueda, reportes, validaciones) con datos de ejemplo mediante `lib/funciones/runner.ts`.
+La herramienta `/funciones` de `uis/backoffice` ejecuta las utilidades de `@repo/brasa-core` (filtros, búsqueda, reportes, validaciones) con datos de ejemplo mediante `lib/funciones/runner.ts`. Es temporal: cuando las reglas pasen al backend, debe retirarse o llamar a la API.
 
 ### 6. Validación de Datos Separada
 

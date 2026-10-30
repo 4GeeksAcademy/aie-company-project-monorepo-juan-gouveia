@@ -1,0 +1,3 @@
+# Variables de entorno: nunca se versionan, salvo los ejemplos sin valores reales.
+.env*
+!.env.example

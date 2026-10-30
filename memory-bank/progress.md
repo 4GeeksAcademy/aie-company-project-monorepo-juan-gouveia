@@ -24,7 +24,8 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 | **Portada** (`app/page.tsx`) — una tarjeta por herramienta, generada desde `lib/tools.ts` | ✅ Implementado |
 | **Header** global con navegación entre herramientas | ✅ Implementado |
 | **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
-| **Autenticación** | ❌ No iniciado; no debe publicarse sin ella |
+| **Autenticación** | ❌ No iniciado; no debe publicarse sin ella. `GET /auth/me` filtrará `lib/tools.ts` por permisos, con la autorización real en la API. La sesión y las llamadas a la API irán por un intermediario en Next.js |
+| **Formación** | ❌ No iniciado; será una herramienta del backoffice, no una aplicación aparte |
 
 **Talent Pipeline Tracker** (`app/talento/`): seguimiento de candidatos del proceso de selección de Brasaland.
 
@@ -53,7 +54,7 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 
 ### 3. Utilidades Core TypeScript (`packages/brasa-core/`)
 
-Paquete `@repo/brasa-core` con modelos de dominio, lógica de negocio y validaciones específicas de Brasaland. Lo consume `uis/backoffice`.
+Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negocio y validaciones específicas de Brasaland. Lo consume `uis/backoffice` para `/funciones`. No admite reglas nuevas: el backend será la fuente de verdad.
 
 | Módulo | Estado |
 |---|---|
@@ -99,7 +100,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 | Elemento | Estado |
 |---|---|
-| `packages/brasa-core/` — `@repo/brasa-core` (dominio y lógica de negocio) | ✅ Consumido por `uis/backoffice` |
+| `packages/brasa-core/` — `@repo/brasa-core` (dominio y lógica de negocio) | ⏳ Transitorio; consumido por `uis/backoffice` |
 | `packages/shared/` — `@repo/shared-types` (Id, BaseEntity) | ✅ Setup inicial; sin consumidores |
 | Sin gestor de monorepo raíz (turborepo/nx/lerna) | ❌ No configurado |
 
@@ -144,10 +145,12 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 4. **Backend FastAPI** — Implementar la API central de Brasaland:
    - Modelos de base de datos.
    - Endpoints REST para locales, menús, ventas.
-   - Conexión con el Talent Pipeline Tracker (`uis/backoffice`) y sustitución del envío simulado del formulario de Brasa Points.
+   - Conexión con el Talent Pipeline Tracker (`uis/backoffice`), a través de un intermediario en Next.js.
+   - Lectura de sedes y menú desde el servidor de Next.js en `uis/website`, sustituyendo `lib/locations.ts`. El formulario pasará a enviar `location_id` (UUID) y el país en ISO 3166-1 alfa-2 (`CO`, `US`).
+   - Alta pública de Brasa Points (`POST /loyalty/enrollments`), llamada desde el navegador, para sustituir el envío simulado del formulario. Es solo registro, sin credenciales, con límite de peticiones, respuesta neutra, registro del consentimiento y confirmación del correo.
    - Desplegar en entorno local con Docker.
 
-5. **Migración de utilidades core** — Refactorizar `packages/brasa-core` (TypeScript) a Python si la lógica de negocio debe residir en el backend, o mantener como librería frontend independiente si el backend la reimplementa.
+5. **Migración de utilidades core** — Portar a Python, dominio por dominio, las reglas de `packages/brasa-core`. Decisión tomada: el backend es la fuente de verdad. Al terminar, retirar `/funciones` o hacer que llame a la API, y eliminar el paquete junto con su configuración en `uis/backoffice`.
 
 6. **Pipeline de datos** — Poblar `data/` con datasets realistas de Brasaland y crear pipelines ETL básicos.
 
@@ -171,6 +174,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 - **Sin gestor de monorepo**: no hay `package.json` raíz ni scripts compartidos; cada proyecto se gestiona independientemente.
 - **Website no publicable aún**: el envío del formulario es simulado, faltan los términos del programa y las sedes usan datos de ejemplo. El detalle está en `uis/website/README.es.md`.
 - **Backoffice sin autenticación**: no debe publicarse hasta que exista el login.
+- **Dependencia temporal del backoffice**: mientras exista `packages/brasa-core`, se construye desde la raíz del repositorio, y los cambios en el paquete también deben comprobar `uis/backoffice`.
 
 ---
 

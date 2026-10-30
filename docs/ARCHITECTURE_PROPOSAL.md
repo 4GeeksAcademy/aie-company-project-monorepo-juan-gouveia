@@ -19,7 +19,7 @@ Descarto MVC y serverless como base, y descarto aplicar la arquitectura hexagona
 | Característica | Qué le exige a la arquitectura |
 |---|---|
 | **Equipo pequeño construyendo desde casi cero.** No hay API interna, datos consolidados ni telemetría. | Una estructura que cualquiera entienda sin formación especial y que permita entregar endpoints útiles pronto. |
-| **Las interfaces ya existen o existirán por separado:** el tracker de candidatos en Next.js, la web corporativa, la futura app de fidelización, el backoffice y los agentes de IA. | El backend no genera pantallas: expone una API JSON que consumen varios clientes distintos. |
+| **Las interfaces ya existen o existirán por separado:** el backoffice con sus herramientas internas, la web corporativa, la futura app de fidelización y los agentes de IA. | El backend no genera pantallas: expone una API JSON que consumen varios clientes distintos. |
 | **Reglas que cambian según el país:** dos monedas (COP y USD), dos legislaciones laborales, dos zonas horarias y dos idiomas. | Un lugar único y comprobable para las reglas de negocio, fuera de los endpoints y de la base de datos. |
 | **Muchos dominios con lógica mayoritariamente de registro y consulta:** candidatos, recetas, proveedores, locales y menús. | No imponer abstracciones pesadas donde la lógica es simple. |
 | **Integraciones externas que van a cambiar:** un POS distinto en cada país, una tasa de cambio que hoy es fija (1 USD = 4000 COP) pero no lo será siempre, un proveedor de LLM para el asistente de dirección y el envío del informe semanal. | Poder sustituir o añadir una integración sin tocar las reglas de negocio. |
@@ -32,7 +32,7 @@ Descarto MVC y serverless como base, y descarto aplicar la arquitectura hexagona
 
 MVC separa los datos (modelo), la presentación (vista) y la coordinación entre ambos (controlador). Nació para aplicaciones que generan la interfaz en el servidor.
 
-- **En Brasaland, la vista no está en el backend.** Las pantallas viven en Next.js y en la web estática; la API solo devuelve JSON. De MVC quedan el modelo y el controlador, y el patrón no indica dónde van las reglas de negocio.
+- **En Brasaland, la vista no está en el backend.** Las pantallas viven en los proyectos Next.js; la API solo devuelve JSON. De MVC quedan el modelo y el controlador, y el patrón no indica dónde van las reglas de negocio.
 - **En la práctica, las reglas acaban en los controladores o en los modelos del ORM.** Con reglas distintas por país, que se repetirían en ventas, compras, RRHH y dashboards, eso las dispersa por decenas de endpoints.
 - **Lo útil de MVC ya está cubierto.** La separación entre presentación y lógica se consigue al tener frontend y backend como sistemas separados.
 
@@ -97,7 +97,7 @@ En contra:
 **Arquitectura en capas dentro de cada dominio, con adaptadores para las integraciones externas.**
 
 ```
-   Clientes: Next.js (backoffice, tracker), web, app de fidelización, agentes de IA
+   Clientes: backoffice, web, app de fidelización, agentes de IA
                                    │  HTTP / JSON
   ┌────────────────────────────────▼──────────────────────────────┐
   │ API        endpoints y esquemas de entrada y salida            │
@@ -167,7 +167,7 @@ Si algo no cumple estas condiciones, no es un dominio: es código compartido (`c
 
 El backend es un único servicio en `services/brasaland-api/`, siguiendo la convención del monorepo de una carpeta por servicio dentro de `services/`. Los frontends (`uis/`) y los agentes de IA (`agents/`) son clientes de esta API; cómo se relacionan con ella se describe en la sección 5.
 
-Los nombres de carpetas, archivos y código van en **inglés**, igual que en el frontend actual. La documentación y los comentarios siguen en español.
+En el backend, los nombres de carpetas, archivos y código van en **inglés**. La documentación y los comentarios siguen en español. Las rutas de los frontends pueden ir en español, porque las ve el usuario.
 
 ### 2.3 Estructura propuesta
 
@@ -197,7 +197,7 @@ services/brasaland-api/
 │   │   ├── customers/          # CRM: clientes, historial y preferencias
 │   │   ├── loyalty/            # Brasa Points: acumulación, saldo y canjes
 │   │   ├── people/             # Empleados, ausencias, vacaciones y alta administrativa
-│   │   ├── recruitment/        # Candidatos y notas (API del talent-pipeline-tracker)
+│   │   ├── recruitment/        # Candidatos y notas (API del tracker del backoffice)
 │   │   ├── telemetry/          # Eventos en tiempo real de los locales
 │   │   └── reporting/          # Métricas y dashboards (solo lectura)
 │   │
@@ -215,6 +215,7 @@ services/brasaland-api/
 ├── migrations/                 # Historial único de cambios del esquema de base de datos
 ├── tests/                      # Replica la estructura de app/ (tests/domains/recipes/…)
 ├── pyproject.toml              # Dependencias y configuración de herramientas
+├── .gitignore                  # Excluye .env, entornos virtuales y cachés de Python
 ├── .env.example                # Variables de entorno necesarias, sin valores reales
 ├── Dockerfile
 └── README.md                   # Cómo instalar, ejecutar y probar el servicio
@@ -248,7 +249,7 @@ Un único backend con una única base de datos hace muy fácil que los dominios 
 1. **Cada tabla tiene un solo dominio dueño**, y solo ese dominio escribe en ella.
 2. **Un dominio solo usa otro a través de su `service.py`.** Nunca importa sus modelos ni su repositorio. Por ejemplo, si `inventory` necesita los productos vendidos ayer, se los pide a `sales.service`; no consulta la tabla de ventas.
 3. **Las referencias entre dominios se hacen por identificador.** Una venta guarda el `location_id`, no una copia de los datos del local. Lo mismo ocurre con los ingredientes, que usan tres dominios: su dueño es `inventory` (es lo que se almacena y se pide), y `recipes` y `procurement` los referencian por identificador.
-4. **Sin dependencias circulares.** Los dominios base (`auth`, `locations`, `menu`) no dependen de nadie. Los operativos dependen de ellos:
+4. **Sin dependencias circulares.** Los dominios base (`auth`, `locations`, `menu`) no dependen de nadie. Los operativos dependen de ellos. Entre los operativos, `loyalty` depende de `customers`, nunca al revés: una cuenta de puntos pertenece a un cliente (3.6).
 
    ```
    auth · locations · menu                        ← dominios base
@@ -276,11 +277,11 @@ Propuesta inicial, sujeta a las prioridades del sprint:
 
 1. **`core/`, `auth/` y `locations/`.** Todos los demás dominios los necesitan.
 2. **`recruitment/`.** Ya existe un frontend que lo consumirá, tras la adaptación descrita en 3.5, así que permite validar la estructura de punta a punta desde el primer sprint.
-3. **Las tres áreas prioritarias del proyecto:**
+3. **`customers/` y `loyalty/`, empezando por el alta pública (3.6).** La web ya tiene el formulario de registro, y el alta no depende de ventas ni de los POS. Requiere la lectura pública de `locations/`. La acumulación de puntos se añade cuando exista `sales/`.
+4. **Las otras dos áreas prioritarias del proyecto:**
    - Operaciones: `menu/`, `sales/` e `inventory/`.
-   - Fidelización: `customers/` y `loyalty/`.
    - Formación: `recipes/` y `training/`.
-4. **El resto** (`procurement/`, `people/`, `telemetry/`, `reporting/`) según las prioridades de negocio.
+5. **El resto** (`procurement/`, `people/`, `telemetry/`, `reporting/`) según las prioridades de negocio.
 
 ---
 
@@ -307,7 +308,7 @@ Propuesta inicial, sujeta a las prioridades del sprint:
 | **Listados** | Los mismos parámetros en todos los dominios: `page`, `limit`, `q` (búsqueda) y filtros con nombre del campo (`status`, `location_id`, `from`, `to`). Siempre la misma respuesta: `{ data, meta: { total, page, limit } }`. | Hoy el tracker recibe dos formatos distintos de lista. Un formato único permite un único componente de tabla o paginación en los frontends. |
 | **Errores** | El mismo formato en todos los dominios, con un código legible por máquina además del mensaje. | El frontend puede mostrar el error correcto sin interpretar textos. |
 | **Valores cerrados** | Los estados y categorías se publican como valores cerrados en la documentación de la API (p. ej. los estados posibles de un candidato). | Hoy el tracker deduce los valores válidos de descripciones de texto. |
-| **País y local** | Se filtra con parámetros (`country`, `location_id`). Además, los permisos del usuario restringen automáticamente lo que ve: un supervisor de Medellín solo recibe sus locales aunque no filtre. | La operación es bicountry; la seguridad no puede depender de que el cliente envíe el filtro correcto. |
+| **País y local** | Cada local tiene un `id` UUID, que es el que usan las referencias (`location_id`), y un `code` único y legible (`MED-01`). El país es un código ISO 3166-1 alfa-2 (`CO`, `US`); cada frontend muestra el nombre según el idioma. Se filtra con parámetros (`country`, `location_id`). Además, los permisos del usuario restringen automáticamente lo que ve: un supervisor de Medellín solo recibe sus locales aunque no filtre. | La operación es bicountry; la seguridad no puede depender de que el cliente envíe el filtro correcto. |
 | **Dinero** | Todo importe va acompañado de su moneda. Los endpoints de informes aceptan `currency=COP\|USD` para devolver los totales convertidos. | Dirección necesita ver la cadena completa en una sola moneda (p. ej. "cuánto vendimos esta semana en Florida"). |
 | **Fechas** | Se intercambian en formato ISO 8601 y en UTC. El servidor aplica la zona horaria de cada local cuando el filtro es "un día" de ese local. | Colombia y Florida tienen husos distintos, y Florida cambia de hora en verano. |
 
@@ -318,17 +319,17 @@ Todas las rutas van precedidas de `/api/v1`. El mapa muestra los recursos princi
 | Dominio (tag) | Rutas | Principales clientes |
 |---|---|---|
 | **auth** | `POST /auth/token` (inicio de sesión) · `GET /auth/me` (usuario actual y sus permisos) · `GET, POST /users` · `GET, PATCH /users/{id}` (cuentas, roles, locales asignados) | Todos los frontends |
-| **locations** | `GET, POST /locations` · `GET, PATCH /locations/{id}` (país, ciudad, moneda, zona horaria, horario de apertura) | Todos |
+| **locations** | `GET, POST /locations` · `GET, PATCH /locations/{id}` (código, país, ciudad, moneda, zona horaria, horario de apertura). La lectura es pública porque la web muestra las sedes y el registro las ofrece como favoritas (3.6). | Todos |
 | **menu** | `GET, POST /menu-items` · `GET, PATCH /menu-items/{id}` (precios y disponibilidad por país) | Web, app de fidelización, backoffice |
-| **recipes** | `GET, POST /recipes` (búsqueda por nombre o ingrediente, idioma) · `GET, PATCH /recipes/{id}` · `GET, POST /recipes/{id}/versions` · `POST /recipes/{id}/versions/{version}/publish`. La consulta de una receta acepta `servings` y `units` para ajustar porciones y unidades de medida. | Plataforma de formación |
-| **training** | `GET, POST /training-paths` · `GET, PATCH /training-paths/{id}` (itinerarios de incorporación) · `GET, POST /enrollments` (asignación de un empleado a un itinerario) · `GET, POST /enrollments/{id}/progress` (horas y tareas por estación) | Plataforma de formación |
+| **recipes** | `GET, POST /recipes` (búsqueda por nombre o ingrediente, idioma) · `GET, PATCH /recipes/{id}` · `GET, POST /recipes/{id}/versions` · `POST /recipes/{id}/versions/{version}/publish`. La consulta de una receta acepta `servings` y `units` para ajustar porciones y unidades de medida. | Backoffice (formación) |
+| **training** | `GET, POST /training-paths` · `GET, PATCH /training-paths/{id}` (itinerarios de incorporación) · `GET, POST /enrollments` (asignación de un empleado a un itinerario) · `GET, POST /enrollments/{id}/progress` (horas y tareas por estación) | Backoffice (formación) |
 | **sales** | `GET /sales` (por local y rango de fechas) · `GET /sales/{id}` · `POST /sales/imports` (carga de ventas desde un POS) | Backoffice, `reporting`, jobs |
-| **inventory** | `GET /ingredients` · `GET /stock` (por local) · `POST /stock/adjustments` · `GET, POST /waste-records` · `GET, POST /ingredient-orders` · `GET, PATCH /ingredient-orders/{id}` · `GET /ingredient-orders/suggestions` (pedido sugerido según ventas históricas y stock) | Backoffice de operaciones |
-| **procurement** | `GET, POST /suppliers` · `GET, PATCH /suppliers/{id}` · `GET, POST /suppliers/{id}/prices` (historial de precios) · `GET, POST /purchases` | Backoffice de compras |
-| **customers** | `GET, POST /customers` · `GET, PATCH /customers/{id}` · `GET /customers/{id}/orders` (historial) | Backoffice de marketing, app de fidelización |
-| **loyalty** | `GET /loyalty/accounts/{customer_id}` (saldo de Brasa Points) · `GET /loyalty/accounts/{customer_id}/transactions` · `POST /loyalty/redemptions` (canje). La acumulación de puntos no tiene endpoint público: la genera el sistema a partir de las ventas. | App de fidelización |
-| **people** | `GET, POST /employees` · `GET, PATCH /employees/{id}` · `GET, POST /absences` · `PATCH /absences/{id}` (aprobación o rechazo de vacaciones y ausencias) | Portal de RRHH |
-| **recruitment** | `GET, POST /candidates` · `GET, PATCH /candidates/{id}` · `GET, POST /candidates/{id}/notes` · `DELETE /candidates/{id}/notes/{note_id}` | talent-pipeline-tracker |
+| **inventory** | `GET /ingredients` · `GET /stock` (por local) · `POST /stock/adjustments` · `GET, POST /waste-records` · `GET, POST /ingredient-orders` · `GET, PATCH /ingredient-orders/{id}` · `GET /ingredient-orders/suggestions` (pedido sugerido según ventas históricas y stock) | Backoffice (operaciones) |
+| **procurement** | `GET, POST /suppliers` · `GET, PATCH /suppliers/{id}` · `GET, POST /suppliers/{id}/prices` (historial de precios) · `GET, POST /purchases` | Backoffice (compras) |
+| **customers** | `GET, POST /customers` · `GET, PATCH /customers/{id}` · `GET /customers/{id}/orders` (historial) | Backoffice (marketing), app de fidelización |
+| **loyalty** | `POST /loyalty/enrollments` (alta pública, ver 3.6) · `POST /loyalty/enrollments/verify` (confirmación del correo) · `GET /loyalty/accounts/{customer_id}` (saldo de Brasa Points) · `GET /loyalty/accounts/{customer_id}/transactions` · `POST /loyalty/redemptions` (canje). La acumulación de puntos no tiene endpoint público: la genera el sistema a partir de las ventas. | Web (alta), app de fidelización |
+| **people** | `GET, POST /employees` · `GET, PATCH /employees/{id}` · `GET, POST /absences` · `PATCH /absences/{id}` (aprobación o rechazo de vacaciones y ausencias) | Backoffice (RRHH) |
+| **recruitment** | `GET, POST /candidates` · `GET, PATCH /candidates/{id}` · `GET, POST /candidates/{id}/notes` · `DELETE /candidates/{id}/notes/{note_id}` | Backoffice (Talent Pipeline Tracker) |
 | **telemetry** | `POST /telemetry/events` (eventos enviados por los locales) · `GET /telemetry/stream` (flujo en tiempo real para el dashboard; tecnología pendiente, ver sección 7) | Locales, dashboard operativo |
 | **reporting** | `GET /reports/sales` (por país, local y periodo, en `currency`) · `GET /reports/locations/ranking` (p. ej. ticket promedio por local) · `GET /reports/hr` (rotación, absentismo, cobertura por país) · `GET /reports/executive-summary` | Dashboards, asistente de IA de dirección |
 
@@ -343,7 +344,7 @@ Todas las rutas van precedidas de `/api/v1`. El mapa muestra los recursos princi
 
 ### 3.5 Transición del talent-pipeline-tracker
 
-El tracker es el único frontend que ya consume una API, y sus tipos documentan los problemas del contrato actual (`uis/talent-pipeline-tracker/types/record.ts`). La nueva API debe resolverlos, no reproducirlos:
+El tracker es el único frontend que ya consume una API, y sus tipos documentan los problemas del contrato actual (`uis/backoffice/types/record.ts`). La nueva API debe resolverlos, no reproducirlos:
 
 | Situación actual | Decisión en la nueva API |
 |---|---|
@@ -353,7 +354,39 @@ El tracker es el único frontend que ya consume una API, y sus tipos documentan 
 | `POST` y `PUT` ignoran `status` y `stage`, y el front los corrige con un `PATCH` adicional. | La creación acepta el estado inicial y las modificaciones se hacen con `PATCH`, sin `PUT`. |
 | Tipos escritos a mano a partir de pruebas contra la API. | Cliente generado desde el contrato de la API. |
 
-**Consecuencia:** el tracker tendrá que adaptarse, cambiando la URL base, las rutas y los tipos. Es un cambio acotado a `lib/api.ts` y `types/record.ts`. Propongo hacerlo en el mismo sprint en que se implemente `recruitment/`, en lugar de mantener rutas `/records` por compatibilidad: arrastrar el contrato antiguo dejaría a la nueva API con las mismas inconsistencias desde el primer día.
+**Consecuencia:** el tracker tendrá que adaptarse, cambiando la URL base, las rutas y los tipos. El cambio se concentra en `lib/talento/api.ts`, `lib/talento/labels.ts` y `types/record.ts`, y alcanza a los componentes del tracker que usan esos tipos. Propongo hacerlo en el mismo sprint en que se implemente `recruitment/`, en lugar de mantener rutas `/records` por compatibilidad: arrastrar el contrato antiguo dejaría a la nueva API con las mismas inconsistencias desde el primer día.
+
+### 3.6 Alta pública en Brasa Points
+
+El formulario de registro de la web lo completa una persona sin sesión, así que su ruta no puede exigir autenticación. Esta es la única escritura pública de la API.
+
+**Flujo.** `POST /loyalty/enrollments` recibe el formulario. `loyalty` pide a `customers`, a través de su servicio, que cree el cliente con sus datos y preferencias, y abre una cuenta de puntos pendiente de confirmar. La cuenta se activa cuando la persona confirma su correo con `POST /loyalty/enrollments/verify`.
+
+**Solo registro.** El alta no crea credenciales: el cliente no inicia sesión ni consulta sus puntos en línea. Esa capacidad se añadirá cuando exista la app de fidelización (sección 7).
+
+**Protecciones obligatorias:**
+
+- **Límite de peticiones** para frenar los registros automatizados.
+- **Respuesta neutra:** la API contesta igual si el correo ya existe o no, para que el alta no revele quién es cliente.
+- **Registro del consentimiento:** se guarda qué aceptó cada persona (términos y ofertas por correo) y cuándo.
+- **Validación en el backend:** las comprobaciones del formulario solo mejoran la experiencia; la decisión final es del servicio.
+
+**Rutas públicas separadas.** La sección 3.1 declara la autenticación en el router de cada dominio. Para que esa protección siga aplicándose por defecto, las rutas públicas (`/loyalty/enrollments` y la lectura de `/locations`) se declaran en un router público aparte dentro de su dominio.
+
+### 3.7 Regla de acumulación de Brasa Points
+
+> **Pendiente de confirmar con Marketing.** `CONTEXT.md` no define esta regla: es un supuesto de trabajo, no un hecho del negocio.
+
+| País | Regla |
+|---|---|
+| Colombia | 1 punto por cada 10.000 COP |
+| Estados Unidos | 1 punto por cada 2 USD |
+
+- **Base del cálculo:** el total pagado en cada venta, en la moneda del país del local.
+- **Redondeo:** solo puntos enteros por venta; la fracción se descarta y no se acumula para la siguiente compra.
+- **Configuración:** la regla se guarda por país en `loyalty`, de modo que cambiarla no exija tocar el código. No depende de `exchange_rates`.
+
+A la tasa fija de 1 USD = 4000 COP, un cliente en Estados Unidos acumula 1,25 veces más puntos por el mismo valor consumido. Marketing debe tenerlo en cuenta al fijar el valor de los canjes.
 
 ---
 
@@ -369,7 +402,7 @@ Fuentes consultadas: la documentación oficial de FastAPI, la plantilla oficial 
 |---|---|---|
 | **Documentación oficial ("Bigger Applications"):** un `main.py` pequeño que registra routers, con las rutas agrupadas en una carpeta `routers/` y las dependencias compartidas en un archivo común. | `main.py` solo registra routers y no contiene rutas de negocio (3.1). | No agrupamos por tipo de archivo. La guía oficial muestra una aplicación con dos o tres áreas; con 14 dominios, una carpeta `routers/` y otra `models/` con decenas de archivos mezclarían áreas del negocio sin relación entre sí (2.1). |
 | **Guía comunitaria:** un paquete por dominio con sus propios archivos de rutas, esquemas, modelos, servicio, dependencias y excepciones, más el código transversal en la raíz (configuración, base de datos, paginación, errores). | La plantilla interna de cada dominio (2.4) y la carpeta `core/` (2.6) siguen esta convención casi sin cambios. | Añadimos un archivo `repository.py`, que separa las consultas a la base de datos de las reglas de negocio, como exige la capa de datos de la sección 1. Añadimos también `integrations/` y `jobs/`, que la guía no contempla: Brasaland tiene POS por país, tareas programadas y proveedores externos que no encajan en ningún dominio. |
-| **Plantilla oficial *Full Stack*:** backend y frontend en carpetas separadas, cada uno con su README, sus dependencias y su configuración de Docker. | El backend vive en `services/brasaland-api/`, separado de los frontends de `uis/` (2.2), con `pyproject.toml`, `Dockerfile`, `.env.example` y `README.md` propios (2.3). | En la plantilla, la API sirve el frontend desde el mismo dominio. En Brasaland, frontends y API son sistemas separados en orígenes distintos, así que el navegador exigirá que la API autorice explícitamente esos orígenes (CORS, ver 5.4). |
+| **Plantilla oficial *Full Stack*:** backend y frontend en carpetas separadas, cada uno con su README, sus dependencias y su configuración de Docker. | El backend vive en `services/brasaland-api/`, separado de los frontends de `uis/` (2.2), con `pyproject.toml`, `Dockerfile`, `.env.example` y `README.md` propios (2.3). | En la plantilla, la API sirve el frontend desde el mismo dominio. En Brasaland, frontends y API son sistemas separados en orígenes distintos, así que las llamadas que salen del navegador exigen que la API autorice ese origen (CORS, ver 5.4). |
 
 ### 4.2 Routers
 
@@ -415,11 +448,9 @@ La investigación también cubrió temas que no afectan a la estructura, como la
 
 Brasaland tendrá varios clientes de una misma API:
 
-- el talent-pipeline-tracker,
-- el futuro backoffice,
+- el backoffice, que reúne las herramientas internas de cada área (talento, formación, RRHH, operaciones, compras y marketing),
 - la web corporativa,
 - la app de fidelización,
-- la plataforma de formación,
 - los agentes de IA.
 
 Esta sección define cómo se relacionan con el backend. Algunas piezas ya aparecen en secciones anteriores; aquí se reúnen y se completan.
@@ -448,6 +479,7 @@ Por qué no repositorios separados:
 **Lo que hay que cuidar:**
 
 - El repositorio mezcla dos ecosistemas (Node.js y Python) y no tiene herramientas comunes en la raíz. Las comprobaciones automáticas (pruebas, linter, construcción) deben ejecutarse **solo en el proyecto que cambió**, para que tocar el tracker no obligue a probar el backend y viceversa.
+- **Excepción temporal:** mientras exista `packages/brasa-core` (6.2), un cambio en ese paquete también debe comprobar `uis/backoffice`, que depende de él.
 - La regla 1 no la impone ninguna herramienta. Se vigila en las revisiones de código.
 
 ### 5.2 Comunicación a través del contrato de la API
@@ -460,20 +492,26 @@ Por qué no repositorios separados:
   3. Se corrigen los errores de tipo que aparezcan.
   4. Todo se integra en el mismo cambio, gracias al monorepo.
 - **Los agentes de IA son clientes como cualquier otro.** Llaman a la API por HTTP con sus propias credenciales y permisos; nunca acceden directamente a la base de datos (2.2).
-- **Las llamadas salen directamente desde el navegador hacia la API,** como ya hace el tracker. Next.js permite además usar el servidor del frontend como intermediario (patrón *Backend for Frontend*). No lo adoptamos de entrada porque añade una capa más sin un problema concreto que resolver. Se reconsiderará si la estrategia de autenticación lo requiere, por ejemplo para guardar la sesión en una cookie inaccesible desde JavaScript. Esa estrategia está pendiente (sección 7).
+- **Desde dónde sale cada llamada depende del cliente:**
+  - **Web, lecturas.** Las páginas piden sedes y menú desde el servidor de Next.js, para que el contenido llegue en el HTML.
+  - **Web, alta de Brasa Points.** El formulario llama a `POST /loyalty/enrollments` directamente desde el navegador (3.6). Así el límite de peticiones ve la IP real del visitante.
+  - **Backoffice.** Usa el servidor de Next.js como intermediario (patrón *Backend for Frontend*). La sesión se guarda en una cookie inaccesible desde JavaScript, y una única ruta genérica (`app/api/[...path]/route.ts`) reenvía las peticiones a la API con el token, que nunca llega al navegador. `proxy.ts` puede redirigir al login antes de mostrar una página.
+- **El intermediario no contiene lógica.** Solo reenvía peticiones y añade el token. No aplica reglas de negocio ni decide permisos: eso sigue en la API.
 - **La autorización vive siempre en el backend.** Que un frontend oculte un botón no protege nada: cada ruta de la API comprueba los permisos por sí misma (3.1, 3.2), sea quien sea el cliente.
+- **Un solo backoffice, con herramientas según los permisos.** Las áreas internas no son aplicaciones separadas, sino herramientas de `uis/backoffice`. `GET /auth/me` devuelve los permisos del usuario, y cada entrada de `lib/tools.ts` declara el permiso que necesita para aparecer en la portada y la navegación. Es solo un filtro de interfaz: la API rechaza igualmente cualquier petición sin permiso, aunque alguien escriba la URL de una herramienta a mano.
 
 ### 5.3 Variables de entorno en cada lado
 
 La configuración del backend se describe en 4.4. En los frontends hay una diferencia importante con Next.js:
 
 - **Las variables con prefijo `NEXT_PUBLIC_` se incrustan en el código que se descarga en el navegador** al construir la aplicación. Cualquier usuario puede leerlas.
-- **Regla:** en un frontend, solo son variables públicas las que sería aceptable publicar en una página web, como la URL base de la API (`NEXT_PUBLIC_API_BASE_URL`, que el tracker ya usa). Claves, tokens y credenciales de proveedores nunca van en un frontend; pertenecen al backend.
-- **Consecuencia:** como el valor queda fijado al construir, cada entorno (desarrollo, pruebas, producción) necesita su propia construcción del frontend apuntando a su API.
+- **Regla:** en un frontend, solo son variables públicas las que sería aceptable publicar en una página web, como la URL base de la API que usa el formulario de la web (`NEXT_PUBLIC_API_BASE_URL`). Claves, tokens y credenciales de proveedores nunca van en un frontend; pertenecen al backend.
+- **Consecuencia:** como el valor queda fijado al construir, cada entorno (desarrollo, pruebas, producción) necesita su propia construcción de la web apuntando a su API.
+- **El backoffice no necesita variables públicas para la API.** Sus llamadas salen del servidor de Next.js (5.2), así que la URL de la API es una variable de servidor, sin el prefijo `NEXT_PUBLIC_`.
 
 **Cada proyecto tiene su propio archivo de entorno y su propio `.env.example`.** No hay un `.env` compartido en la raíz: mezclaría la configuración de sistemas que se despliegan por separado y facilitaría exponer en un frontend un secreto del backend.
 
-**Hay un punto de coordinación obligatorio entre ambos lados:** la URL de la API que conoce cada frontend y la lista de orígenes que autoriza el backend (5.4) deben coincidir en cada entorno. Si no coinciden, el navegador bloquea las peticiones aunque los dos sistemas funcionen correctamente por separado.
+**Hay un punto de coordinación obligatorio entre ambos lados:** la URL de la API que conoce la web y la lista de orígenes que autoriza el backend (5.4) deben coincidir en cada entorno. Si no coinciden, el navegador bloquea las peticiones aunque los dos sistemas funcionen correctamente por separado.
 
 ### 5.4 CORS
 
@@ -484,12 +522,11 @@ En Brasaland, los frontends y la API son siempre orígenes distintos:
 - en desarrollo, porque se ejecutan en puertos distintos;
 - en producción, porque se publican en dominios distintos.
 
-Por tanto, CORS es necesario desde el primer endpoint. Política propuesta:
+Solo la web llama a la API desde el navegador, y únicamente para el alta de Brasa Points (5.2). El resto del tráfico sale de servidores de Next.js y no pasa por CORS. Por tanto, CORS es necesario desde que exista esa ruta, con una lista muy corta. Política propuesta:
 
-- **Lista explícita de orígenes permitidos**, distinta por entorno y leída de una variable de entorno del backend. Incluye solo los frontends que llaman a la API desde el navegador.
+- **Lista explícita de orígenes permitidos**, distinta por entorno y leída de una variable de entorno del backend. Hoy solo incluye la web; el backoffice no está en la lista porque usa un intermediario (5.2).
 - **Nunca el comodín `*`.** Además de abrir la API a cualquier web, deja de funcionar en cuanto las peticiones llevan credenciales, como la cabecera de autenticación que usarán todas las rutas protegidas.
-- **Solo los métodos y cabeceras que la API usa:** `GET`, `POST`, `PATCH` y `DELETE`; las cabeceras de autenticación y de tipo de contenido.
-- **Si el frontend añade un intermediario en el servidor (5.2),** sus llamadas dejan de venir del navegador y ese frontend ya no necesitaría estar en la lista.
+- **Solo los métodos y cabeceras que el navegador necesita:** hoy, `POST` y la cabecera de tipo de contenido para el alta.
 
 Dos aclaraciones para el equipo, porque son fuente habitual de confusión:
 
@@ -504,6 +541,8 @@ Frontend y backend se despliegan por separado, así que durante un tiempo conviv
 - **Un cambio que no se pueda hacer de forma compatible requiere una nueva versión de la API** (`/api/v2`, sección 3.1). Mientras tanto, la versión anterior sigue disponible hasta que todos los clientes hayan migrado.
 
 La transición del tracker (3.5) es la excepción. Como hoy consume otra API y no la nuestra, se cambia de una vez en el sprint en que se implementa `recruitment/`.
+
+**Construcción del backoffice.** Mientras exista `packages/brasa-core`, el backoffice no puede construirse solo con su carpeta: la construcción usa la raíz del repositorio como contexto. Si se empaqueta con la salida `standalone` de Next.js, también necesita `outputFileTracingRoot`. Esta excepción, junto con la de 5.1, desaparece al eliminar el paquete (6.2), y con ella la dependencia `file:`, `transpilePackages` y `turbopack.root`.
 
 ---
 
@@ -555,11 +594,13 @@ La estructura propuesta solo funciona si se aplica con constancia: FastAPI no im
 
 | Riesgo | Por qué importa | Respuesta propuesta |
 |---|---|---|
-| **Reglas de negocio duplicadas en TypeScript y en Python.** `src/` ya implementa validaciones y cálculos (margen, ticket promedio, métricas por país). | Si el backend las reimplementa y alguien sigue usando las de `src/`, habrá dos versiones de la misma regla que divergen con el tiempo. | El backend pasa a ser la fuente de verdad de las reglas de negocio. `src/` queda como referencia para portar la lógica y no se amplía con reglas nuevas. |
+| **Reglas de negocio duplicadas en TypeScript y en Python.** El paquete `packages/brasa-core` ya implementa validaciones y cálculos (margen, ticket promedio, métricas por país), y la herramienta `/funciones` del backoffice los usa. | Si el backend las reimplementa y alguien sigue usando las de `brasa-core`, habrá dos versiones de la misma regla que divergen con el tiempo. | El backend pasa a ser la fuente de verdad de las reglas de negocio. `brasa-core` es transitorio: queda como referencia para portar la lógica y no se amplía con reglas ni consumidores nuevos. Cuando se complete la migración, `/funciones` se retira o pasa a usar la API, y el paquete se elimina. |
 | **No sabemos cómo funcionan los POS.** Solo sabemos que hay uno distinto en cada país y que no están integrados. | Determina si las ventas llegan por carga periódica, por avisos automáticos (webhooks) o por exportación de archivos. Eso afecta a `sales` y a la puntualidad de las alertas. | Averiguarlo antes de empezar `sales/`. La interfaz común (`integrations/pos/`) permite avanzar con un adaptador de prueba mientras tanto. |
 | **Base de datos, autenticación e infraestructura sin decidir.** | La estructura no depende de ellas, pero el primer endpoint real sí. | Cerrar las decisiones de la sección 7 antes del primer sprint de desarrollo. |
 | **Construir los 14 dominios antes de tiempo.** | El árbol de 2.3 es un mapa de destino. Crear carpetas vacías o modelos especulativos para todos los dominios ralentiza al equipo y fija fronteras antes de conocer bien el negocio. | Crear cada dominio cuando se empiece a trabajar en él (2.7). |
 | **La excepción de `reporting` se convierte en una puerta trasera.** | Si `reporting` empieza a escribir datos, o si otros dominios copian su forma de leer tablas ajenas, la regla de 2.5 deja de existir en la práctica. | `reporting` solo hace consultas de solo lectura, y la excepción no se extiende a ningún otro dominio sin una decisión explícita. |
+| **Personal de cocina en el backoffice.** La formación forma parte del backoffice. | Quien se forma necesita una cuenta y un permiso propios, normalmente desde el móvil y en un área con alta rotación. Además, el mismo backoffice contiene herramientas de RRHH y compras. | Crear y retirar esas cuentas debe ser sencillo, y los permisos deben limitarlas a formación (5.2). La interfaz móvil de formación se diseña desde el principio para ese uso. |
+| **Abuso del alta pública.** | Es la única escritura sin autenticación, así que cualquiera puede llamarla: registros falsos en masa o comprobación de qué correos son clientes. | Las protecciones de 3.6 forman parte del alcance de la ruta, no son una mejora posterior. |
 | **Brasa Points depende de las ventas.** | Si `sales` llama directamente a `loyalty` al registrar cada venta, aparece una dependencia entre dominios operativos que no está en 2.5, y un fallo en fidelización podría bloquear el registro de ventas. | La acumulación de puntos la procesa un job a partir de las ventas nuevas, sin que `sales` conozca a `loyalty`. |
 | **Pedidos en línea fuera del mapa.** `CONTEXT.md` menciona una app de fidelización **y de pedidos**. | La propuesta no incluye un dominio de pedidos digitales. Si entra en el alcance, generará ventas que hoy solo llegan desde los POS. | Tratarlo como un dominio nuevo (`orders/`) cuando se priorice, sin mezclarlo con `sales`. |
 | **Un monorepo sin herramientas comunes.** | Sin comprobaciones separadas por proyecto, cada cambio obliga a probarlo todo o, peor, a no probar nada. | Comprobaciones automáticas por carpeta (5.1). |
@@ -580,7 +621,7 @@ Varias palabras significan cosas distintas según quién las use. Conviene fijar
 ### 6.4 Cómo se mantiene la estructura en el tiempo
 
 - **Revisión de código con una lista corta de comprobaciones,** derivada de 6.1:
-  - ¿Hay reglas de negocio en un router?
+  - ¿Hay reglas de negocio en un router o en el intermediario de Next.js?
   - ¿Algún dominio importa modelos o repositorios de otro?
   - ¿Hay librerías de proveedores fuera de `integrations/`?
   - ¿Se regeneró el cliente del frontend?
@@ -598,7 +639,7 @@ Esta propuesta define la estructura del backend, pero deja abiertas varias decis
 | Decisión | Qué condiciona | Dónde se menciona |
 |---|---|---|
 | **Motor de base de datos, librería para tablas y esquemas, y herramienta de migraciones** | `core/database.py`, los `models.py` de cada dominio y `migrations/`. | 2.3, 4.3 |
-| **Estrategia de autenticación** (incluido si los clientes de la app de fidelización comparten el acceso de los usuarios internos) | `auth/` y `core/security.py`. Si la sesión se guarda en una cookie, condiciona también el uso de un intermediario en Next.js y la configuración de CORS con credenciales. | 3.3, 5.2, 5.4 |
+| **Estrategia de autenticación.** La sesión del backoffice se guarda en una cookie gestionada por su intermediario (5.2). Falta decidir cómo inicia sesión el personal y el modelo de permisos. De momento los clientes no tienen acceso (3.6); cuando exista la app de fidelización habrá que decidir cómo se identifican. | `auth/` y `core/security.py`. | 3.3, 5.2, 5.4 |
 | **Tecnología para el flujo en tiempo real** | `GET /telemetry/stream` y el dashboard operativo. | 3.3 |
 | **Ejecución de tareas programadas y de fondo** | Cómo se lanzan y se reintentan los procesos de `jobs/`. | 2.6 |
 | **Criterio para usar funciones asíncronas** | Rendimiento de las rutas y de los adaptadores de POS e IA, cuyas llamadas externas no deben bloquear la API. | 4 |

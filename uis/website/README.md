@@ -42,10 +42,10 @@ No environment variables are needed.
 
 These must be resolved before publishing:
 
-- **Simulated submission:** `submitRegistration()` in `lib/api.ts` does not save or send data, yet the form shows a thank-you message. It will call the FastAPI backend when that exists.
+- **Simulated submission:** `submitRegistration()` in `lib/api.ts` does not save or send data, yet the form shows a thank-you message. When the FastAPI backend exists, it will call `POST /loyalty/enrollments`, which only registers the customer and creates no login credentials.
 - **No programme terms:** the form requires accepting terms whose text does not exist yet.
 - **Placeholder data:** addresses, phone numbers, and map links in `lib/locations.ts` are examples. The footer social links are placeholders too.
-- **Unconfirmed rule:** `CONTEXT.md` does not define the "1 point per $10,000 COP" rule shown on the landing page.
+- **Unconfirmed rule:** `CONTEXT.md` does not define the points rules shown on the landing page (1 point per $10,000 COP or $2 USD). They are an assumption pending confirmation from Marketing.
 - **Broken "Menú" link:** it points to `#menu`, and that section does not exist.
 - **Missing favicon:** `favicon.ico` returns 404.
 - **Phone error message:** it asks for 10 digits, but the validation accepts 8 to 15.

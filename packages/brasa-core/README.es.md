@@ -2,7 +2,9 @@
 
 Modelos de dominio y utilidades de negocio de Brasaland: menú, ventas, locales, desperdicio y métricas por país en USD y COP, con la tasa fija definida en el paquete.
 
-Responde a la necesidad de datos centralizados descrita en `CONTEXT.md`: todos los consumidores aplican las mismas reglas de negocio. Los datos de ejemplo son ilustrativos, no datos reales de la empresa.
+> **Paquete transitorio.** El backend es la fuente de verdad de las reglas de negocio. Este paquete no recibe reglas nuevas ni consumidores nuevos, solo correcciones mientras siga en uso. Sirve de referencia para portar la lógica a Python y se eliminará cuando deje de usarse.
+
+Hoy solo lo usa la herramienta `/funciones` de `uis/backoffice`. Los datos de ejemplo son ilustrativos, no datos reales de la empresa.
 
 ## API pública
 
@@ -17,9 +19,9 @@ Todo se exporta desde la raíz del paquete.
 | `utils/validations` | `validateMenuItem`, `validateSaleTransaction`, `validateLocation`, que devuelven `{ valid, errors[] }` |
 | `utils/test-data` | `sampleMenuItems`, `sampleLocations`, `sampleSales`, `sampleWasteRecords`, `invalidMenuItem`, `invalidSale`, `invalidLocation` |
 
-## Cómo consumirlo
+## Cómo se consume
 
-El repositorio no tiene gestor de workspaces y el paquete se distribuye como TypeScript sin compilar. En un proyecto Next.js:
+Esta configuración documenta el uso actual en `uis/backoffice`; no debe replicarse en proyectos nuevos. El repositorio no tiene gestor de workspaces y el paquete se distribuye como TypeScript sin compilar:
 
 1. Añade la dependencia en `package.json` y ejecuta `npm install`:
 
@@ -40,7 +42,7 @@ El repositorio no tiene gestor de workspaces y el paquete se distribuye como Typ
    import { calculateAverageTicket, sampleSales } from "@repo/brasa-core";
    ```
 
-`uis/backoffice` lo usa de esta forma. Los servicios y agentes en Python no pueden importarlo directamente.
+Los servicios y agentes en Python no pueden importarlo: obtienen estos cálculos a través de la API.
 
 ## Estructura
 

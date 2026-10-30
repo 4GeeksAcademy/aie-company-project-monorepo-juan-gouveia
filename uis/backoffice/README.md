@@ -12,7 +12,7 @@ Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS 4. It is an inde
 
 ## How to run it
 
-Create `.env.local` with the API URL:
+Copy `.env.example` as `.env.local` and set the API URL:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=<api-base-url>
@@ -43,6 +43,8 @@ npm run build
 2. Put its own files in `components/<tool>/` and `lib/<tool>/`. Reusable pieces stay directly in `components/`.
 3. Add an entry to `lib/tools.ts`. The home page and navigation are generated from that list.
 
+Internal areas, including training, join this project as tools, not as separate applications. Once authentication exists, each `lib/tools.ts` entry will declare the permission it needs, and the list will be filtered with `GET /auth/me`. That filter only affects the interface: real authorization lives in the API.
+
 ## Structure
 
 - `app/`: root layout, home page, and one folder per tool.
@@ -54,5 +56,6 @@ npm run build
 ## Known limitations
 
 - **No authentication:** do not publish it until login exists.
+- **`/funciones` is temporary:** it tests the rules in `@repo/brasa-core`, a transitional package. Once those rules move to the backend, it must be retired or call the API. Do not add business calculations to the frontends.
 - **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). Tool links are hidden on mobile, where staff navigate from the home page.
 - **Shared API:** the tracker uses a shared playground API, so avoid test writes against it.

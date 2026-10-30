@@ -2,7 +2,9 @@
 
 Domain models and business utilities for Brasaland: menu, sales, locations, waste, and country metrics in USD and COP, using the fixed rate defined in the package.
 
-It supports the need for centralized data described in `CONTEXT.md`: every consumer applies the same business rules. The sample data is illustrative, not real company data.
+> **Transitional package.** The backend is the source of truth for business rules. This package takes no new rules or new consumers, only fixes while it remains in use. It serves as a reference for porting the logic to Python and will be removed once it is no longer used.
+
+Today only the `/funciones` tool in `uis/backoffice` uses it. The sample data is illustrative, not real company data.
 
 ## Public API
 
@@ -17,9 +19,9 @@ Everything is exported from the package root.
 | `utils/validations` | `validateMenuItem`, `validateSaleTransaction`, `validateLocation`, which return `{ valid, errors[] }` |
 | `utils/test-data` | `sampleMenuItems`, `sampleLocations`, `sampleSales`, `sampleWasteRecords`, `invalidMenuItem`, `invalidSale`, `invalidLocation` |
 
-## How to consume it
+## How it is consumed
 
-The repository has no workspace manager, and the package ships uncompiled TypeScript. In a Next.js project:
+This setup documents the current use in `uis/backoffice`; do not replicate it in new projects. The repository has no workspace manager, and the package ships uncompiled TypeScript:
 
 1. Add the dependency to `package.json` and run `npm install`:
 
@@ -40,7 +42,7 @@ The repository has no workspace manager, and the package ships uncompiled TypeSc
    import { calculateAverageTicket, sampleSales } from "@repo/brasa-core";
    ```
 
-`uis/backoffice` uses it this way. Python services and agents cannot import it directly.
+Python services and agents cannot import it: they get these calculations through the API.
 
 ## Structure
 

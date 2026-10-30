@@ -11,5 +11,5 @@ Cada subcarpeta dentro de `packages/` debería representar **un paquete versiona
 
 | Paquete | Carpeta | Propósito | Lo consume |
 |---|---|---|---|
-| [`@repo/brasa-core`](./brasa-core/README.es.md) | `brasa-core/` | Modelos de dominio y utilidades de negocio de Brasaland | `uis/backoffice` |
+| [`@repo/brasa-core`](./brasa-core/README.es.md) | `brasa-core/` | Transitorio: modelos de dominio y utilidades de negocio de Brasaland, que el backend sustituirá | `uis/backoffice` |
 | `@repo/shared-types` | `shared/` | Tipos base (`Id`, `BaseEntity`) | Aún sin consumidores |

@@ -25,7 +25,10 @@ export default function BrasaPoints() {
 
         <ol className="ml-5 list-decimal list-outside mb-4 marker:text-red-700 marker:font-semibold">
           <li>Te registras aquí ¡Es 100% digital!</li>
-          <li>Acumulas 1 punto por cada $10.000 COP de consumo en nuestros locales.</li>
+          <li>
+            Acumulas 1 punto por cada $10.000 COP de consumo en Colombia, o por cada $2 USD en
+            Estados Unidos.
+          </li>
           <li>Canjea tus puntos por descuentos y platos gratis.</li>
           <li>Accede a ofertas exclusivas y promociones especiales, solo para nuestros miembros.</li>
         </ol>

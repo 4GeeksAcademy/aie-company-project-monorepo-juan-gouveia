@@ -42,10 +42,10 @@ No necesita variables de entorno.
 
 Deben resolverse antes de publicar:
 
-- **Envío simulado:** `submitRegistration()` en `lib/api.ts` no guarda ni envía datos, aunque el formulario muestra un mensaje de agradecimiento. Llamará al backend FastAPI cuando exista.
+- **Envío simulado:** `submitRegistration()` en `lib/api.ts` no guarda ni envía datos, aunque el formulario muestra un mensaje de agradecimiento. Cuando exista el backend FastAPI, llamará a `POST /loyalty/enrollments`, que solo registra al cliente: no crea credenciales de acceso.
 - **Sin términos del programa:** el formulario exige aceptar unos términos cuyo texto aún no existe.
 - **Datos de ejemplo:** las direcciones, los teléfonos y los enlaces de mapas de `lib/locations.ts` son ejemplos. Los enlaces a redes del pie también.
-- **Regla sin confirmar:** `CONTEXT.md` no define la regla de "1 punto por cada $10.000 COP" que muestra la landing.
+- **Regla sin confirmar:** `CONTEXT.md` no define las reglas de puntos que muestra la landing (1 punto por cada $10.000 COP o $2 USD). Son un supuesto pendiente de confirmar con Marketing.
 - **Enlace "Menú" roto:** apunta a `#menu`, y esa sección no existe.
 - **Falta el favicon:** `favicon.ico` da 404.
 - **Mensaje de error del teléfono:** pide 10 dígitos, pero la validación acepta de 8 a 15.
