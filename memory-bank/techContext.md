@@ -13,7 +13,10 @@
 | **PostCSS** | (vía @tailwindcss/postcss) | Procesamiento CSS |
 | **ESLint** | ^9 | Linter con `eslint-config-next` (core-web-vitals + TypeScript) |
 
-**Proyecto UI actual:** `uis/talent-pipeline-tracker` — Seguimiento de candidatos de reclutamiento para Brasaland.
+**Proyectos UI actuales:**
+
+- `uis/website` (puerto 3000) — Landing y registro de Brasa Points para clientes.
+- `uis/backoffice` (puerto 3001) — Herramientas internas: Talent Pipeline Tracker (`/talento`) y pruebas de funciones (`/funciones`).
 
 ### Backend / Servicios
 
@@ -30,11 +33,12 @@
 
 ### Paquetes Compartidos
 
-- **`@repo/shared-types`** (`packages/shared/`) — tipos base compartidos (`Id`, `BaseEntity`) para uso transversal entre proyectos.
+- **`@repo/shared-types`** (`packages/shared/`) — tipos base compartidos (`Id`, `BaseEntity`) para uso transversal entre proyectos. Aún sin consumidores.
+- **`@repo/brasa-core`** (`packages/brasa-core/`) — modelos y lógica de negocio de Brasaland. Lo consume `uis/backoffice`.
 
-### Utilidades Core (`src/`)
+### Utilidades Core (`packages/brasa-core/`)
 
-- **TypeScript** puro, compilado con `tsconfig.manual.json` (target ES2020, module ES2020, bundler resolution).
+- **TypeScript** sin compilar: cada aplicación Next.js lo enlaza con una dependencia `file:`, `transpilePackages` y `turbopack.root` en la raíz del repositorio.
 - Módulos:
   - `types/models.ts` — modelos de dominio de Brasaland (`MenuItem`, `Location`, `SaleTransaction`, `WasteRecord`, `CountryMetrics`, etc.)
   - `utils/collections.ts` — filtros y ordenamiento (por locación, fechas, categoría, precio, capacidad)
@@ -42,16 +46,11 @@
   - `utils/transformations.ts` — cálculos financieros, margen de ganancia, scoring de rendimiento, ranking, ticket promedio, métricas por país
   - `utils/validations.ts` — validación de MenuItem, SaleTransaction, Location
   - `utils/test-data.ts` — datos de ejemplo (válidos e inválidos)
-  - `utils/manual-runner.ts` — API `brasaManual` expuesta globalmente para pruebas en consola del navegador
 
 ### Agentes / IA
 
 - **Python** (esqueleto vacío en `agents/_template/agent.py`)
 - Estructura de directorios: `agents/`, `skills/`, `mcps/`, `workflows/`
-
-### Sitio Web Estático
-
-- HTML/CSS/JS vanilla en `uis/website/` — sitio corporativo de Brasaland (index.html, funciones-brasaland.html, application.html).
 
 ### Infraestructura y Datos
 
@@ -86,7 +85,7 @@ Basada en el template oficial de 4Geeks Academy. Cada carpeta de primer nivel ti
 | `uis/backoffice/` | App interna de la empresa, con layout propio y separado del sitio público (vista de entrada en `/`). |
 | `services/` | APIs y servicios backend. |
 
-**Estado actual:** `uis/website/` existe. `uis/backoffice/` aún no existe; el único proyecto interno actual es `uis/talent-pipeline-tracker/` (seguimiento de candidatos). Decisión del desarrollador: de momento se mantiene en esa ubicación y se moverá a `uis/backoffice/` más adelante. No lo muevas sin confirmación explícita.
+**Estado actual:** `uis/website/` y `uis/backoffice/` existen como proyectos Next.js independientes. El Talent Pipeline Tracker es un módulo de `uis/backoffice/`, en `/talento`. Cada herramienta interna nueva se registra en `uis/backoffice/lib/tools.ts`.
 
 ### 2. Backend Centralizado (Recomendación)
 
@@ -98,7 +97,7 @@ El frontend usa el App Router de Next.js 16 con:
 - Componentes del lado del servidor por defecto
 - `"use client"` para interactividad (manejo de estado, efectos, hooks de router)
 - Layout anidado con Header global
-- Sistema de rutas dinámicas (`/candidates/[id]`)
+- Sistema de rutas dinámicas (`/talento/candidates/[id]`)
 
 ### 4. Tipos de Dominio de Brasaland
 
@@ -109,13 +108,13 @@ Los modelos de datos están diseñados específicamente para el dominio de Brasa
 - Desperdicio con categorías de razón
 - Scoring de rendimiento multi-factor (ingresos, eficiencia, desperdicio, margen)
 
-### 5. API de Prueba en Consola (`brasaManual`)
+### 5. Pruebas Manuales de Funciones
 
-Se expone un objeto global `window.brasaManual` que permite ejecutar todas las funciones de utilidad (filtros, búsqueda, reportes, validaciones) directamente desde la consola del navegador con datos de ejemplo.
+La herramienta `/funciones` de `uis/backoffice` ejecuta las utilidades de `@repo/brasa-core` (filtros, búsqueda, reportes, validaciones) con datos de ejemplo mediante `lib/funciones/runner.ts`.
 
 ### 6. Validación de Datos Separada
 
-Las reglas de validación de negocio (para MenuItem, SaleTransaction, Location) viven en módulos independientes (`src/utils/validations.ts`) y devuelven objetos `{ valid, errors[] }`.
+Las reglas de validación de negocio (para MenuItem, SaleTransaction, Location) viven en módulos independientes (`packages/brasa-core/utils/validations.ts`) y devuelven objetos `{ valid, errors[] }`.
 
 ### 7. ESLint con Configuración de Next.js
 
@@ -128,7 +127,7 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 ### Lenguaje y Compilación
 
 - **TypeScript estricto** (`strict: true`) en todos los tsconfig.
-- **Target ES2020** para utilidades core, **ES2017** para el frontend Next.js.
+- **Target ES2017** para los proyectos Next.js, que también compilan `@repo/brasa-core`.
 - **moduleResolution "bundler"** en Next.js.
 - Sin transpilador configurado a nivel raíz (cada proyecto maneja su propia compilación).
 
@@ -171,7 +170,7 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 ### Datos
 
 - La carpeta `data/` está estructurada pero vacía (solo READMEs).
-- Los datos de ejemplo existen únicamente en TypeScript (`src/utils/test-data.ts`), no persistentes.
+- Los datos de ejemplo existen únicamente en TypeScript (`packages/brasa-core/utils/test-data.ts`), no persistentes.
 
 ### Dependencias Externas
 
@@ -181,4 +180,4 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ---
 
-_Actualizado: 2026-10-14_
+_Actualizado: 2026-10-30_

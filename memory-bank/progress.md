@@ -15,15 +15,23 @@
 | `.agents/rules/` — reglas de desarrollo (`brasaland-domain`, `monorepo-structure`) | ✅ Completado |
 | `.agents/skills/` — skills de desarrollo (`update-memory-bank`, `new-module-scaffold`, `validate-domain-model`) | ✅ Completado |
 
-### 2. Frontend — Talent Pipeline Tracker (`uis/talent-pipeline-tracker/`)
+### 2. Backoffice (`uis/backoffice/`)
 
-Aplicación Next.js 16 con App Router para el seguimiento de candidatos del proceso de selección de Brasaland.
+Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las herramientas del personal; cada herramienta nueva se añade con su carpeta en `app/` y una entrada en `lib/tools.ts`.
+
+| Elemento | Estado |
+|---|---|
+| **Portada** (`app/page.tsx`) — una tarjeta por herramienta, generada desde `lib/tools.ts` | ✅ Implementado |
+| **Header** global con navegación entre herramientas | ✅ Implementado |
+| **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
+| **Autenticación** | ❌ No iniciado; no debe publicarse sin ella |
+
+**Talent Pipeline Tracker** (`app/talento/`): seguimiento de candidatos del proceso de selección de Brasaland.
 
 | Componente | Estado |
 |---|---|
-| **Página principal** (`app/page.tsx`) — listado de candidatos con filtros | ✅ Implementado |
-| **Detalle de candidato** (`app/candidates/[id]/page.tsx`) — vista individual | ✅ Implementado |
-| **Header** global con navegación | ✅ Implementado |
+| **Página principal** (`app/talento/page.tsx`) — listado de candidatos con filtros | ✅ Implementado |
+| **Detalle de candidato** (`app/talento/candidates/[id]/page.tsx`) — vista individual | ✅ Implementado |
 | **CandidateCard** — tarjeta resumen con datos y badges | ✅ Implementado |
 | **CandidateHeader** — cabecera con nombre y botón editar | ✅ Implementado |
 | **CandidateDetails** — datos completos del candidato | ✅ Implementado |
@@ -37,15 +45,15 @@ Aplicación Next.js 16 con App Router para el seguimiento de candidatos del proc
 | **EmptyMessage / ErrorMessage / LoadingMessage** — estados de UI | ✅ Implementado |
 | **DetailItem** — fila de detalle genérica | ✅ Implementado |
 | **Tipos (`types/record.ts`)** — interfaces de Record, Note, API responses | ✅ Implementado |
-| **API client (`lib/api.ts`)** — fetch a backend REST con filtros | ✅ Implementado |
+| **API client (`lib/talento/api.ts`)** — fetch a backend REST con filtros | ✅ Implementado |
 | **Hooks** (`useAutoClose`, `useEscapeKey`, `useNotes`, `usePatchField`) | ✅ Implementado |
 | **Formato (`lib/format.ts`)** — formatDate, formatDateTime | ✅ Implementado |
 
 **Backend:** La UI está lista pero no hay backend real. Los datos se obtendrían de una API REST aún no implementada.
 
-### 3. Utilidades Core TypeScript (`src/`)
+### 3. Utilidades Core TypeScript (`packages/brasa-core/`)
 
-Módulos completos con modelos de dominio, lógica de negocio y validaciones específicas de Brasaland.
+Paquete `@repo/brasa-core` con modelos de dominio, lógica de negocio y validaciones específicas de Brasaland. Lo consume `uis/backoffice`.
 
 | Módulo | Estado |
 |---|---|
@@ -55,7 +63,6 @@ Módulos completos con modelos de dominio, lógica de negocio y validaciones esp
 | `utils/transformations.ts` — Cálculos financieros, scoring, ranking, ticket promedio, métricas por país | ✅ Completado |
 | `utils/validations.ts` — Validaciones de dominio con formato `{ valid, errors[] }` | ✅ Completado |
 | `utils/test-data.ts` — Datos de ejemplo (válidos e inválidos para pruebas) | ✅ Completado |
-| `utils/manual-runner.ts` — API `brasaManual` expuesta en `window` para consola del navegador | ✅ Completado |
 
 ### 4. Backend / Servicios
 
@@ -78,20 +85,22 @@ Módulos completos con modelos de dominio, lógica de negocio y validaciones esp
 
 ### 6. Website Corporativo (`uis/website/`; las rutas de la tabla son relativas a esa carpeta)
 
+Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las páginas HTML anteriores.
+
 | Elemento | Estado |
 |---|---|
-| `website/index.html` — Página principal | ✅ Implementado |
-| `website/funciones-brasaland.html` — Página de funciones | ✅ Implementado |
-| `website/application.html` — Página de aplicación | ✅ Implementado |
-| `website/validation.js` — Script de validación | ✅ Implementado |
-| `website/manual-tests.js` — Pruebas manuales | ✅ Implementado |
-| `website/media/` — Recursos multimedia | ✅ Con contenido |
+| `app/page.tsx` — Landing | ✅ Implementado |
+| `app/registro/page.tsx` — Formulario de Brasa Points en tres pasos | ✅ Implementado; envío simulado |
+| `lib/locations.ts` — Países, ciudades y sedes (datos de ejemplo) | ✅ Implementado |
+| `lib/registration-validation.ts` — Reglas de validación | ✅ Implementado |
+| `public/media/` — Recursos multimedia | ✅ Con contenido |
 
 ### 7. Paquetes Compartidos
 
 | Elemento | Estado |
 |---|---|
-| `packages/shared/` — `@repo/shared-types` (Id, BaseEntity) | ✅ Setup inicial |
+| `packages/brasa-core/` — `@repo/brasa-core` (dominio y lógica de negocio) | ✅ Consumido por `uis/backoffice` |
+| `packages/shared/` — `@repo/shared-types` (Id, BaseEntity) | ✅ Setup inicial; sin consumidores |
 | Sin gestor de monorepo raíz (turborepo/nx/lerna) | ❌ No configurado |
 
 ### 8. Datos
@@ -135,10 +144,10 @@ Módulos completos con modelos de dominio, lógica de negocio y validaciones esp
 4. **Backend FastAPI** — Implementar la API central de Brasaland:
    - Modelos de base de datos.
    - Endpoints REST para locales, menús, ventas.
-   - Conexión con el frontend existente (talent-pipeline-tracker).
+   - Conexión con el Talent Pipeline Tracker (`uis/backoffice`) y sustitución del envío simulado del formulario de Brasa Points.
    - Desplegar en entorno local con Docker.
 
-5. **Migración de utilidades core** — Refactorizar `src/` (TypeScript) a Python si la lógica de negocio debe residir en el backend, o mantener como librería frontend independiente si el backend la reimplementa.
+5. **Migración de utilidades core** — Refactorizar `packages/brasa-core` (TypeScript) a Python si la lógica de negocio debe residir en el backend, o mantener como librería frontend independiente si el backend la reimplementa.
 
 6. **Pipeline de datos** — Poblar `data/` con datasets realistas de Brasaland y crear pipelines ETL básicos.
 
@@ -160,7 +169,9 @@ Módulos completos con modelos de dominio, lógica de negocio y validaciones esp
 - **Sin base de datos definida**: no hay decisión tomada sobre SQL vs NoSQL ni esquema de datos.
 - **Dependencia de Python para agentes**: el esqueleto está en Python, pero el resto del stack es TypeScript/JavaScript — se debe decidir si los agentes serán Python puro o se integran vía MCP/subprocess.
 - **Sin gestor de monorepo**: no hay `package.json` raíz ni scripts compartidos; cada proyecto se gestiona independientemente.
+- **Website no publicable aún**: el envío del formulario es simulado, faltan los términos del programa y las sedes usan datos de ejemplo. El detalle está en `uis/website/README.es.md`.
+- **Backoffice sin autenticación**: no debe publicarse hasta que exista el login.
 
 ---
 
-_Actualizado: 2026-10-14_
+_Actualizado: 2026-10-30_
