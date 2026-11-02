@@ -58,8 +58,9 @@
 
 ### Infraestructura y Datos
 
-- `infra/`, `scripts/`, `internal/` — solo READMEs, sin implementación.
-- `data/` — estructura por etapas: `raw/`, `process/`, `pipelines/`, `eval/` (solo READMEs).
+- `infra/`, `internal/` — solo READMEs, sin implementación.
+- `scripts/incident-report/` — procesador de reportes de incidentes en **Python 3**, solo con la librería estándar (`csv`, `decimal`) y pruebas con `unittest`. Lee de `data/raw/` y exporta a `data/process/results.csv`.
+- `data/` — estructura por etapas: `raw/`, `process/`, `pipelines/`, `eval/`. `raw/` contiene `incidents-brasaland.csv`; el resto solo tiene READMEs.
 
 ---
 
@@ -175,13 +176,13 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ### Datos
 
-- La carpeta `data/` está estructurada pero vacía (solo READMEs).
-- Los datos de ejemplo existen únicamente en TypeScript (`packages/brasa-core/utils/test-data.ts`), no persistentes.
+- El único dataset es `data/raw/incidents-brasaland.csv`, que se conserva sin modificar. Los demás datos de ejemplo existen solo en TypeScript (`packages/brasa-core/utils/test-data.ts`), sin persistencia.
+- Los artefactos generados en `data/process/` (como `results.csv`) no se versionan.
 
 ### Dependencias Externas
 
 - **Node.js**: requerido para el frontend Next.js.
-- **Python**: requerido para agentes (esqueleto).
+- **Python 3**: requerido para `scripts/incident-report/` (probado con 3.12, sin dependencias) y para agentes (esqueleto).
 - Sin gestor de monorepo configurado a nivel raíz (no hay `package.json` raíz, ni turborepo, ni nx, ni lerna).
 
 ---

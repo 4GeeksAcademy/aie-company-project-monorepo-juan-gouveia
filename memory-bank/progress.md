@@ -4,6 +4,8 @@
 
 La refactorización de las interfaces está completada: `uis/website` y `uis/backoffice` son aplicaciones Next.js independientes; el tracker y las pruebas de funciones viven como herramientas del backoffice. Las decisiones posteriores de arquitectura del backend están documentadas como propuesta y no implican que el backend o la autenticación estén implementados.
 
+El procesador de reportes de incidentes (`scripts/incident-report/`) está completado: valida y resume el CSV de incidentes de Operaciones, coincide exactamente con los valores esperados del briefing y exporta las métricas a `data/process/results.csv`.
+
 ### 1. Contexto y Configuración Inicial
 
 | Elemento | Estado |
@@ -110,8 +112,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 | Elemento | Estado |
 |---|---|
-| `data/raw/` — datos fuente | ❌ Vacío |
-| `data/process/` — datos procesados | ❌ Vacío |
+| `data/raw/` — datos fuente | ✅ `incidents-brasaland.csv` (100 incidentes de prueba, enero de 2024) |
+| `data/process/` — datos procesados | ✅ `results.csv` generado por `scripts/incident-report/`; ignorado en Git |
 | `data/pipelines/` — pipelines ETL | ❌ Vacío |
 | `data/eval/` — datasets de evaluación | ❌ Vacío |
 
@@ -120,7 +122,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 | Elemento | Estado |
 |---|---|
 | `infra/` — Docker, deploy | ❌ No iniciado |
-| `scripts/` — scripts auxiliares | ❌ No iniciado |
+| `scripts/incident-report/` — procesador de reportes de incidentes (Python, sin dependencias, 28 pruebas `unittest`) | ✅ Implementado |
 | `internal/` — CLIs internos | ❌ No iniciado |
 
 ---
@@ -154,7 +156,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 5. **Migración de utilidades core** — Portar a Python, dominio por dominio, las reglas de `packages/brasa-core`. Decisión tomada: el backend es la fuente de verdad. Al terminar, retirar `/funciones` o hacer que llame a la API, y eliminar el paquete junto con su configuración en `uis/backoffice`.
 
-6. **Pipeline de datos** — Poblar `data/` con datasets realistas de Brasaland y crear pipelines ETL básicos.
+6. **Pipeline de datos** — Poblar `data/` con datasets realistas de Brasaland y crear pipelines ETL básicos. Ya hay un primer dataset (`data/raw/incidents-brasaland.csv`) con su procesador en `scripts/incident-report/`; sus reglas de validación servirán de referencia para la ingesta de incidentes del dashboard operativo.
 
 ### Mediano Plazo
 
@@ -180,4 +182,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-10-30_
+_Actualizado: 2026-11-02_
