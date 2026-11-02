@@ -2,6 +2,8 @@
 
 ## Estado Actual del Desarrollo
 
+La refactorización de las interfaces está completada: `uis/website` y `uis/backoffice` son aplicaciones Next.js independientes; el tracker y las pruebas de funciones viven como herramientas del backoffice. Las decisiones posteriores de arquitectura del backend están documentadas como propuesta y no implican que el backend o la autenticación estén implementados.
+
 ### 1. Contexto y Configuración Inicial
 
 | Elemento | Estado |
@@ -17,7 +19,7 @@
 
 ### 2. Backoffice (`uis/backoffice/`)
 
-Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las herramientas del personal; cada herramienta nueva se añade con su carpeta en `app/` y una entrada en `lib/tools.ts`.
+Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las herramientas del personal; cada herramienta nueva se añade con su carpeta en `app/` y una entrada en `lib/tools.ts`. La estructura unificada sustituye al tracker como aplicación independiente.
 
 | Elemento | Estado |
 |---|---|
@@ -27,7 +29,7 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 | **Autenticación** | ❌ No iniciado; no debe publicarse sin ella. `GET /auth/me` filtrará `lib/tools.ts` por permisos, con la autorización real en la API. La sesión y las llamadas a la API irán por un intermediario en Next.js |
 | **Formación** | ❌ No iniciado; será una herramienta del backoffice, no una aplicación aparte |
 
-**Talent Pipeline Tracker** (`app/talento/`): seguimiento de candidatos del proceso de selección de Brasaland.
+**Talent Pipeline Tracker** (`app/talento/`): seguimiento de candidatos del proceso de selección de Brasaland. `/funciones` también está integrado como herramienta temporal para probar `@repo/brasa-core`.
 
 | Componente | Estado |
 |---|---|

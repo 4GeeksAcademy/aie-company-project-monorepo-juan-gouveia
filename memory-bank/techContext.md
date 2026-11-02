@@ -21,7 +21,7 @@
 ### Backend / Servicios
 
 - **No implementado aún.** La carpeta `services/` contiene solo READMEs. La recomendación del template es usar **FastAPI** como backend centralizado.
-- El frontend espera una API REST definida mediante `NEXT_PUBLIC_API_BASE_URL` con endpoints:
+- El tracker consume actualmente una API REST de playground mediante `NEXT_PUBLIC_API_BASE_URL` con endpoints:
   - `GET /records` — listar candidatos (filtrable por status, stage, search)
   - `GET /records/{id}` — detalle de candidato
   - `POST /records` — crear candidato
@@ -30,11 +30,14 @@
   - `GET /records/{id}/notes` — listar notas
   - `POST /records/{id}/notes` — crear nota
   - `DELETE /records/{id}/notes/{noteId}` — eliminar nota
+- La propuesta de arquitectura recomienda un backend FastAPI organizado por dominios, pero sigue siendo una propuesta: aún no hay backend Brasaland ni autenticación. A futuro, el backoffice usará una ruta BFF de Next.js y el website leerá locales y menú desde el servidor; el alta pública de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
 
 ### Paquetes Compartidos
 
 - **`@repo/shared-types`** (`packages/shared/`) — tipos base compartidos (`Id`, `BaseEntity`) para uso transversal entre proyectos. Aún sin consumidores.
 - **`@repo/brasa-core`** (`packages/brasa-core/`) — modelos y lógica de negocio de Brasaland. Paquete transitorio; lo consume `uis/backoffice`.
+- La refactorización de `uis/` consolidó el Talent Pipeline Tracker y `/funciones` como herramientas de `uis/backoffice`; `uis/website` sigue siendo una aplicación independiente. El backoffice no comparte layout con el website.
+- **Website:** `/` es la landing y `/registro` el formulario de Brasa Points. `lib/locations.ts` contiene datos de ejemplo y `lib/api.ts` simula el envío; ambas integraciones se sustituirán cuando exista el backend.
 
 ### Utilidades Core (`packages/brasa-core/`)
 
@@ -87,6 +90,8 @@ Basada en el template oficial de 4Geeks Academy. Cada carpeta de primer nivel ti
 | `services/` | APIs y servicios backend. |
 
 **Estado actual:** `uis/website/` y `uis/backoffice/` existen como proyectos Next.js independientes. El Talent Pipeline Tracker es un módulo de `uis/backoffice/`, en `/talento`. Cada herramienta interna nueva se registra en `uis/backoffice/lib/tools.ts`, y eso incluye la formación y el resto de áreas internas. Con la autenticación, esa lista se filtrará por permisos con `GET /auth/me`; la autorización real vive en la API.
+
+La integración mediante BFF, el filtrado de herramientas por permisos y las lecturas dinámicas del website son decisiones futuras de `docs/ARCHITECTURE_PROPOSAL.md`, no comportamiento actualmente implementado.
 
 ### 2. Backend Centralizado (Recomendación)
 
