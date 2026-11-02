@@ -11,8 +11,8 @@ Verificar que los modelos, validaciones y datos de ejemplo del repositorio no co
 
 ## Cuándo usarla
 
-- Al crear o modificar tipos, entidades o validaciones (por ejemplo `src/types/models.ts` y `src/utils/validations.ts`).
-- Al añadir o cambiar datos de ejemplo (por ejemplo `src/utils/test-data.ts`) o campos de una API o UI.
+- Al crear o modificar tipos, entidades o validaciones (por ejemplo `packages/brasa-core/types/models.ts` y `packages/brasa-core/utils/validations.ts`).
+- Al añadir o cambiar datos de ejemplo (por ejemplo `packages/brasa-core/utils/test-data.ts`) o campos de una API o UI.
 
 ## Inputs
 

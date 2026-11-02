@@ -1,0 +1,13 @@
+{
+  "name": "@repo/brasa-core",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Modelos de dominio y utilidades de negocio de Brasaland",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "MIT"
+}

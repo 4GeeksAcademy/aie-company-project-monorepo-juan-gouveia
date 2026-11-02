@@ -12,4 +12,11 @@ Organize `uis/` by **different concerns** — each subfolder covers a distinct a
 - **Main purpose**: to centralize in a single place all frontend applications that support the company's use cases.
 - **Recommendation**: document in this file (or in sub-READMEs) the applications you add, their objective, the technology used, and how to run them.
 
+## Applications
+
+| Application | Objective | Technology | Development port |
+|---|---|---|---|
+| [`website`](./website/README.md) | Landing page and Brasa Points registration for customers | Next.js, React, Tailwind CSS | 3000 |
+| [`backoffice`](./backoffice/README.md) | Internal tools: Talent Pipeline Tracker and function tests | Next.js, React, Tailwind CSS | 3001 |
+
 > _Estas instrucciones también están disponibles en [español](./README.es.md)._
