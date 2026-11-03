@@ -199,6 +199,8 @@ services/brasaland-api/
 │   │   ├── people/             # Empleados, ausencias, vacaciones y alta administrativa
 │   │   ├── recruitment/        # Candidatos y notas (API del tracker del backoffice)
 │   │   ├── telemetry/          # Eventos en tiempo real de los locales
+│   │   ├── incidents/          # Incidentes operativos: validación y análisis de reportes (implementado)
+│   │   ├── suppliers/          # Directorio de proveedores (implementado; TinyDB provisional, ver 2.7)
 │   │   └── reporting/          # Métricas y dashboards (solo lectura)
 │   │
 │   ├── integrations/           # Adaptadores a sistemas externos (sección 1.4)
@@ -255,7 +257,7 @@ Un único backend con una única base de datos hace muy fácil que los dominios 
    auth · locations · menu                        ← dominios base
           ▲
    recipes · training · sales · inventory · procurement
-   customers · loyalty · people · recruitment · telemetry
+   customers · loyalty · people · recruitment · telemetry · incidents · suppliers
           ▲
    reporting                                      ← solo lee
    ```
@@ -282,6 +284,12 @@ Propuesta inicial, sujeta a las prioridades del sprint:
    - Operaciones: `menu/`, `sales/` e `inventory/`.
    - Formación: `recipes/` y `training/`.
 5. **El resto** (`procurement/`, `people/`, `telemetry/`, `reporting/`) según las prioridades de negocio.
+
+**Primer dominio implementado: `incidents/`.** Se adelantó al orden anterior porque Operaciones necesitaba validar y resumir el CSV de incidentes que hasta ahora llevaba en una hoja de cálculo. No depende de base de datos, autenticación ni otros dominios, así que sirvió para validar la estructura de punta a punta. Mientras no exista `locations/`, valida los códigos de local (`COL-01`, `FLA-01`…) contra una lista fija; cuando exista, deberá consultarlos a `locations.service`. Su último análisis se guarda en memoria hasta que haya base de datos.
+
+**Segundo dominio implementado: `suppliers/`.** Compras necesitaba sustituir la hoja de cálculo del directorio de proveedores, que circulaba por correo en varias versiones. Por indicación del CTO, guarda los datos en **TinyDB**, un archivo JSON sin servidor, hasta que se decida el motor de base de datos (sección 7). Su `database.py` y su `repository.py` son lo único que conoce TinyDB, así que la migración no tocará los endpoints. Arranca con los 15 proveedores del briefing (seeder idempotente) y no depende de otros dominios.
+
+Cubre la parte de directorio que esta propuesta asignaba a `procurement/`: alta, consulta, tarifa vigente y estado. Cuando se aborden el historial de precios y las compras, `suppliers/` se integrará en `procurement/` o pasará a ser su base. `procurement/` dependería entonces de `suppliers.service` y no habría dos dominios dueños de los proveedores. Hasta entonces, `updated_at` solo guarda la fecha del último cambio de tarifa, no el historial.
 
 ---
 
@@ -330,6 +338,8 @@ Todas las rutas van precedidas de `/api/v1`. El mapa muestra los recursos princi
 | **loyalty** | `POST /loyalty/enrollments` (alta pública, ver 3.6) · `POST /loyalty/enrollments/verify` (confirmación del correo) · `GET /loyalty/accounts/{customer_id}` (saldo de Brasa Points) · `GET /loyalty/accounts/{customer_id}/transactions` · `POST /loyalty/redemptions` (canje). La acumulación de puntos no tiene endpoint público: la genera el sistema a partir de las ventas. | Web (alta), app de fidelización |
 | **people** | `GET, POST /employees` · `GET, PATCH /employees/{id}` · `GET, POST /absences` · `PATCH /absences/{id}` (aprobación o rechazo de vacaciones y ausencias) | Backoffice (RRHH) |
 | **recruitment** | `GET, POST /candidates` · `GET, PATCH /candidates/{id}` · `GET, POST /candidates/{id}/notes` · `DELETE /candidates/{id}/notes/{note_id}` | Backoffice (Talent Pipeline Tracker) |
+| **incidents** | `POST /incidents/analyze` (sube el CSV de incidentes y devuelve el resumen: válidos, inválidos con su motivo, categorías, estados y satisfacción) · `GET /incidents/results/export` (descarga el último análisis como CSV) | Backoffice (operaciones) |
+| **suppliers** | `GET, POST /suppliers` (filtros `country` y `category`, combinables) · `GET, DELETE /suppliers/{id}` (`DELETE` solo para corregir datos; lo habitual es suspender) · `PATCH /suppliers/{id}/rate` (registra el timestamp del cambio) · `PATCH /suppliers/{id}/status` (`active` / `suspended`). Implementado con TinyDB provisional; ver 2.7 sobre su relación con `procurement`. | Backoffice (compras) |
 | **telemetry** | `POST /telemetry/events` (eventos enviados por los locales) · `GET /telemetry/stream` (flujo en tiempo real para el dashboard; tecnología pendiente, ver sección 7) | Locales, dashboard operativo |
 | **reporting** | `GET /reports/sales` (por país, local y periodo, en `currency`) · `GET /reports/locations/ranking` (p. ej. ticket promedio por local) · `GET /reports/hr` (rotación, absentismo, cobertura por país) · `GET /reports/executive-summary` | Dashboards, asistente de IA de dirección |
 
@@ -638,7 +648,7 @@ Esta propuesta define la estructura del backend, pero deja abiertas varias decis
 
 | Decisión | Qué condiciona | Dónde se menciona |
 |---|---|---|
-| **Motor de base de datos, librería para tablas y esquemas, y herramienta de migraciones** | `core/database.py`, los `models.py` de cada dominio y `migrations/`. | 2.3, 4.3 |
+| **Motor de base de datos, librería para tablas y esquemas, y herramienta de migraciones** | `core/database.py`, los `models.py` de cada dominio y `migrations/`. Mientras tanto, `suppliers/` usa TinyDB con su propio `database.py` (2.7). | 2.3, 4.3 |
 | **Estrategia de autenticación.** La sesión del backoffice se guarda en una cookie gestionada por su intermediario (5.2). Falta decidir cómo inicia sesión el personal y el modelo de permisos. De momento los clientes no tienen acceso (3.6); cuando exista la app de fidelización habrá que decidir cómo se identifican. | `auth/` y `core/security.py`. | 3.3, 5.2, 5.4 |
 | **Tecnología para el flujo en tiempo real** | `GET /telemetry/stream` y el dashboard operativo. | 3.3 |
 | **Ejecución de tareas programadas y de fondo** | Cómo se lanzan y se reintentan los procesos de `jobs/`. | 2.6 |

@@ -49,13 +49,22 @@ You are building **one company** across many milestones and projects. Each top-l
 
 ---
 
-## Current status of the template
+## Current status of the project
 
-> 💡 This repository currently provides a **base folder structure and documentation skeleton** only. It does not include runnable apps or global scripts yet.
->
-> - `CONTEXT.md` is a placeholder and must be replaced with your assigned company context.
-> - There is no root `AGENTS.md` yet.
-> - Shared package metadata exists in `packages/shared/package.json` (`@repo/shared-types`), but no workspace runner is configured at root.
+This repository holds the **Brasaland** project. `CONTEXT.md` (and its Spanish version, `CONTEXT.es.md`) contains the company briefing, and [`memory-bank/progress.md`](./memory-bank/progress.md) tracks the detailed status and next steps.
+
+| Area | Path | Status |
+| --- | --- | --- |
+| Corporate website | [`uis/website/`](./uis/website/README.md) | Next.js app on port 3000. The Brasa Points sign-up form submission is simulated |
+| Backoffice | [`uis/backoffice/`](./uis/backoffice/README.md) | Next.js app on port 3001: Talent Pipeline Tracker (`/talento`), incident analysis (`/incidencias`), supplier directory (`/proveedores`) and business-function tests (`/funciones`). No authentication yet, so it must not be published |
+| Brasaland API | [`services/brasaland-api/`](./services/brasaland-api/README.md) | FastAPI, organized by domain. It implements the `incidents` and `suppliers` domains (the latter with temporary TinyDB storage), with no authentication yet |
+| Incident report script | [`scripts/incident-report/`](./scripts/incident-report/README.md) | Python CLI that validates and summarizes the incidents CSV and exports `data/process/results.csv`. It reuses the API's analysis logic |
+| Shared packages | [`packages/`](./packages/README.md) | `@repo/brasa-core` is transitional (used by `/funciones`); `@repo/shared-types` has no consumers yet |
+| Data | [`data/raw/`](./data/raw/README.md) | `incidents-brasaland.csv` (100 test incidents) |
+| AI, automation and infrastructure | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Template structure and examples only |
+
+- Instructions for coding agents are in the root [`AGENTS.md`](./AGENTS.md), with development rules and skills in `.agents/`.
+- There is no root `docker-compose.yml` or workspace runner yet: each project is installed and run from its own folder, following its README.
 
 ---
 
@@ -269,8 +278,11 @@ Is it a CLI tool with its own package?     → internal/
 ```text
 ai-engineering-company-project-monorepo/
 ├── README.md / README.es.md   # This guide
-├── CONTEXT.md                 # ← Replace with your company briefing
-├── docker-compose.yml         # ← Local dev orchestration (repo root)
+├── AGENTS.md                  # Instructions for coding agents (+ .agents/ rules and skills)
+├── CONTEXT.md / CONTEXT.es.md # Brasaland company briefing
+├── company-choice.md          # Company choice and personal focus
+├── memory-bank/               # Project brief, tech context and progress
+├── docker-compose.yml         # ← Local dev orchestration (repo root; not created yet)
 ├── uis/                       # Frontends (website, backoffice, dashboards)
 ├── services/                  # Centralized FastAPI company API
 ├── data/

@@ -1,0 +1,9 @@
+# Entorno virtual y cachés de Python.
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+build/
+
+# Base de datos TinyDB del directorio de proveedores (datos locales, no se versionan).
+storage/
