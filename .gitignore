@@ -1,3 +1,9 @@
 # Variables de entorno: nunca se versionan, salvo los ejemplos sin valores reales.
 .env*
 !.env.example
+
+# Resultados exportados por scripts/incident-report/analyze.py: se regeneran en cada ejecución.
+data/process/results.csv
+
+# Caché de bytecode de Python.
+__pycache__/
