@@ -115,3 +115,5 @@ La consigna pide `/services/api` y las rutas `/api/incidents/...`. Este servicio
 - desviarse en el primer dominio implementado rompería esa coherencia.
 
 Desde el navegador, las rutas se ven igual que en la consigna: el backoffice expone `/api/incidents/...` y su intermediario las reenvía a `/api/v1/incidents/...`.
+
+Todas las divergencias con el briefing y la consigna, con sus motivos, están en [`docs/BRIEFING_DIVERGENCES.md`](../../docs/BRIEFING_DIVERGENCES.md).

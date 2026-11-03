@@ -115,3 +115,5 @@ The assignment asks for `/services/api` and the routes `/api/incidents/...`. Thi
 - departing from it in the first implemented domain would break that consistency.
 
 From the browser, the routes look the same as in the assignment: the backoffice exposes `/api/incidents/...` and its intermediary forwards them to `/api/v1/incidents/...`.
+
+All divergences from the briefing and the assignment, with their reasons, are listed in [`docs/BRIEFING_DIVERGENCES.md`](../../docs/BRIEFING_DIVERGENCES.md) (in Spanish).

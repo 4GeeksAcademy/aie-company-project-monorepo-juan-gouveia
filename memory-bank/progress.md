@@ -137,7 +137,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Entregar la Fase 2 del procesador de incidentes** — La implementación está revisada y aprobada. Queda la entrega, que debe incluir las justificaciones: rutas y carpetas (en `services/brasaland-api/README.es.md`), y lógica compartida dentro de la API y no en `packages/`, diferencias con la salida del briefing y decisiones de funcionamiento (en el documento de justificaciones, fuera del repositorio).
+0. **Entregar la Fase 2 del procesador de incidentes** — La implementación está revisada y aprobada. Queda la entrega, que debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md`: rutas y carpetas, lógica compartida dentro de la API y no en `packages/`, diferencias con la salida del briefing y decisiones de funcionamiento.
 
 1. ✅ **AGENTS.md raíz** — Completado (junto con `.agents/rules/` y `.agents/skills/`). Define:
    - Convenciones de código y estilo.

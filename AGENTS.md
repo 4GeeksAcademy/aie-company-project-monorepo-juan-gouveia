@@ -37,3 +37,4 @@ La aprobación debe referirse claramente al archivo o área y al cambio previsto
 - Mantén cada cambio en la carpeta correspondiente a su responsabilidad; no agregues archivos de implementación a la raíz sin necesidad.
 - Sigue los patrones y convenciones locales del proyecto en el que trabajas y evita cambios no relacionados con la tarea.
 - No inventes hechos del negocio: usa `CONTEXT.md` y el Memory Bank como referencia.
+- Los nombres de campos, categorías, estados y valores esperados deben coincidir exactamente con el briefing de cada ejercicio. Cualquier otra divergencia con un briefing o una consigna (carpetas, rutas, textos, comportamiento) se registra con su motivo en `docs/BRIEFING_DIVERGENCES.md`.
