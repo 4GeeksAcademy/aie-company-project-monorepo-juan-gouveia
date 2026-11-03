@@ -12,11 +12,14 @@ Next.js 16 (App Router), React 19, TypeScript y Tailwind CSS 4. Es un proyecto i
 
 ## Cómo ejecutarlo
 
-Copia `.env.example` como `.env.local` e indica la URL de la API:
+Copia `.env.example` como `.env.local` e indica las URL de las API:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=<url-base-de-la-api>
+NEXT_PUBLIC_API_BASE_URL=<url-base-de-la-api>     # API del tracker
+API_BASE_URL=http://localhost:8000/api/v1         # API de Brasaland (services/brasaland-api)
 ```
+
+Las herramientas que usan la API de Brasaland necesitan que esté arrancada; las instrucciones están en [`services/brasaland-api/README.es.md`](../../services/brasaland-api/README.es.md).
 
 Después ejecuta:
 
@@ -48,6 +51,7 @@ Las áreas internas, incluida la formación, se incorporan aquí como herramient
 ## Estructura
 
 - `app/`: layout raíz, portada y una carpeta por herramienta.
+- `app/api/[...path]/route.ts`: intermediario (BFF) hacia la API de Brasaland. Reenvía `/api/<ruta>` a `API_BASE_URL/<ruta>` sin aplicar lógica, así que la URL de la API se queda en el servidor y no hace falta CORS. Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`).
 - `components/`: componentes base reutilizables, más `talento/` y `funciones/`.
 - `hooks/`: hooks personalizados.
 - `lib/`: `tools.ts`, `format.ts` y una carpeta por herramienta.

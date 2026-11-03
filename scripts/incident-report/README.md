@@ -7,6 +7,12 @@ A console script that validates and summarizes Brasaland's operational incidents
 - Python 3 (tested with 3.12).
 - No external dependencies: it only uses the standard library (`csv`, `decimal`, `unittest`).
 
+## Where the logic lives
+
+The validation rules and the analysis live in the backend, in [`services/brasaland-api/app/domains/incidents/service.py`](../../services/brasaland-api/app/domains/incidents/service.py), which is their source of truth. The API uses that same service, so the script and the backoffice always give the same results.
+
+The script only handles the console: resolving the path, formatting the report, asking and exporting. It imports the service by adding `services/brasaland-api` to the Python path. Since the service only uses the standard library, nothing needs to be installed. However, the script must run inside the repository: if `analyze.py` is copied elsewhere, it cannot find the service.
+
 ## Usage
 
 From this folder:
@@ -40,7 +46,7 @@ The path is resolved from the current folder. If it does not exist there, the sc
 
    A record that breaks several rules counts toward each of them, but only once in the invalid total.
 3. For valid records, it counts records per category and per status, with their percentage, and computes the satisfaction index for closed cases: scored cases, the 1–5 distribution and the average.
-4. Prints the summary to the console. The invalid breakdown only lists rules that have cases.
+4. Prints the summary to the console. The invalid breakdown only lists rules that have cases. Below it, the `INVALID RECORDS DETAIL` section lists each invalid record with its ID, its row in the file (the header is row 1) and its reasons, for example `BRS-000044 (row 45): Missing location_id`.
 5. Asks `¿Deseas exportar los resultados a CSV? [s / n]`. It accepts `s`, `si`, `sí`, `y` or `yes`; any other answer, or no input, skips the export.
 
 Percentages and the average round half up, for example 2.25 → 2.3.
@@ -67,9 +73,10 @@ There is one row per metric, with the columns `metric`, `value` and `percentage`
 python -m unittest -v
 ```
 
-The 28 tests check:
+The 32 tests check:
 
 - that the provided CSV gives exactly the values expected by the briefing: 100 records, 96 valid, 4 invalid and a 3.46 average;
+- the detail of each invalid record: ID, row and reasons;
 - each rule, including its edge cases;
 - file loading;
 - the export and the final prompt.

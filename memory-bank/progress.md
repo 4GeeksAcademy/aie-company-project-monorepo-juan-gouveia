@@ -6,6 +6,8 @@ La refactorización de las interfaces está completada: `uis/website` y `uis/bac
 
 El procesador de reportes de incidentes (`scripts/incident-report/`) está completado: valida y resume el CSV de incidentes de Operaciones, coincide exactamente con los valores esperados del briefing y exporta las métricas a `data/process/results.csv`.
 
+**Fase 2 en curso (integración en la plataforma):** el backend está listo. `services/brasaland-api/` (FastAPI) implementa el dominio `incidents` con `POST /api/v1/incidents/analyze` y `GET /api/v1/incidents/results/export`, con errores HTTP apropiados y 24 pruebas pytest. La lógica se extrajo del script a `app/domains/incidents/service.py`, que es su fuente de verdad, y el script la importa. El backoffice ya tiene su intermediario BFF (`app/api/[...path]/route.ts`) y la variable `API_BASE_URL`. **Falta solo el frontend:** la página `/incidencias` con carga de archivo, resumen, descarga del CSV y aviso de inválidos (pasos 7 a 10 de `docs/_private/plan-csv-reader.md`).
+
 ### 1. Contexto y Configuración Inicial
 
 | Elemento | Estado |
@@ -30,6 +32,8 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 | **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
 | **Autenticación** | ❌ No iniciado; no debe publicarse sin ella. `GET /auth/me` filtrará `lib/tools.ts` por permisos, con la autorización real en la API. La sesión y las llamadas a la API irán por un intermediario en Next.js |
 | **Formación** | ❌ No iniciado; será una herramienta del backoffice, no una aplicación aparte |
+
+**Intermediario (BFF)** (`app/api/[...path]/route.ts`): reenvía `/api/<ruta>` a `API_BASE_URL` (la API de Brasaland) sin lógica. ✅ Implementado. La herramienta `/incidencias` que lo usará está pendiente.
 
 **Talent Pipeline Tracker** (`app/talento/`): seguimiento de candidatos del proceso de selección de Brasaland. `/funciones` también está integrado como herramienta temporal para probar `@repo/brasa-core`.
 
@@ -73,8 +77,9 @@ Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negoci
 
 | Elemento | Estado |
 |---|---|
-| `services/` — carpeta preparada | ❌ Vacío (solo READMEs) |
-| API REST (FastAPI recomendado) | ❌ No iniciado |
+| `services/brasaland-api/` — API FastAPI por dominios (propuesta de arquitectura) | ✅ Iniciada |
+| Dominio `incidents` — `POST /api/v1/incidents/analyze`, `GET /api/v1/incidents/results/export`, `GET /health`; 24 pruebas pytest | ✅ Implementado; último análisis en memoria |
+| Resto de dominios (`auth`, `locations`, `recruitment`…) | ❌ No iniciado |
 | Base de datos | ❌ No definida |
 | Autenticación / Autorización | ❌ No iniciado |
 
@@ -122,7 +127,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 | Elemento | Estado |
 |---|---|
 | `infra/` — Docker, deploy | ❌ No iniciado |
-| `scripts/incident-report/` — procesador de reportes de incidentes (Python, sin dependencias, 28 pruebas `unittest`) | ✅ Implementado |
+| `scripts/incident-report/` — procesador de reportes de incidentes (Python, sin dependencias, 32 pruebas `unittest`) | ✅ Implementado |
 | `internal/` — CLIs internos | ❌ No iniciado |
 
 ---
@@ -130,6 +135,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 ## Propuesta de Próximos Pasos
 
 ### Inmediatos (Sprint Actual)
+
+0. **Frontend de análisis de incidencias (siguiente tarea)** — En `uis/backoffice`: página `/incidencias` registrada en `lib/tools.ts`, `components/FileDropzone.tsx` (arrastrar y soltar o selector), resumen con métricas, categorías, estados y satisfacción, botón de descarga de `results.csv` y aviso de registros inválidos con su detalle. Usa el BFF (`/api/incidents/...`), que ya está listo. El detalle está en los pasos 7 a 10 de `docs/_private/plan-csv-reader.md`.
 
 1. ✅ **AGENTS.md raíz** — Completado (junto con `.agents/rules/` y `.agents/skills/`). Define:
    - Convenciones de código y estilo.
@@ -146,7 +153,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Corto Plazo (Próximos Sprints)
 
-4. **Backend FastAPI** — Implementar la API central de Brasaland:
+4. **Backend FastAPI** — Seguir con la API central de Brasaland (`services/brasaland-api/`, ya iniciada con `incidents`):
    - Modelos de base de datos.
    - Endpoints REST para locales, menús, ventas.
    - Conexión con el Talent Pipeline Tracker (`uis/backoffice`), a través de un intermediario en Next.js.
@@ -172,7 +179,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ## Riesgos y Bloqueantes
 
-- **Backend ausente**: el frontend está desacoplado pero no puede validarse end-to-end sin backend.
+- **Backend incipiente**: solo existe el dominio `incidents`, sin base de datos (su último análisis vive en memoria) y sin autenticación. El tracker sigue usando la API de playground.
 - **Sin base de datos definida**: no hay decisión tomada sobre SQL vs NoSQL ni esquema de datos.
 - **Dependencia de Python para agentes**: el esqueleto está en Python, pero el resto del stack es TypeScript/JavaScript — se debe decidir si los agentes serán Python puro o se integran vía MCP/subprocess.
 - **Sin gestor de monorepo**: no hay `package.json` raíz ni scripts compartidos; cada proyecto se gestiona independientemente.

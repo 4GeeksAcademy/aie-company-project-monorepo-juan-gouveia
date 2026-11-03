@@ -16,11 +16,14 @@
 **Proyectos UI actuales:**
 
 - `uis/website` (puerto 3000) — Landing y registro de Brasa Points para clientes.
-- `uis/backoffice` (puerto 3001) — Herramientas internas: Talent Pipeline Tracker (`/talento`) y pruebas de funciones (`/funciones`).
+- `uis/backoffice` (puerto 3001) — Herramientas internas: Talent Pipeline Tracker (`/talento`) y pruebas de funciones (`/funciones`). La herramienta de análisis de incidencias (`/incidencias`) está pendiente; su BFF ya existe.
 
 ### Backend / Servicios
 
-- **No implementado aún.** La carpeta `services/` contiene solo READMEs. La recomendación del template es usar **FastAPI** como backend centralizado.
+- **`services/brasaland-api/`** — API central en **FastAPI** (Python ≥ 3.11, Pydantic 2), con la estructura por dominios de la propuesta de arquitectura. Dependencias en `pyproject.toml` (`fastapi`, `uvicorn[standard]`, `python-multipart`; de desarrollo, `pytest` y `httpx`) y entorno virtual propio en `.venv/`, ignorado en Git. Se arranca con `uvicorn app.main:app --port 8000`.
+- **Único dominio implementado: `incidents`.** `POST /api/v1/incidents/analyze` (multipart, campo `file`) y `GET /api/v1/incidents/results/export` (`text/csv`, adjunto `results.csv`), más `GET /health`. `service.py` es la fuente de verdad de las reglas y solo usa la librería estándar, porque también lo importa `scripts/incident-report/analyze.py`. El último análisis se guarda en memoria (`repository.py`).
+- **Errores:** formato único `{"error": {"code", "message"}}` (`app/core/errors.py`), con mensajes en español: 400 `missing_file` / `empty_file`, 413 `file_too_large` (5 MB), 415 `unsupported_file_type` (por extensión), 422 `invalid_encoding` / `missing_columns` / `no_records` / `invalid_request`, 404 `no_analysis` / `not_found`.
+- **Desviación de la consigna, a justificar en la entrega:** se usan `services/brasaland-api/` y `/api/v1` (propuesta) en vez de `/services/api` y `/api/incidents/...`.
 - El tracker consume actualmente una API REST de playground mediante `NEXT_PUBLIC_API_BASE_URL` con endpoints:
   - `GET /records` — listar candidatos (filtrable por status, stage, search)
   - `GET /records/{id}` — detalle de candidato
@@ -30,7 +33,8 @@
   - `GET /records/{id}/notes` — listar notas
   - `POST /records/{id}/notes` — crear nota
   - `DELETE /records/{id}/notes/{noteId}` — eliminar nota
-- La propuesta de arquitectura recomienda un backend FastAPI organizado por dominios, pero sigue siendo una propuesta: aún no hay backend Brasaland ni autenticación. A futuro, el backoffice usará una ruta BFF de Next.js y el website leerá locales y menú desde el servidor; el alta pública de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
+- **BFF del backoffice implementado:** `uis/backoffice/app/api/[...path]/route.ts` reenvía `/api/<ruta>` a la variable de servidor `API_BASE_URL` (`http://localhost:8000/api/v1`) sin lógica ni token (aún no hay autenticación). Responde 500 `api_not_configured` si falta la variable y 502 `api_unavailable` si la API no responde. El tracker no lo usa todavía.
+- **Sigue pendiente:** autenticación, base de datos y el resto de dominios. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
 
 ### Paquetes Compartidos
 
@@ -158,8 +162,8 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ### Backend
 
-- **No implementado.** No hay servicios, controladores, modelos de BD ni configuración de base de datos.
-- La UI asume un backend RESTful con endpoints específicos (ver sección de Stack → Backend).
+- Solo existe el dominio `incidents` de `services/brasaland-api/`. No hay modelos de BD ni configuración de base de datos; el último análisis vive en memoria y se pierde al reiniciar.
+- El tracker sigue usando la API de playground (ver sección de Stack → Backend).
 - No hay autenticación ni autorización implementadas.
 
 ### Agentes / IA
@@ -182,9 +186,9 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 ### Dependencias Externas
 
 - **Node.js**: requerido para el frontend Next.js.
-- **Python 3**: requerido para `scripts/incident-report/` (probado con 3.12, sin dependencias) y para agentes (esqueleto).
+- **Python 3**: requerido para `services/brasaland-api/` (≥ 3.11, con su `.venv`), para `scripts/incident-report/` (sin dependencias; importa el servicio del backend) y para agentes (esqueleto).
 - Sin gestor de monorepo configurado a nivel raíz (no hay `package.json` raíz, ni turborepo, ni nx, ni lerna).
 
 ---
 
-_Actualizado: 2026-10-30_
+_Actualizado: 2026-11-02_

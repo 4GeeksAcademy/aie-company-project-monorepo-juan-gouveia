@@ -85,6 +85,20 @@ class BriefingValuesTest(unittest.TestCase):
         ]:
             self.assertIn(expected, report)
 
+    def test_invalid_details(self):
+        self.assertEqual(self.summary["invalid_details"], [
+            {"incident_id": "BRS-000044", "row": 45, "rules": ["missing_location"]},
+            {"incident_id": "BRS-000049", "row": 50, "rules": ["invalid_category"]},
+            {"incident_id": "BRS-000079", "row": 80, "rules": ["empty_description"]},
+            {"incident_id": "BRS-000086", "row": 87, "rules": ["closed_without_score"]},
+        ])
+
+    def test_report_lists_invalid_records(self):
+        report = analyze.format_report(self.summary, SOURCE.name)
+        self.assertIn("INVALID RECORDS DETAIL", report)
+        self.assertIn("  ├─ BRS-000044 (row 45): Missing location_id", report)
+        self.assertIn("  └─ BRS-000086 (row 87): Closed case, no score", report)
+
     def test_report_hides_rules_without_cases(self):
         report = analyze.format_report(self.summary, SOURCE.name)
         self.assertIn("Missing location_id", report)
@@ -143,6 +157,19 @@ class ValidationRulesTest(unittest.TestCase):
         self.assertEqual(summary["rules"]["missing_location"], 1)
         self.assertEqual(summary["rules"]["closed_without_score"], 1)
         self.assertIn("Note:", analyze.format_report(summary, "test.csv"))
+
+    def test_detail_joins_several_rules_and_handles_missing_id(self):
+        records = [make_record(), make_record(incident_id="", location_id="", category="")]
+        summary = analyze.analyze(records)
+        self.assertEqual(summary["invalid_details"], [
+            {"incident_id": "", "row": 3, "rules": ["missing_location", "invalid_category"]},
+        ])
+        report = analyze.format_report(summary, "test.csv")
+        self.assertIn("  └─ (no id) (row 3): Missing location_id; Invalid or missing category", report)
+
+    def test_no_detail_section_without_invalid_records(self):
+        report = analyze.format_report(analyze.analyze([make_record()]), "test.csv")
+        self.assertNotIn("INVALID RECORDS DETAIL", report)
 
 
 class EdgeCasesTest(unittest.TestCase):
