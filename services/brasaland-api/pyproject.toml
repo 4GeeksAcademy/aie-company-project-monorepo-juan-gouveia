@@ -8,7 +8,15 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     # Necesario para recibir archivos como multipart/form-data.
     "python-multipart>=0.0.9",
+    # Almacenamiento ligero del directorio de proveedores (provisional hasta tener Postgres).
+    "tinydb>=4.8",
+    # EmailStr para el contacto de los proveedores.
+    "pydantic[email]>=2.7",
 ]
+
+[project.scripts]
+# `uv run seed` carga los proveedores iniciales del briefing en TinyDB.
+seed = "app.domains.suppliers.seed:main"
 
 [project.optional-dependencies]
 dev = [

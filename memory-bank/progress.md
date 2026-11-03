@@ -8,6 +8,14 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 
 **Fase 2 completada (integración en la plataforma):** `services/brasaland-api/` (FastAPI) implementa el dominio `incidents` con `POST /api/v1/incidents/analyze` y `GET /api/v1/incidents/results/export`, con errores HTTP apropiados y 24 pruebas pytest. La lógica se extrajo del script a `app/domains/incidents/service.py`, que es su fuente de verdad, y el script la importa. En el backoffice, la herramienta `/incidencias` sube el CSV (arrastrando o con el selector), muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv`. Llama a la API a través del intermediario BFF (`app/api/[...path]/route.ts`), configurado con `API_BASE_URL`. La revisión manual en el navegador está hecha y aprobada (2026-11-03).
 
+**Directorio de proveedores (milestone 09) completado en la rama `directorio-prov`**, que parte de `features/csv-reader` (PR abierto):
+
+- **Backend:** el dominio `suppliers` de `services/brasaland-api/` (FastAPI + TinyDB + Pydantic) tiene `POST/GET /api/v1/suppliers`, `GET/DELETE /suppliers/{id}` y `PATCH /suppliers/{id}/rate` y `/status`.
+- **Datos:** el seeder (`uv run seed`) es idempotente, y la API siembra al arrancar si la base está vacía. Los datos persisten en `storage/brasaland-db.json`.
+- **Frontend:** la herramienta `/proveedores` del backoffice permite filtrar, dar de alta, actualizar la tarifa y activar o suspender.
+- **Verificación:** 132 pruebas pytest pasan. La revisión en el navegador está hecha (2026-11-03).
+- **Herramientas:** el servicio adopta uv (`uv.lock` versionado).
+
 ### 1. Contexto y Configuración Inicial
 
 | Elemento | Estado |
@@ -30,11 +38,12 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 | **Portada** (`app/page.tsx`) — una tarjeta por herramienta, generada desde `lib/tools.ts` | ✅ Implementado |
 | **Header** global con navegación entre herramientas | ✅ Implementado |
 | **Análisis de incidencias** (`app/incidencias/`) — carga del CSV con `FileDropzone`, resumen, registros inválidos y descarga de `results.csv` | ✅ Implementado; último análisis en la memoria de la API |
+| **Directorio de proveedores** (`app/proveedores/`) — listado con badges de estado, filtros por país y categoría sin recargar, formulario de alta con validación y errores de la API, edición de tarifa y activar/suspender | ✅ Implementado; datos en el TinyDB de la API |
 | **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
 | **Autenticación** | ❌ No iniciado; no debe publicarse sin ella. `GET /auth/me` filtrará `lib/tools.ts` por permisos, con la autorización real en la API. La sesión y las llamadas a la API irán por un intermediario en Next.js |
 | **Formación** | ❌ No iniciado; será una herramienta del backoffice, no una aplicación aparte |
 
-**Intermediario (BFF)** (`app/api/[...path]/route.ts`): reenvía `/api/<ruta>` a `API_BASE_URL` (la API de Brasaland) sin lógica. ✅ Implementado; lo usa `/incidencias`.
+**Intermediario (BFF)** (`app/api/[...path]/route.ts`): reenvía `GET`, `POST`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL` (la API de Brasaland) sin lógica. ✅ Implementado; lo usan `/incidencias` y `/proveedores`.
 
 **Talent Pipeline Tracker** (`app/talento/`): seguimiento de candidatos del proceso de selección de Brasaland. `/funciones` también está integrado como herramienta temporal para probar `@repo/brasa-core`.
 
@@ -80,8 +89,9 @@ Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negoci
 |---|---|
 | `services/brasaland-api/` — API FastAPI por dominios (propuesta de arquitectura) | ✅ Iniciada |
 | Dominio `incidents` — `POST /api/v1/incidents/analyze`, `GET /api/v1/incidents/results/export`, `GET /health`; 24 pruebas pytest | ✅ Implementado; último análisis en memoria |
+| Dominio `suppliers` — CRUD del directorio de proveedores, filtros `country`/`category`, `PATCH` de tarifa (registra `updated_at`) y de estado, 409 por nombre duplicado; seeder `uv run seed`; 108 pruebas pytest | ✅ Implementado; TinyDB en `storage/brasaland-db.json` |
 | Resto de dominios (`auth`, `locations`, `recruitment`…) | ❌ No iniciado |
-| Base de datos | ❌ No definida |
+| Base de datos | ⏳ TinyDB provisional para `suppliers` (directiva del CTO); el motor definitivo (Postgres con ORM) está sin decidir |
 | Autenticación / Autorización | ❌ No iniciado |
 
 ### 5. Agentes / IA
@@ -137,6 +147,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
+0. **Entregar el Directorio de proveedores (milestone 09)** — Implementado y revisado en la rama `directorio-prov`. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Directorio de proveedores"): `services/brasaland-api/` en lugar de `services/api/`, `/api/v1/suppliers`, `/proveedores` en el backoffice y las decisiones de funcionamiento. Cuando se fusione `features/csv-reader`, el PR de esta rama debe apuntar a `main`.
+
 0. **Entregar la Fase 2 del procesador de incidentes** — La implementación está revisada y aprobada. Queda la entrega, que debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md`: rutas y carpetas, lógica compartida dentro de la API y no en `packages/`, diferencias con la salida del briefing y decisiones de funcionamiento.
 
 1. ✅ **AGENTS.md raíz** — Completado (junto con `.agents/rules/` y `.agents/skills/`). Define:
@@ -180,8 +192,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ## Riesgos y Bloqueantes
 
-- **Backend incipiente**: solo existe el dominio `incidents`, sin base de datos (su último análisis vive en memoria) y sin autenticación. El tracker sigue usando la API de playground.
-- **Sin base de datos definida**: no hay decisión tomada sobre SQL vs NoSQL ni esquema de datos.
+- **Backend incipiente**: solo existen los dominios `incidents` (su último análisis vive en memoria) y `suppliers` (TinyDB provisional), sin autenticación. El tracker sigue usando la API de playground.
+- **Sin base de datos definitiva**: TinyDB es provisional y solo para `suppliers`. Falta decidir el motor (el CTO apunta a Postgres con ORM), las migraciones y el esquema. TinyDB no está pensado para muchos procesos escribiendo a la vez.
+- **`suppliers` frente a `procurement`**: la propuesta reservaba los proveedores para `procurement/`. Cuando se aborden el historial de precios y las compras, hay que integrar ambos dominios para que solo uno sea dueño de los proveedores (propuesta, 2.7).
 - **Dependencia de Python para agentes**: el esqueleto está en Python, pero el resto del stack es TypeScript/JavaScript — se debe decidir si los agentes serán Python puro o se integran vía MCP/subprocess.
 - **Sin gestor de monorepo**: no hay `package.json` raíz ni scripts compartidos; cada proyecto se gestiona independientemente.
 - **Website no publicable aún**: el envío del formulario es simulado, faltan los términos del programa y las sedes usan datos de ejemplo. El detalle está en `uis/website/README.es.md`.

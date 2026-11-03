@@ -56,8 +56,8 @@ This repository holds the **Brasaland** project. `CONTEXT.md` (and its Spanish v
 | Area | Path | Status |
 | --- | --- | --- |
 | Corporate website | [`uis/website/`](./uis/website/README.md) | Next.js app on port 3000. The Brasa Points sign-up form submission is simulated |
-| Backoffice | [`uis/backoffice/`](./uis/backoffice/README.md) | Next.js app on port 3001: Talent Pipeline Tracker (`/talento`), incident analysis (`/incidencias`) and business-function tests (`/funciones`). No authentication yet, so it must not be published |
-| Brasaland API | [`services/brasaland-api/`](./services/brasaland-api/README.md) | FastAPI, organized by domain. Only the `incidents` domain is implemented, with no database or authentication yet |
+| Backoffice | [`uis/backoffice/`](./uis/backoffice/README.md) | Next.js app on port 3001: Talent Pipeline Tracker (`/talento`), incident analysis (`/incidencias`), supplier directory (`/proveedores`) and business-function tests (`/funciones`). No authentication yet, so it must not be published |
+| Brasaland API | [`services/brasaland-api/`](./services/brasaland-api/README.md) | FastAPI, organized by domain. It implements the `incidents` and `suppliers` domains (the latter with temporary TinyDB storage), with no authentication yet |
 | Incident report script | [`scripts/incident-report/`](./scripts/incident-report/README.md) | Python CLI that validates and summarizes the incidents CSV and exports `data/process/results.csv`. It reuses the API's analysis logic |
 | Shared packages | [`packages/`](./packages/README.md) | `@repo/brasa-core` is transitional (used by `/funciones`); `@repo/shared-types` has no consumers yet |
 | Data | [`data/raw/`](./data/raw/README.md) | `incidents-brasaland.csv` (100 test incidents) |
