@@ -6,7 +6,7 @@ La refactorización de las interfaces está completada: `uis/website` y `uis/bac
 
 El procesador de reportes de incidentes (`scripts/incident-report/`) está completado: valida y resume el CSV de incidentes de Operaciones, coincide exactamente con los valores esperados del briefing y exporta las métricas a `data/process/results.csv`.
 
-**Fase 2 en curso (integración en la plataforma):** el backend está listo. `services/brasaland-api/` (FastAPI) implementa el dominio `incidents` con `POST /api/v1/incidents/analyze` y `GET /api/v1/incidents/results/export`, con errores HTTP apropiados y 24 pruebas pytest. La lógica se extrajo del script a `app/domains/incidents/service.py`, que es su fuente de verdad, y el script la importa. El backoffice ya tiene su intermediario BFF (`app/api/[...path]/route.ts`) y la variable `API_BASE_URL`. **Falta solo el frontend:** la página `/incidencias` con carga de archivo, resumen, descarga del CSV y aviso de inválidos (pasos 7 a 10 de `docs/_private/plan-csv-reader.md`).
+**Fase 2 completada (integración en la plataforma):** `services/brasaland-api/` (FastAPI) implementa el dominio `incidents` con `POST /api/v1/incidents/analyze` y `GET /api/v1/incidents/results/export`, con errores HTTP apropiados y 24 pruebas pytest. La lógica se extrajo del script a `app/domains/incidents/service.py`, que es su fuente de verdad, y el script la importa. En el backoffice, la herramienta `/incidencias` sube el CSV (arrastrando o con el selector), muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv`. Llama a la API a través del intermediario BFF (`app/api/[...path]/route.ts`), configurado con `API_BASE_URL`. La revisión manual en el navegador está hecha y aprobada (2026-11-03).
 
 ### 1. Contexto y Configuración Inicial
 
@@ -29,11 +29,12 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 |---|---|
 | **Portada** (`app/page.tsx`) — una tarjeta por herramienta, generada desde `lib/tools.ts` | ✅ Implementado |
 | **Header** global con navegación entre herramientas | ✅ Implementado |
+| **Análisis de incidencias** (`app/incidencias/`) — carga del CSV con `FileDropzone`, resumen, registros inválidos y descarga de `results.csv` | ✅ Implementado; último análisis en la memoria de la API |
 | **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
 | **Autenticación** | ❌ No iniciado; no debe publicarse sin ella. `GET /auth/me` filtrará `lib/tools.ts` por permisos, con la autorización real en la API. La sesión y las llamadas a la API irán por un intermediario en Next.js |
 | **Formación** | ❌ No iniciado; será una herramienta del backoffice, no una aplicación aparte |
 
-**Intermediario (BFF)** (`app/api/[...path]/route.ts`): reenvía `/api/<ruta>` a `API_BASE_URL` (la API de Brasaland) sin lógica. ✅ Implementado. La herramienta `/incidencias` que lo usará está pendiente.
+**Intermediario (BFF)** (`app/api/[...path]/route.ts`): reenvía `/api/<ruta>` a `API_BASE_URL` (la API de Brasaland) sin lógica. ✅ Implementado; lo usa `/incidencias`.
 
 **Talent Pipeline Tracker** (`app/talento/`): seguimiento de candidatos del proceso de selección de Brasaland. `/funciones` también está integrado como herramienta temporal para probar `@repo/brasa-core`.
 
@@ -136,7 +137,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Frontend de análisis de incidencias (siguiente tarea)** — En `uis/backoffice`: página `/incidencias` registrada en `lib/tools.ts`, `components/FileDropzone.tsx` (arrastrar y soltar o selector), resumen con métricas, categorías, estados y satisfacción, botón de descarga de `results.csv` y aviso de registros inválidos con su detalle. Usa el BFF (`/api/incidents/...`), que ya está listo. El detalle está en los pasos 7 a 10 de `docs/_private/plan-csv-reader.md`.
+0. **Entregar la Fase 2 del procesador de incidentes** — La implementación está revisada y aprobada. Queda la entrega, que debe incluir las justificaciones: rutas y carpetas (en `services/brasaland-api/README.es.md`), y lógica compartida dentro de la API y no en `packages/`, diferencias con la salida del briefing y decisiones de funcionamiento (en el documento de justificaciones, fuera del repositorio).
 
 1. ✅ **AGENTS.md raíz** — Completado (junto con `.agents/rules/` y `.agents/skills/`). Define:
    - Convenciones de código y estilo.
@@ -189,4 +190,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-11-02_
+_Actualizado: 2026-11-03_
