@@ -13,18 +13,26 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 class ApiError(Exception):
     """Error de negocio o de entrada que la API devuelve con su código HTTP."""
 
-    def __init__(self, status_code: int, code: str, message: str):
+    def __init__(self, status_code: int, code: str, message: str, headers: dict[str, str] | None = None):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.message = message
+        # Cabeceras extra de la respuesta; por ejemplo, WWW-Authenticate: Bearer en los 401.
+        self.headers = headers
 
 
-def error_response(status_code: int, code: str, message: str, details: list[dict] | None = None) -> JSONResponse:
+def error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    details: list[dict] | None = None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     error: dict = {"code": code, "message": message}
     if details:
         error["details"] = details
-    return JSONResponse(status_code=status_code, content={"error": error})
+    return JSONResponse(status_code=status_code, content={"error": error}, headers=headers)
 
 
 # Mensajes en español para los errores de validación más comunes de Pydantic.
@@ -60,7 +68,10 @@ def describe_validation_errors(errors: list[dict]) -> list[dict]:
         field = ".".join(parts) or "body"
 
         kind = item["type"]
-        if kind == "value_error":
+        if kind == "value_error" and str(item["msg"]).startswith("value is not a valid email address"):
+            # EmailStr (email-validator) explica el fallo en inglés.
+            message = "No es un email válido."
+        elif kind == "value_error":
             # Validadores propios: el mensaje ya está en español; se quita el prefijo de Pydantic.
             message = str(item["msg"]).removeprefix("Value error, ")
         elif kind in VALIDATION_MESSAGES:
@@ -81,13 +92,14 @@ def describe_validation_errors(errors: list[dict]) -> list[dict]:
 
 
 async def handle_api_error(_request: Request, error: ApiError) -> JSONResponse:
-    return error_response(error.status_code, error.code, error.message)
+    return error_response(error.status_code, error.code, error.message, headers=error.headers)
 
 
 async def handle_http_exception(_request: Request, error: StarletteHTTPException) -> JSONResponse:
     # Errores propios de FastAPI (ruta inexistente, método no permitido) con el mismo formato.
     code = "not_found" if error.status_code == 404 else f"http_{error.status_code}"
-    return error_response(error.status_code, code, str(error.detail))
+    # Se conservan sus cabeceras (por ejemplo, Allow en un 405).
+    return error_response(error.status_code, code, str(error.detail), headers=getattr(error, "headers", None))
 
 
 async def handle_validation_error(_request: Request, error: RequestValidationError) -> JSONResponse:

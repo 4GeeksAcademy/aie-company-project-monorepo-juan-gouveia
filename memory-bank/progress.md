@@ -2,7 +2,7 @@
 
 ## Estado Actual del Desarrollo
 
-La refactorización de las interfaces está completada: `uis/website` y `uis/backoffice` son aplicaciones Next.js independientes; el tracker y las pruebas de funciones viven como herramientas del backoffice. Las decisiones posteriores de arquitectura del backend están documentadas como propuesta y no implican que el backend o la autenticación estén implementados.
+La refactorización de las interfaces está completada: `uis/website` y `uis/backoffice` son aplicaciones Next.js independientes; el tracker y las pruebas de funciones viven como herramientas del backoffice. Las decisiones posteriores de arquitectura del backend están documentadas como propuesta; solo están implementados los dominios que se describen abajo (`incidents`, `suppliers` y la autenticación de la API).
 
 El procesador de reportes de incidentes (`scripts/incident-report/`) está completado: valida y resume el CSV de incidentes de Operaciones, coincide exactamente con los valores esperados del briefing y exporta las métricas a `data/process/results.csv`.
 
@@ -15,6 +15,16 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Frontend:** la herramienta `/proveedores` del backoffice permite filtrar, dar de alta, actualizar la tarifa y activar o suspender.
 - **Verificación:** 132 pruebas pytest pasan. La revisión en el navegador está hecha (2026-11-03).
 - **Herramientas:** el servicio adopta uv (`uv.lock` versionado).
+
+**Autenticación (ticket AUTH-01) completada en la rama `feature/auth-api`**, creada desde `directorio-prov` porque sus PR siguen abiertos. Las 6 fases están hechas y la verificación en `/docs` está revisada (2026-11-04):
+
+- **Configuración:** `SECRET_KEY` y `ACCESS_TOKEN_EXPIRE_MINUTES` se leen del entorno (`.env`, ignorado; plantilla `.env.example`) y la API no arranca sin ellas. Se ejecuta con `uv run --env-file .env uvicorn ...`.
+- **Dominios nuevos:** `users` (solo credenciales, roles `admin`/`manager`/`user`, contraseñas con bcrypt de libpass), `profiles` (nombre y contacto, uno a uno) y `auth` (login con JWT de python-jose, `GET /auth/me` y la dependencia `get_current_user`). Todo bajo `/api/v1`, en TinyDB (`storage/auth-db.json`).
+- **Permisos:** cada usuario solo accede a su cuenta (403 si no); listar usuarios y cambiar `role` o `is_active` es solo de admin. El primer admin se crea con `uv run create-admin`.
+- **Rutas protegidas:** todas salvo `POST /auth/login`, `POST /users` y `GET /health`, incluidas las 8 de `incidents` y `suppliers`. `/incidencias` y `/proveedores` del backoffice reciben 401 hasta que el BFF envíe el token, como prevé el briefing.
+- **Verificación:** 361 pruebas pytest pasan; flujo y rutas protegidas probados en vivo con bases temporales.
+- **Documentación:** los README del servicio, de `services/` y del backoffice, `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas", con la tabla de verificación) y `docs/ARCHITECTURE_PROPOSAL.md` (2.3, 2.5, 2.7, 3.2, 3.3 y 7).
+- **Pendiente:** abrir el PR (contra `directorio-prov` mientras su PR siga abierto) y entregar. En el backoffice, que el BFF envíe el token, en una fase posterior.
 
 ### 1. Contexto y Configuración Inicial
 
@@ -40,7 +50,7 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 | **Análisis de incidencias** (`app/incidencias/`) — carga del CSV con `FileDropzone`, resumen, registros inválidos y descarga de `results.csv` | ✅ Implementado; último análisis en la memoria de la API |
 | **Directorio de proveedores** (`app/proveedores/`) — listado con badges de estado, filtros por país y categoría sin recargar, formulario de alta con validación y errores de la API, edición de tarifa y activar/suspender | ✅ Implementado; datos en el TinyDB de la API |
 | **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
-| **Autenticación** | ❌ No iniciado; no debe publicarse sin ella. `GET /auth/me` filtrará `lib/tools.ts` por permisos, con la autorización real en la API. La sesión y las llamadas a la API irán por un intermediario en Next.js |
+| **Autenticación** | ❌ No iniciado en el backoffice (la API ya tiene login JWT en `feature/auth-api`); no debe publicarse sin ella. `GET /auth/me` filtrará `lib/tools.ts` por permisos, con la autorización real en la API. La sesión y las llamadas a la API irán por un intermediario en Next.js |
 | **Formación** | ❌ No iniciado; será una herramienta del backoffice, no una aplicación aparte |
 
 **Intermediario (BFF)** (`app/api/[...path]/route.ts`): reenvía `GET`, `POST`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL` (la API de Brasaland) sin lógica. ✅ Implementado; lo usan `/incidencias` y `/proveedores`.
@@ -90,9 +100,10 @@ Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negoci
 | `services/brasaland-api/` — API FastAPI por dominios (propuesta de arquitectura) | ✅ Iniciada |
 | Dominio `incidents` — `POST /api/v1/incidents/analyze`, `GET /api/v1/incidents/results/export`, `GET /health`; 24 pruebas pytest | ✅ Implementado; último análisis en memoria |
 | Dominio `suppliers` — CRUD del directorio de proveedores, filtros `country`/`category`, `PATCH` de tarifa (registra `updated_at`) y de estado, 409 por nombre duplicado; seeder `uv run seed`; 108 pruebas pytest | ✅ Implementado; TinyDB en `storage/brasaland-db.json` |
-| Resto de dominios (`auth`, `locations`, `recruitment`…) | ❌ No iniciado |
-| Base de datos | ⏳ TinyDB provisional para `suppliers` (directiva del CTO); el motor definitivo (Postgres con ORM) está sin decidir |
-| Autenticación / Autorización | ❌ No iniciado |
+| Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me` y `/profiles/{user_id}`, `get_current_user`, `uv run create-admin`; 135 pruebas pytest (más 35 de `core` y 59 de rutas protegidas) | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
+| Resto de dominios (`locations`, `recruitment`…) | ❌ No iniciado |
+| Base de datos | ⏳ TinyDB provisional para `suppliers` (directiva del CTO); el motor definitivo (Postgres con ORM) está sin decidir. Usuarios y perfiles se quedan en TinyDB también después (directiva del briefing AUTH-01) |
+| Autenticación / Autorización | ✅ JWT stateless (sin sesiones ni cookies). Todas las rutas exigen token salvo login, registro y `/health`. ⏳ Permisos por rol solo en la gestión de usuarios (admin); el BFF del backoffice aún no envía el token |
 
 ### 5. Agentes / IA
 
@@ -147,6 +158,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
+0. **Entregar AUTH-01 (rama `feature/auth-api`)** — Implementado, verificado y documentado. Su PR apunta a `directorio-prov` mientras esa rama no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas").
+
 0. **Entregar el Directorio de proveedores (milestone 09)** — Implementado y revisado en la rama `directorio-prov`. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Directorio de proveedores"): `services/brasaland-api/` en lugar de `services/api/`, `/api/v1/suppliers`, `/proveedores` en el backoffice y las decisiones de funcionamiento. Cuando se fusione `features/csv-reader`, el PR de esta rama debe apuntar a `main`.
 
 0. **Entregar la Fase 2 del procesador de incidentes** — La implementación está revisada y aprobada. Queda la entrega, que debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md`: rutas y carpetas, lógica compartida dentro de la API y no en `packages/`, diferencias con la salida del briefing y decisiones de funcionamiento.
@@ -192,15 +205,15 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ## Riesgos y Bloqueantes
 
-- **Backend incipiente**: solo existen los dominios `incidents` (su último análisis vive en memoria) y `suppliers` (TinyDB provisional), sin autenticación. El tracker sigue usando la API de playground.
+- **Backend incipiente**: solo existen los dominios `incidents` (su último análisis vive en memoria), `suppliers` (TinyDB provisional) y la autenticación JWT. El tracker sigue usando la API de playground.
 - **Sin base de datos definitiva**: TinyDB es provisional y solo para `suppliers`. Falta decidir el motor (el CTO apunta a Postgres con ORM), las migraciones y el esquema. TinyDB no está pensado para muchos procesos escribiendo a la vez.
 - **`suppliers` frente a `procurement`**: la propuesta reservaba los proveedores para `procurement/`. Cuando se aborden el historial de precios y las compras, hay que integrar ambos dominios para que solo uno sea dueño de los proveedores (propuesta, 2.7).
 - **Dependencia de Python para agentes**: el esqueleto está en Python, pero el resto del stack es TypeScript/JavaScript — se debe decidir si los agentes serán Python puro o se integran vía MCP/subprocess.
 - **Sin gestor de monorepo**: no hay `package.json` raíz ni scripts compartidos; cada proyecto se gestiona independientemente.
 - **Website no publicable aún**: el envío del formulario es simulado, faltan los términos del programa y las sedes usan datos de ejemplo. El detalle está en `uis/website/README.es.md`.
-- **Backoffice sin autenticación**: no debe publicarse hasta que exista el login.
+- **Backoffice sin autenticación**: no debe publicarse hasta que exista el login. La API ya protege `incidents` y `suppliers`, así que `/incidencias` y `/proveedores` reciben 401 hasta que el BFF envíe el token (fase posterior prevista por el briefing).
 - **Dependencia temporal del backoffice**: mientras exista `packages/brasa-core`, se construye desde la raíz del repositorio, y los cambios en el paquete también deben comprobar `uis/backoffice`.
 
 ---
 
-_Actualizado: 2026-11-03_
+_Actualizado: 2026-11-04_

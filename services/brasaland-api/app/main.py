@@ -4,21 +4,27 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from app.core.config import API_PREFIX, get_settings
 from app.core.errors import register_error_handlers
+from app.domains.auth.dependencies import get_current_user
+from app.domains.auth.router import router as auth_router
 from app.domains.incidents.router import router as incidents_router
+from app.domains.profiles.router import router as profiles_router
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.router import router as suppliers_router
 from app.domains.suppliers.seed import seed_if_empty
-
-API_PREFIX = "/api/v1"
+from app.domains.users.router import router as users_router
 
 logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Sin SECRET_KEY ni ACCESS_TOKEN_EXPIRE_MINUTES válidas, la API no arranca (ConfigError dice cuál falta).
+    get_settings()
+
     # El directorio de proveedores nunca arranca vacío: si la tabla no tiene datos, se siembra.
     # Se respeta dependency_overrides para que las pruebas usen su propia base temporal.
     repository = app.dependency_overrides.get(get_supplier_repository, get_supplier_repository)()
@@ -30,11 +36,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Brasaland API", version="0.1.0", lifespan=lifespan)
 register_error_handlers(app)
-app.include_router(incidents_router, prefix=API_PREFIX)
-app.include_router(suppliers_router, prefix=API_PREFIX)
+# Rutas con datos sensibles: todas exigen un token válido (AUTH-01). Sin token, 401.
+PROTECTED = [Depends(get_current_user)]
+app.include_router(incidents_router, prefix=API_PREFIX, dependencies=PROTECTED)
+app.include_router(suppliers_router, prefix=API_PREFIX, dependencies=PROTECTED)
+# Autenticación (AUTH-01): login, usuarios (solo credenciales) y perfiles.
+app.include_router(auth_router, prefix=API_PREFIX)
+app.include_router(users_router, prefix=API_PREFIX)
+app.include_router(profiles_router, prefix=API_PREFIX)
 
 
 @app.get("/health", tags=["health"])
 def health() -> dict[str, str]:
-    """Comprueba que el servicio responde. Fuera de /api/v1 y sin autenticación (propuesta 3.4)."""
+    """Comprueba que el servicio responde. Fuera de /api/v1 y pública: no expone datos (propuesta 3.4)."""
     return {"status": "ok"}
