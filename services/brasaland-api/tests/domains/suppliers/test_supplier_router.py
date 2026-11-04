@@ -11,9 +11,12 @@ BASE = "/api/v1/suppliers"
 
 
 @pytest.fixture
-def api(supplier_repository):
-    """Cliente con la base temporal de conftest; el arranque la siembra con los 15 del briefing."""
-    with TestClient(app) as client:
+def api(supplier_repository, auth_headers):
+    """Cliente con la base temporal de conftest; el arranque la siembra con los 15 del briefing.
+
+    Envía el token de un usuario autenticado: las rutas de proveedores lo exigen (AUTH-01).
+    """
+    with TestClient(app, headers=auth_headers) as client:
         yield client
 
 
@@ -242,7 +245,7 @@ def test_delete_returns_404_for_missing_id(api):
 # --- Persistencia a través de la API ------------------------------------------------------
 
 
-def test_changes_survive_an_api_restart(tmp_path):
+def test_changes_survive_an_api_restart(tmp_path, auth_headers):
     from app.domains.suppliers.dependencies import get_repository
     from app.domains.suppliers.repository import SupplierRepository
 
@@ -250,7 +253,7 @@ def test_changes_survive_an_api_restart(tmp_path):
 
     first = SupplierRepository.from_path(path)
     app.dependency_overrides[get_repository] = lambda: first
-    with TestClient(app) as client:
+    with TestClient(app, headers=auth_headers) as client:
         client.patch(f"{BASE}/2/rate", json={"rate_per_unit": 28100})
         client.post(BASE, json=new_payload())
     first.close()
@@ -258,7 +261,7 @@ def test_changes_survive_an_api_restart(tmp_path):
     second = SupplierRepository.from_path(path)
     app.dependency_overrides[get_repository] = lambda: second
     try:
-        with TestClient(app) as client:
+        with TestClient(app, headers=auth_headers) as client:
             suppliers = client.get(BASE).json()
         assert len(suppliers) == 16
         assert suppliers[1]["rate_per_unit"] == 28100.0

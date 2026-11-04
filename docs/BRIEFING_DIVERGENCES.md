@@ -13,6 +13,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 
 1. [Procesador de reportes de incidentes](#procesador-de-reportes-de-incidentes) (briefing "Utilidad de Análisis de Datos", Fases 1 y 2)
 2. [Directorio de proveedores](#directorio-de-proveedores) (briefing del milestone 09, "Lightweight Storage API")
+3. [Autenticación y protección de rutas](#autenticación-y-protección-de-rutas) (ticket AUTH-01)
 
 ---
 
@@ -177,3 +178,77 @@ Todo lo de esta tabla se ejecutó el 3 de noviembre de 2026.
 | Persistencia | Cambiar una tarifa y un estado, y reiniciar uvicorn | Los cambios siguen ahí y no se vuelve a sembrar |
 | Endpoints | curl a `/api/v1/suppliers` | Filtro USA + carne devuelve Miami Meat; alta 201 con `id`; nombre duplicado 409; tarifa 0, estado `deleted`, país desconocido y USA con COP dan 422; ID inexistente 404 en GET, PATCH y DELETE |
 | Backoffice | `tsc`, `lint` y prueba en `http://localhost:3001/proveedores` con la API arrancada | Sin errores. Listado, filtros sin recargar, alta con errores de la API, tarifa, activar/suspender y badges. Revisado en el navegador |
+
+---
+
+## Autenticación y protección de rutas
+
+Ticket AUTH-01: usuarios (solo credenciales), perfiles uno a uno, login con JWT, la dependencia `get_current_user` y su aplicación a las rutas no públicas. Los modelos, los roles (`admin`, `manager`, `user`), los campos y los nombres (`get_current_user`, `user_uuid`, `ACCESS_TOKEN_EXPIRE_MINUTES`) coinciden con el briefing. Las diferencias son de rutas y de decisiones de seguridad que el briefing no concreta.
+
+> **Estado:** implementado y verificado. Exigen token todas las rutas salvo `POST /auth/login`, `POST /users` y `GET /health`, incluidas las 8 rutas existentes de `incidents` y `suppliers` (el briefing pide al menos 5).
+
+| Qué | Briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Rutas | `/auth`, `/users`, `/profiles` | `/api/v1/auth`, `/api/v1/users`, `/api/v1/profiles` | Versión única de la API, como `incidents` y `suppliers` |
+| Formato del login | Acepta `email` y `password` | JSON `{email, password}` **y** formulario `username`/`password` | El botón «Authorize» de `/docs` (`OAuth2PasswordBearer`) envía un formulario |
+| `role` en el registro | "Los registros nuevos vía `POST /users` usan `user` por defecto" | `POST /users` rechaza `role` (422); el primer admin se crea con `uv run create-admin` | Si el registro público aceptara `role`, cualquiera podría hacerse admin |
+| `GET /users` | "Listar todos los usuarios (protegida)" | Solo admin (403 para el resto) | Listar todas las cuentas expone credenciales (emails) ajenas |
+| Almacenamiento | `User` y `Profile` en TinyDB | TinyDB en un archivo propio, `storage/auth-db.json` | No interferir con el archivo de proveedores |
+
+### 1. Rutas bajo `/api/v1`
+
+Es la misma decisión que en los ejercicios anteriores ([incidentes, apartado 2](#2-backend-servicesbrasaland-api-y-rutas-bajo-apiv1) y [proveedores, apartado 2](#2-rutas-bajo-apiv1)). El criterio "las rutas de auth están bajo `/auth`, las de usuarios bajo `/users` y las de perfil bajo `/profiles`: estructura limpia y coherente" se cumple dentro del prefijo común; mezclar rutas con y sin `/api/v1` sería menos coherente.
+
+### 2. Login con JSON y con formulario
+
+El briefing dice que `POST /auth/login` "acepta `email` y `password`", y también pide usar `OAuth2PasswordBearer`. El diálogo «Authorize» de `/docs` que genera ese esquema envía un formulario con los campos `username` y `password`, que es el estándar de OAuth2. Para cumplir ambas cosas, el mismo endpoint acepta:
+
+- **JSON** `{"email", "password"}`, como dice el briefing;
+- **formulario** `username`/`password`, donde `username` es el email, para que el flujo de `/docs` funcione con un clic.
+
+Las respuestas son las mismas en ambos casos. `/docs` documenta los dos formatos.
+
+### 3. El registro no acepta `role`
+
+`POST /users` es público. Si aceptara `role`, cualquiera podría registrarse como `admin`. Por eso:
+
+- el registro siempre crea `role = user` (el valor por defecto del briefing) y responde 422 si se envía `role`;
+- el primer administrador se crea desde la consola con `uv run create-admin`, que también promueve a un usuario existente;
+- después, un admin cambia roles con `PUT /users/{id}`, como indica el briefing.
+
+### 4. Decisiones de funcionamiento
+
+Estas decisiones no se apartan del briefing, pero concretan lo que no especifica.
+
+| Decisión | Motivo | Límite conocido |
+| --- | --- | --- |
+| `id` del usuario y del perfil: UUID4 en texto (el `doc_id` de TinyDB queda interno) | Otros módulos lo guardarán como `user_uuid`; un UUID no es enumerable | — |
+| El JWT lleva solo `sub` (el `id`), `iat` y `exp`, firmado con HS256 | "El token debe llevar como mínimo el ID del usuario"; el rol se lee de TinyDB en cada petición, así un cambio de rol o una desactivación aplica al momento | No hay revocación de tokens: un token robado vale hasta que caduca, salvo que se desactive o borre la cuenta |
+| `SECRET_KEY` y `ACCESS_TOKEN_EXPIRE_MINUTES` son obligatorias y sin valor por defecto; la API no arranca sin ellas | "Se leen desde variables de entorno, no están hardcodeadas" | En local se cargan con `uv run --env-file .env` |
+| `GET`, `PUT` y `DELETE /users/{id}`: solo la propia cuenta o un admin; 403 aunque el ID no exista | Criterio "acceder o actualizar las credenciales de otro usuario recibe 403"; no revelar qué IDs existen | — |
+| `role` e `is_active` solo los cambia un admin (403) | Un usuario no puede darse más permisos | Un admin puede quitarse a sí mismo el rol |
+| `PUT` cambia solo los campos enviados | El briefing usa `PUT` para "actualizar campos" | Diverge de la propuesta de arquitectura, que no usa `PUT`; manda el briefing |
+| `DELETE /users/{id}` responde 200 con el usuario eliminado y borra su perfil | Igual que en proveedores; el briefing pide borrar el perfil vinculado | — |
+| Perfil solo por `/profiles/me` | "Solo el dueño del perfil puede modificarlo": sin rutas por ID, no hay forma de tocar uno ajeno | Un admin no edita perfiles ajenos |
+| Email único sin distinguir mayúsculas (409 `duplicate_email`) | El email es la credencial de login | — |
+| Contraseña de 8 caracteres a 72 bytes | bcrypt rechaza más de 72 bytes; mejor un 422 claro que un 500 | — |
+| Login fallido: mismo 401 `invalid_credentials` si el email no existe o la contraseña falla, y bcrypt se ejecuta en ambos casos | No revelar qué emails están registrados | Sin límite de intentos |
+| Cuenta desactivada: 403 `inactive_user` en el login y con un token ya emitido | Distinguir "no te conozco" (401) de "te conozco, pero no puedes entrar" (403) | — |
+| `/health` sigue siendo pública | Lo usan las comprobaciones de disponibilidad y no expone datos | — |
+| `/incidencias` y `/proveedores` del backoffice reciben 401 | El briefing lo da por esperado: el frontend enviará el token en una fase posterior | Esas herramientas no funcionan hasta entonces |
+
+### 5. Cómo verificarlo
+
+Todo lo de esta tabla se ejecutó el 4 de noviembre de 2026.
+
+| Qué se comprueba | Comando o acción | Resultado |
+| --- | --- | --- |
+| Pruebas de la API | `cd services/brasaland-api && uv run pytest` | 351 pruebas pasan: `core` 35, `incidents` 24, `suppliers` 108, `users` 78, `profiles` 20, `auth` 27 y rutas protegidas 59 |
+| Configuración | Arrancar sin `.env` y con `uv run --env-file .env` | Sin `.env` la API no arranca y nombra `SECRET_KEY`; con él, `/health` responde 200 |
+| Contraseñas | Pruebas de `users` sobre el archivo TinyDB | El texto plano no aparece en el archivo; solo el hash `$2b$` de bcrypt. `name`, `phone` y `address` solo están en `profiles` |
+| Flujo completo en `/docs` | Registro con `POST /users` → «Authorize» (o `POST /auth/login` y copiar el token) → `GET /auth/me` y `GET /suppliers` | Revisado por el desarrollador en el navegador |
+| 401 | curl a las rutas protegidas sin token, con un token alterado y con uno caducado | 401 con `WWW-Authenticate: Bearer` (`not_authenticated`, `invalid_token`, `token_expired`) |
+| 403 | Un usuario lee, cambia o borra la cuenta de otro, o intenta cambiarse el rol | 403 `forbidden`; `GET /users` responde 403 a quien no es admin |
+| Rutas existentes | curl a 6 rutas de `suppliers` e `incidents` con y sin token | Sin token, 401; con token, las respuestas de siempre (200, o 404 en el export sin análisis previo) |
+| Ninguna ruta abierta por olvido | `tests/test_protected_routes.py` sobre `/openapi.json` | Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`. Al quitar la protección de `suppliers`, la prueba falla |
+| Primer admin | `uv run create-admin` con datos inválidos | Mensaje en español y no escribe nada; los casos válidos están cubiertos por pruebas |

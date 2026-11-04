@@ -62,6 +62,7 @@ Las áreas internas, incluida la formación, se incorporan aquí como herramient
 ## Limitaciones conocidas
 
 - **Sin autenticación:** no debe publicarse hasta que exista el login.
+- **`/incidencias` y `/proveedores` reciben 401 por ahora:** la API de Brasaland exige un token JWT en esas rutas (ticket AUTH-01), y el intermediario todavía no lo envía. Es lo esperado: el frontend se actualizará para enviar el token en una fase posterior.
 - **`/funciones` es temporal:** prueba las reglas de `@repo/brasa-core`, un paquete transitorio. Cuando esas reglas pasen al backend, debe retirarse o llamar a la API. No añadas cálculos de negocio a los frontends.
 - **`/incidencias` descarga el último análisis de la API:** se guarda en memoria, así que si la API se reinicia hay que volver a subir el archivo, y si dos personas analizan a la vez, se descarga el más reciente.
 - **`/proveedores` escribe en la base local de la API:** las altas y los cambios de tarifa o estado se guardan en `services/brasaland-api/storage/brasaland-db.json`. Para volver a los datos iniciales, borra ese archivo y reinicia la API. La interfaz no ofrece borrar proveedores: el flujo habitual es suspenderlos.

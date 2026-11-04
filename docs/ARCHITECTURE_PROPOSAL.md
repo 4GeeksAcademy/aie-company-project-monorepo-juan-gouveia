@@ -186,7 +186,9 @@ services/brasaland-api/
 │   │   └── timezones.py        # Hora local de cada país y conversión desde UTC
 │   │
 │   ├── domains/
-│   │   ├── auth/               # Usuarios de la plataforma, roles y acceso por local o país
+│   │   ├── auth/               # Inicio de sesión (JWT), usuario actual y permisos (implementado)
+│   │   ├── users/              # Cuentas: solo credenciales y rol (implementado; TinyDB, ver 2.7)
+│   │   ├── profiles/           # Nombre visible y contacto de cada cuenta, uno a uno (implementado)
 │   │   ├── locations/          # Locales: país, ciudad, moneda, zona horaria, horario
 │   │   ├── menu/               # Productos que se venden y sus precios por país
 │   │   ├── recipes/            # Recetas, versiones, traducciones y publicación a locales
@@ -251,7 +253,7 @@ Un único backend con una única base de datos hace muy fácil que los dominios 
 1. **Cada tabla tiene un solo dominio dueño**, y solo ese dominio escribe en ella.
 2. **Un dominio solo usa otro a través de su `service.py`.** Nunca importa sus modelos ni su repositorio. Por ejemplo, si `inventory` necesita los productos vendidos ayer, se los pide a `sales.service`; no consulta la tabla de ventas.
 3. **Las referencias entre dominios se hacen por identificador.** Una venta guarda el `location_id`, no una copia de los datos del local. Lo mismo ocurre con los ingredientes, que usan tres dominios: su dueño es `inventory` (es lo que se almacena y se pide), y `recipes` y `procurement` los referencian por identificador.
-4. **Sin dependencias circulares.** Los dominios base (`auth`, `locations`, `menu`) no dependen de nadie. Los operativos dependen de ellos. Entre los operativos, `loyalty` depende de `customers`, nunca al revés: una cuenta de puntos pertenece a un cliente (3.6).
+4. **Sin dependencias circulares.** Los dominios base (`auth`, con `users` y `profiles`; `locations`, `menu`) no dependen de nadie. Los operativos dependen de ellos. Entre los operativos, `loyalty` depende de `customers`, nunca al revés: una cuenta de puntos pertenece a un cliente (3.6).
 
    ```
    auth · locations · menu                        ← dominios base
@@ -291,6 +293,14 @@ Propuesta inicial, sujeta a las prioridades del sprint:
 
 Cubre la parte de directorio que esta propuesta asignaba a `procurement/`: alta, consulta, tarifa vigente y estado. Cuando se aborden el historial de precios y las compras, `suppliers/` se integrará en `procurement/` o pasará a ser su base. `procurement/` dependería entonces de `suppliers.service` y no habría dos dominios dueños de los proveedores. Hasta entonces, `updated_at` solo guarda la fecha del último cambio de tarifa, no el historial.
 
+**Tercer bloque implementado: autenticación (`auth/`, `users/` y `profiles/`).** Ninguna ruta que exponga o modifique datos sensibles debe responder sin una sesión válida. Se resolvió así:
+
+- **Tokens:** la API emite tokens JWT firmados (`POST /auth/login`) y es *stateless*: no guarda sesiones ni usa cookies.
+- **Dependencia `get_current_user`:** valida el token en cada petición. Se declara al registrar el router de cada dominio, como recomienda 3.1. Hoy protege todas las rutas salvo el inicio de sesión, el registro y `/health`.
+- **Usuarios y perfiles:** `users/` guarda solo credenciales y rol (`admin`, `manager` o `user`), y `profiles/` el nombre y el contacto.
+- **Almacenamiento:** por indicación del CTO, ambos viven en **TinyDB** también después de introducir PostgreSQL, en un archivo propio. Los demás dominios guardan solo el identificador de la cuenta, con el nombre `user_uuid` (regla 3 de 2.5).
+- **Pendiente:** los permisos por rol, fuera de la gestión de cuentas, y la asignación de locales o país a cada cuenta.
+
 ---
 
 ## 3. Organización de rutas y routers
@@ -311,7 +321,7 @@ Cubre la parte de directorio que esta propuesta asignaba a `procurement/`: alta,
 |---|---|---|
 | **Nombres** | Sustantivos en plural y en inglés, con guiones (`/ingredient-orders`). Los campos JSON van en `snake_case`. | Coherencia con el código (sección 2.2) y con el frontend actual, que ya usa `snake_case`. |
 | **Anidación** | Como máximo un nivel, y solo cuando el recurso hijo no existe sin el padre: `/candidates/{id}/notes`, `/recipes/{id}/versions`. | Evita URLs largas y frágiles, y deja claro qué pertenece a qué. |
-| **Métodos** | `GET` para consultar, `POST` para crear, `PATCH` para modificar parcialmente y `DELETE` para borrar. No se usa `PUT`. | Hoy el tracker debe hacer un `PATCH` extra porque el `PUT` de la API que consume reinicia `status` y `stage` (ver 3.5). |
+| **Métodos** | `GET` para consultar, `POST` para crear, `PATCH` para modificar parcialmente y `DELETE` para borrar. No se usa `PUT`, salvo en `/users/{id}` y `/profiles/me`, donde lo pidió el ticket de autenticación; allí actualiza solo los campos enviados. | Hoy el tracker debe hacer un `PATCH` extra porque el `PUT` de la API que consume reinicia `status` y `stage` (ver 3.5). |
 | **Acciones de negocio** | Una operación que hace algo más que cambiar un campo se expone como un `POST` explícito: `POST /recipes/{id}/versions/{version}/publish`. | Publicar una receta la envía a los 14 locales. Debe ser una acción visible y auditable, no un `PATCH` de un campo `published`. |
 | **Listados** | Los mismos parámetros en todos los dominios: `page`, `limit`, `q` (búsqueda) y filtros con nombre del campo (`status`, `location_id`, `from`, `to`). Siempre la misma respuesta: `{ data, meta: { total, page, limit } }`. | Hoy el tracker recibe dos formatos distintos de lista. Un formato único permite un único componente de tabla o paginación en los frontends. |
 | **Errores** | El mismo formato en todos los dominios, con un código legible por máquina además del mensaje. | El frontend puede mostrar el error correcto sin interpretar textos. |
@@ -326,7 +336,7 @@ Todas las rutas van precedidas de `/api/v1`. El mapa muestra los recursos princi
 
 | Dominio (tag) | Rutas | Principales clientes |
 |---|---|---|
-| **auth** | `POST /auth/token` (inicio de sesión) · `GET /auth/me` (usuario actual y sus permisos) · `GET, POST /users` · `GET, PATCH /users/{id}` (cuentas, roles, locales asignados) | Todos los frontends |
+| **auth**, **users**, **profiles** (implementados) | `POST /auth/login` (inicio de sesión, devuelve un JWT) · `GET /auth/me` (usuario actual, rol y perfil) · `POST /users` (registro público) · `GET /users` (solo admin) · `GET, PUT, DELETE /users/{id}` (la propia cuenta o un admin) · `GET, PUT /profiles/me`. Pendiente: permisos y locales asignados a cada cuenta. | Todos los frontends |
 | **locations** | `GET, POST /locations` · `GET, PATCH /locations/{id}` (código, país, ciudad, moneda, zona horaria, horario de apertura). La lectura es pública porque la web muestra las sedes y el registro las ofrece como favoritas (3.6). | Todos |
 | **menu** | `GET, POST /menu-items` · `GET, PATCH /menu-items/{id}` (precios y disponibilidad por país) | Web, app de fidelización, backoffice |
 | **recipes** | `GET, POST /recipes` (búsqueda por nombre o ingrediente, idioma) · `GET, PATCH /recipes/{id}` · `GET, POST /recipes/{id}/versions` · `POST /recipes/{id}/versions/{version}/publish`. La consulta de una receta acepta `servings` y `units` para ajustar porciones y unidades de medida. | Backoffice (formación) |
@@ -649,7 +659,7 @@ Esta propuesta define la estructura del backend, pero deja abiertas varias decis
 | Decisión | Qué condiciona | Dónde se menciona |
 |---|---|---|
 | **Motor de base de datos, librería para tablas y esquemas, y herramienta de migraciones** | `core/database.py`, los `models.py` de cada dominio y `migrations/`. Mientras tanto, `suppliers/` usa TinyDB con su propio `database.py` (2.7). | 2.3, 4.3 |
-| **Estrategia de autenticación.** La sesión del backoffice se guarda en una cookie gestionada por su intermediario (5.2). Falta decidir cómo inicia sesión el personal y el modelo de permisos. De momento los clientes no tienen acceso (3.6); cuando exista la app de fidelización habrá que decidir cómo se identifican. | `auth/` y `core/security.py`. | 3.3, 5.2, 5.4 |
+| **Estrategia de autenticación.** *Resuelto en la API:* el personal inicia sesión con email y contraseña y recibe un JWT; la API es stateless, sin sesiones ni cookies (2.7). *Pendiente:* cómo guarda el token el intermediario del backoffice, porque 5.2 preveía una cookie y la directiva de autenticación descarta las cookies; el modelo de permisos por rol, local o país; y cómo se identificarán los clientes cuando exista la app de fidelización (3.6). | `auth/`, `core/security.py` y el intermediario del backoffice. | 2.7, 3.3, 5.2, 5.4 |
 | **Tecnología para el flujo en tiempo real** | `GET /telemetry/stream` y el dashboard operativo. | 3.3 |
 | **Ejecución de tareas programadas y de fondo** | Cómo se lanzan y se reintentan los procesos de `jobs/`. | 2.6 |
 | **Criterio para usar funciones asíncronas** | Rendimiento de las rutas y de los adaptadores de POS e IA, cuyas llamadas externas no deben bloquear la API. | 4 |

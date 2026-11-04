@@ -20,7 +20,14 @@
 
 ### Backend / Servicios
 
-- **`services/brasaland-api/`** — API central en **FastAPI** (Python ≥ 3.11, Pydantic 2), con la estructura por dominios de la propuesta de arquitectura. Dependencias en `pyproject.toml` (`fastapi`, `uvicorn[standard]`, `python-multipart`, `tinydb` y `pydantic[email]`; de desarrollo, `pytest` y `httpx`), gestionadas con **uv** (`uv.lock` versionado) y entorno virtual propio en `.venv/`, ignorado en Git. Comandos: `uv sync --extra dev`, `uv run uvicorn app.main:app --port 8000`, `uv run pytest` y `uv run seed` (script de `[project.scripts]`).
+- **`services/brasaland-api/`** — API central en **FastAPI** (Python ≥ 3.11, Pydantic 2), con la estructura por dominios de la propuesta de arquitectura. Dependencias en `pyproject.toml` (`fastapi`, `uvicorn[standard]`, `python-multipart`, `tinydb`, `pydantic[email]`, `python-jose[cryptography]` y `libpass[bcrypt]`; de desarrollo, `pytest` y `httpx`), gestionadas con **uv** (`uv.lock` versionado) y entorno virtual propio en `.venv/`, ignorado en Git. Comandos: `uv sync --extra dev`, `uv run --env-file .env uvicorn app.main:app --port 8000`, `uv run pytest`, `uv run seed` y `uv run create-admin` (scripts de `[project.scripts]`).
+- **Configuración (`app/core/config.py`):** `SECRET_KEY` (mínimo 32 caracteres) y `ACCESS_TOKEN_EXPIRE_MINUTES` son obligatorias y sin valor por defecto; la API no arranca sin ellas. En local van en `services/brasaland-api/.env` (ignorado; plantilla `.env.example`). Opcionales: `AUTH_DB_PATH` y `BRASALAND_DB_PATH`. `API_PREFIX = "/api/v1"` vive aquí.
+- **Autenticación (ticket AUTH-01, rama `feature/auth-api`, completada y verificada).**
+  - **Modelo:** JWT stateless, sin sesiones ni cookies. `app/core/security.py` hashea con bcrypt (libpass, `from passlib.hash import bcrypt`) y firma con HS256 (python-jose) tokens con solo `sub` (UUID del usuario), `iat` y `exp`.
+  - **Dominios:** `users` (solo credenciales: `id` UUID4, `email` único en minúsculas, `hashed_password`, `is_active`, `role` ∈ `admin`/`manager`/`user`, `created_at`; capa `service.py`), `profiles` (`id`, `user_id`, `name`, `phone`, `address`, uno a uno) y `auth` (`POST /auth/login` con JSON o formulario, `GET /auth/me`, `get_current_user`, `require_admin`).
+  - **Rutas:** `/api/v1/auth`, `/api/v1/users` (registro público; el resto, la propia cuenta o admin; `GET /users`, `role` e `is_active` solo admin) y `/api/v1/profiles/me`.
+  - **Almacenamiento:** TinyDB en `storage/auth-db.json`, una instancia con un `RLock` compartido por los repositorios de usuarios y perfiles. Por directiva del briefing, usuarios y perfiles se quedan en TinyDB aunque llegue PostgreSQL; otros módulos guardan el `id` como `user_uuid`.
+  - **Protección:** `main.py` registra `incidents` y `suppliers` con `dependencies=[Depends(get_current_user)]`. Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`; `tests/test_protected_routes.py` lo comprueba sobre el esquema OpenAPI.
 - **Dominio `suppliers` (directorio de proveedores, milestone 09).**
   - **Rutas:** `POST/GET /api/v1/suppliers` (filtros `country` y `category`), `GET/DELETE /suppliers/{id}`, `PATCH /suppliers/{id}/rate` y `PATCH /suppliers/{id}/status`.
   - **Modelos (`models.py`):** Pydantic con enums que tienen los valores exactos del briefing. La moneda debe corresponder al país, `extra="forbid"`, y la tarifa es estricta y mayor que 0.
@@ -30,7 +37,7 @@
   - **Seeder:** `seed.py` tiene los 15 proveedores del briefing. `uv run seed` inserta por nombre, y el `lifespan` de `main.py` siembra solo si la tabla está vacía.
   - **Pruebas:** usan una base temporal mediante un fixture autouse en `tests/conftest.py`.
 - **Dominio `incidents`.** `POST /api/v1/incidents/analyze` (multipart, campo `file`) y `GET /api/v1/incidents/results/export` (`text/csv`, adjunto `results.csv`), más `GET /health`. `service.py` es la fuente de verdad de las reglas y solo usa la librería estándar, porque también lo importa `scripts/incident-report/analyze.py`. El último análisis se guarda en memoria (`repository.py`).
-- **Errores:** formato único `{"error": {"code", "message"}}` (`app/core/errors.py`), con mensajes en español: 400 `missing_file` / `empty_file`, 413 `file_too_large` (5 MB), 415 `unsupported_file_type` (por extensión), 422 `invalid_encoding` / `missing_columns` / `no_records` / `invalid_request`, 404 `no_analysis` / `not_found` / `supplier_not_found`, 409 `duplicate_supplier`. Los 422 de validación (`invalid_request`) incluyen `details: [{field, message}]` con mensajes en español (`describe_validation_errors`).
+- **Errores:** formato único `{"error": {"code", "message"}}` (`app/core/errors.py`), con mensajes en español y cabeceras opcionales (los 401 llevan `WWW-Authenticate: Bearer`). Autenticación: 401 `not_authenticated` / `invalid_token` / `token_expired` / `invalid_credentials`, 403 `inactive_user` / `forbidden`, 404 `user_not_found` / `profile_not_found`, 409 `duplicate_email`, 415 `unsupported_media_type`. Resto: 400 `missing_file` / `empty_file`, 413 `file_too_large` (5 MB), 415 `unsupported_file_type` (por extensión), 422 `invalid_encoding` / `missing_columns` / `no_records` / `invalid_request`, 404 `no_analysis` / `not_found` / `supplier_not_found`, 409 `duplicate_supplier`. Los 422 de validación (`invalid_request`) incluyen `details: [{field, message}]` con mensajes en español (`describe_validation_errors`).
 - **Desviación de la consigna, a justificar en la entrega:** se usan `services/brasaland-api/` y `/api/v1` (propuesta) en vez de `/services/api` y `/api/incidents/...`. Esta y las demás divergencias con briefings y consignas se registran en `docs/BRIEFING_DIVERGENCES.md`.
 - El tracker consume actualmente una API REST de playground mediante `NEXT_PUBLIC_API_BASE_URL` con endpoints:
   - `GET /records` — listar candidatos (filtrable por status, stage, search)
@@ -41,8 +48,8 @@
   - `GET /records/{id}/notes` — listar notas
   - `POST /records/{id}/notes` — crear nota
   - `DELETE /records/{id}/notes/{noteId}` — eliminar nota
-- **BFF del backoffice implementado:** `uis/backoffice/app/api/[...path]/route.ts` reenvía `GET`, `POST`, `PATCH` y `DELETE` de `/api/<ruta>` a la variable de servidor `API_BASE_URL` (`http://localhost:8000/api/v1`) sin lógica ni token (aún no hay autenticación). Responde 500 `api_not_configured` si falta la variable y 502 `api_unavailable` si la API no responde. El tracker no lo usa todavía.
-- **Sigue pendiente:** autenticación, la base de datos definitiva (TinyDB es provisional) y el resto de dominios. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
+- **BFF del backoffice implementado:** `uis/backoffice/app/api/[...path]/route.ts` reenvía `GET`, `POST`, `PATCH` y `DELETE` de `/api/<ruta>` a la variable de servidor `API_BASE_URL` (`http://localhost:8000/api/v1`) sin lógica ni token. Como la API ya protege `incidents` y `suppliers`, esas herramientas reciben 401 hasta que el BFF envíe el token (fase posterior). Responde 500 `api_not_configured` si falta la variable y 502 `api_unavailable` si la API no responde. El tracker no lo usa todavía.
+- **Sigue pendiente:** enviar el token desde el BFF del backoffice, la base de datos definitiva (TinyDB es provisional) y el resto de dominios. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
 
 ### Paquetes Compartidos
 
@@ -172,7 +179,7 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 - Existen los dominios `incidents` y `suppliers` de `services/brasaland-api/`. El último análisis de incidentes vive en memoria y se pierde al reiniciar. Los proveedores persisten en TinyDB, que es provisional hasta Postgres con ORM y no está pensado para muchos procesos escribiendo a la vez.
 - El tracker sigue usando la API de playground (ver sección de Stack → Backend).
-- No hay autenticación ni autorización implementadas.
+- La autenticación JWT protege todas las rutas salvo login, registro y `/health` (rama `feature/auth-api`). No hay permisos por rol fuera de la gestión de usuarios. El BFF del backoffice aún no envía el token.
 
 ### Agentes / IA
 
@@ -183,7 +190,7 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 ### Infraestructura
 
 - Sin Docker, docker-compose, CI/CD, o scripts de deploy.
-- Sin base de datos de servidor; solo el archivo TinyDB local de `suppliers`.
+- Sin base de datos de servidor; solo los archivos TinyDB locales de `suppliers` y de usuarios y perfiles.
 - Sin configuración de hosting/cloud.
 
 ### Datos
@@ -199,4 +206,4 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ---
 
-_Actualizado: 2026-11-03_
+_Actualizado: 2026-11-04_
