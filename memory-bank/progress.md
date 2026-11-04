@@ -22,7 +22,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Dominios nuevos:** `users` (solo credenciales, roles `admin`/`manager`/`user`, contraseñas con bcrypt de libpass), `profiles` (nombre y contacto, uno a uno) y `auth` (login con JWT de python-jose, `GET /auth/me` y la dependencia `get_current_user`). Todo bajo `/api/v1`, en TinyDB (`storage/auth-db.json`).
 - **Permisos:** cada usuario solo accede a su cuenta (403 si no); listar usuarios y cambiar `role` o `is_active` es solo de admin. El primer admin se crea con `uv run create-admin`.
 - **Rutas protegidas:** todas salvo `POST /auth/login`, `POST /users` y `GET /health`, incluidas las 8 de `incidents` y `suppliers`. `/incidencias` y `/proveedores` del backoffice reciben 401 hasta que el BFF envíe el token, como prevé el briefing.
-- **Verificación:** 351 pruebas pytest pasan; flujo y rutas protegidas probados en vivo con bases temporales.
+- **Verificación:** 361 pruebas pytest pasan; flujo y rutas protegidas probados en vivo con bases temporales.
 - **Documentación:** los README del servicio, de `services/` y del backoffice, `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas", con la tabla de verificación) y `docs/ARCHITECTURE_PROPOSAL.md` (2.3, 2.5, 2.7, 3.2, 3.3 y 7).
 - **Pendiente:** abrir el PR (contra `directorio-prov` mientras su PR siga abierto) y entregar. En el backoffice, que el BFF envíe el token, en una fase posterior.
 
@@ -100,7 +100,7 @@ Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negoci
 | `services/brasaland-api/` — API FastAPI por dominios (propuesta de arquitectura) | ✅ Iniciada |
 | Dominio `incidents` — `POST /api/v1/incidents/analyze`, `GET /api/v1/incidents/results/export`, `GET /health`; 24 pruebas pytest | ✅ Implementado; último análisis en memoria |
 | Dominio `suppliers` — CRUD del directorio de proveedores, filtros `country`/`category`, `PATCH` de tarifa (registra `updated_at`) y de estado, 409 por nombre duplicado; seeder `uv run seed`; 108 pruebas pytest | ✅ Implementado; TinyDB en `storage/brasaland-db.json` |
-| Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me`, `get_current_user`, `uv run create-admin`; 125 pruebas pytest (más 35 de `core` y 59 de rutas protegidas) | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
+| Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me` y `/profiles/{user_id}`, `get_current_user`, `uv run create-admin`; 135 pruebas pytest (más 35 de `core` y 59 de rutas protegidas) | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
 | Resto de dominios (`locations`, `recruitment`…) | ❌ No iniciado |
 | Base de datos | ⏳ TinyDB provisional para `suppliers` (directiva del CTO); el motor definitivo (Postgres con ORM) está sin decidir. Usuarios y perfiles se quedan en TinyDB también después (directiva del briefing AUTH-01) |
 | Autenticación / Autorización | ✅ JWT stateless (sin sesiones ni cookies). Todas las rutas exigen token salvo login, registro y `/health`. ⏳ Permisos por rol solo en la gestión de usuarios (admin); el BFF del backoffice aún no envía el token |

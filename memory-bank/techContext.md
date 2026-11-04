@@ -25,7 +25,7 @@
 - **Autenticación (ticket AUTH-01, rama `feature/auth-api`, completada y verificada).**
   - **Modelo:** JWT stateless, sin sesiones ni cookies. `app/core/security.py` hashea con bcrypt (libpass, `from passlib.hash import bcrypt`) y firma con HS256 (python-jose) tokens con solo `sub` (UUID del usuario), `iat` y `exp`.
   - **Dominios:** `users` (solo credenciales: `id` UUID4, `email` único en minúsculas, `hashed_password`, `is_active`, `role` ∈ `admin`/`manager`/`user`, `created_at`; capa `service.py`), `profiles` (`id`, `user_id`, `name`, `phone`, `address`, uno a uno) y `auth` (`POST /auth/login` con JSON o formulario, `GET /auth/me`, `get_current_user`, `require_admin`).
-  - **Rutas:** `/api/v1/auth`, `/api/v1/users` (registro público; el resto, la propia cuenta o admin; `GET /users`, `role` e `is_active` solo admin) y `/api/v1/profiles/me`.
+  - **Rutas:** `/api/v1/auth`, `/api/v1/users` (registro público; el resto, la propia cuenta o admin; `GET /users`, `role` e `is_active` solo admin) y `/api/v1/profiles` (`/me`, y `/{user_id}`: leer el dueño o un admin, modificar solo el dueño; 403 en otro caso).
   - **Almacenamiento:** TinyDB en `storage/auth-db.json`, una instancia con un `RLock` compartido por los repositorios de usuarios y perfiles. Por directiva del briefing, usuarios y perfiles se quedan en TinyDB aunque llegue PostgreSQL; otros módulos guardan el `id` como `user_uuid`.
   - **Protección:** `main.py` registra `incidents` y `suppliers` con `dependencies=[Depends(get_current_user)]`. Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`; `tests/test_protected_routes.py` lo comprueba sobre el esquema OpenAPI.
 - **Dominio `suppliers` (directorio de proveedores, milestone 09).**

@@ -68,7 +68,7 @@ La API **no arranca** si falta `SECRET_KEY` o `ACCESS_TOKEN_EXPIRE_MINUTES`, o s
 uv run pytest -v
 ```
 
-Las 351 pruebas cubren:
+Las 361 pruebas cubren:
 
 - **`core` (35):** la configuración desde el entorno (variables ausentes o inválidas, la API no arranca sin clave), el hash de contraseñas y los tokens (caducados, firmados con otra clave, alterados, sin firma o sin claims), y las cabeceras de los errores.
 - **`incidents` (24):** la lectura del archivo, los valores del briefing, el JSON del análisis, el CSV exportado y cada error de entrada. Las reglas también las prueban las 32 pruebas del script de consola (`scripts/incident-report/`), que usa el mismo servicio.
@@ -77,13 +77,13 @@ Las 351 pruebas cubren:
   - el seeder: que no duplica y que confirma el recuento en consola;
   - el repositorio, incluidas la persistencia y la escritura desde dos procesos;
   - cada endpoint con sus códigos HTTP.
-- **`users` (78), `profiles` (20) y `auth` (27):**
+- **`users` (78), `profiles` (30) y `auth` (27):**
   - los roles del briefing, el email normalizado y los límites de la contraseña;
   - que el texto plano nunca llega al archivo y que `name`, `phone` y `address` solo están en el perfil;
   - el perfil creado con el usuario y borrado con él;
   - `uv run create-admin`;
   - el login en JSON y en formulario, `get_current_user` (401 sin token, mal formado, caducado o de un usuario borrado; 403 si está desactivado);
-  - cada endpoint, incluidos los 403 cuando un usuario intenta leer, cambiar o borrar la cuenta de otro.
+  - cada endpoint, incluidos los 403 cuando un usuario intenta leer, cambiar o borrar la cuenta o el perfil de otro (un admin puede leer cualquier perfil, pero no modificarlo).
 - **Rutas protegidas (59):** las 8 de `incidents` y `suppliers` responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave, y funcionan como antes con un token válido. `/health` sigue pública, y ninguna ruta queda abierta salvo las públicas declaradas. Las pruebas existentes de `incidents` y `suppliers` envían el token de un usuario de prueba.
 
 Cada prueba usa bases TinyDB temporales y su propia configuración, así que no toca `storage/` ni depende del `.env`.
@@ -114,7 +114,7 @@ app/
     ├── profiles/
     │   ├── models.py       # Profile, ProfileUpdate
     │   ├── repository.py   # Consultas y escrituras de perfiles
-    │   └── router.py       # GET y PUT /profiles/me
+    │   └── router.py       # GET y PUT /profiles/me y /profiles/{user_id}
     ├── incidents/
     │   ├── router.py       # Endpoints: solo traducen HTTP
     │   ├── service.py      # Reglas de validación y análisis (solo librería estándar)
@@ -229,9 +229,11 @@ Ninguna ruta que exponga o modifique datos sensibles debe responder sin una sesi
 | `DELETE /api/v1/users/{id}` | La propia cuenta o admin | 200 con el usuario eliminado (también borra su perfil) | 401, 403, 404 |
 | `GET /api/v1/profiles/me` | Token | 200 | 401, 404 `profile_not_found` |
 | `PUT /api/v1/profiles/me` | Token (solo el propio perfil) | 200 | 401, 404, 422 |
+| `GET /api/v1/profiles/{user_id}` | El propio perfil o admin | 200 | 401, 403 `forbidden`, 404 (solo admin) |
+| `PUT /api/v1/profiles/{user_id}` | Solo el dueño del perfil, también frente a un admin | 200 | 401, 403 `forbidden`, 404, 422 |
 
 - **Login:** acepta JSON `{"email", "password"}` y también el formulario `username`/`password` que envía el botón «Authorize» de `/docs` (`username` es el email). Si el email no existe o la contraseña falla, la respuesta es la misma, y bcrypt se ejecuta en ambos casos para no revelar qué emails están registrados.
-- **`PUT`:** cambia solo los campos enviados. En `/profiles/me`, `null` vacía un campo.
+- **`PUT`:** cambia solo los campos enviados. En los perfiles, `null` vacía un campo.
 - **403 entre usuarios:** un usuario que no es admin recibe 403 al acceder a otra cuenta, exista o no ese ID, para no revelar qué IDs existen.
 - **Primer administrador:** `uv run create-admin` pide el email y la contraseña (sin mostrarla) y crea el admin. Si el email ya existe, lo hace admin y lo reactiva sin cambiar su contraseña. Después, un admin cambia roles con `PUT /users/{id}`.
 

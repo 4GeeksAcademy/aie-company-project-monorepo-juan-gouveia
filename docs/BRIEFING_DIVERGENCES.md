@@ -229,7 +229,7 @@ Estas decisiones no se apartan del briefing, pero concretan lo que no especifica
 | `role` e `is_active` solo los cambia un admin (403) | Un usuario no puede darse más permisos | Un admin puede quitarse a sí mismo el rol |
 | `PUT` cambia solo los campos enviados | El briefing usa `PUT` para "actualizar campos" | Diverge de la propuesta de arquitectura, que no usa `PUT`; manda el briefing |
 | `DELETE /users/{id}` responde 200 con el usuario eliminado y borra su perfil | Igual que en proveedores; el briefing pide borrar el perfil vinculado | — |
-| Perfil solo por `/profiles/me` | "Solo el dueño del perfil puede modificarlo": sin rutas por ID, no hay forma de tocar uno ajeno | Un admin no edita perfiles ajenos |
+| Perfiles por `/profiles/me` y por `/profiles/{user_id}`: leerlo, el dueño o un admin; modificarlo, solo el dueño (403 en otro caso, también para un admin) | "Solo el dueño del perfil puede modificarlo", y el criterio de evaluación pide 403 al acceder o actualizar el perfil de otro usuario | Un admin no edita perfiles ajenos |
 | Email único sin distinguir mayúsculas (409 `duplicate_email`) | El email es la credencial de login | — |
 | Contraseña de 8 caracteres a 72 bytes | bcrypt rechaza más de 72 bytes; mejor un 422 claro que un 500 | — |
 | Login fallido: mismo 401 `invalid_credentials` si el email no existe o la contraseña falla, y bcrypt se ejecuta en ambos casos | No revelar qué emails están registrados | Sin límite de intentos |
@@ -243,12 +243,12 @@ Todo lo de esta tabla se ejecutó el 4 de noviembre de 2026.
 
 | Qué se comprueba | Comando o acción | Resultado |
 | --- | --- | --- |
-| Pruebas de la API | `cd services/brasaland-api && uv run pytest` | 351 pruebas pasan: `core` 35, `incidents` 24, `suppliers` 108, `users` 78, `profiles` 20, `auth` 27 y rutas protegidas 59 |
+| Pruebas de la API | `cd services/brasaland-api && uv run pytest` | 361 pruebas pasan: `core` 35, `incidents` 24, `suppliers` 108, `users` 78, `profiles` 30, `auth` 27 y rutas protegidas 59 |
 | Configuración | Arrancar sin `.env` y con `uv run --env-file .env` | Sin `.env` la API no arranca y nombra `SECRET_KEY`; con él, `/health` responde 200 |
 | Contraseñas | Pruebas de `users` sobre el archivo TinyDB | El texto plano no aparece en el archivo; solo el hash `$2b$` de bcrypt. `name`, `phone` y `address` solo están en `profiles` |
 | Flujo completo en `/docs` | Registro con `POST /users` → «Authorize» (o `POST /auth/login` y copiar el token) → `GET /auth/me` y `GET /suppliers` | Revisado por el desarrollador en el navegador |
 | 401 | curl a las rutas protegidas sin token, con un token alterado y con uno caducado | 401 con `WWW-Authenticate: Bearer` (`not_authenticated`, `invalid_token`, `token_expired`) |
-| 403 | Un usuario lee, cambia o borra la cuenta de otro, o intenta cambiarse el rol | 403 `forbidden`; `GET /users` responde 403 a quien no es admin |
+| 403 | Un usuario lee, cambia o borra la cuenta de otro, lee o cambia el perfil de otro (`/profiles/{user_id}`), o intenta cambiarse el rol | 403 `forbidden`; `GET /users` responde 403 a quien no es admin; un admin lee cualquier perfil pero recibe 403 al modificar uno ajeno |
 | Rutas existentes | curl a 6 rutas de `suppliers` e `incidents` con y sin token | Sin token, 401; con token, las respuestas de siempre (200, o 404 en el export sin análisis previo) |
 | Ninguna ruta abierta por olvido | `tests/test_protected_routes.py` sobre `/openapi.json` | Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`. Al quitar la protección de `suppliers`, la prueba falla |
 | Primer admin | `uv run create-admin` con datos inválidos | Mensaje en español y no escribe nada; los casos válidos están cubiertos por pruebas |

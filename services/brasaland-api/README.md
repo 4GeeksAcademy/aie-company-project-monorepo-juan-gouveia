@@ -68,7 +68,7 @@ The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is m
 uv run pytest -v
 ```
 
-The 351 tests cover:
+The 361 tests cover:
 
 - **`core` (35):** configuration from the environment (missing or invalid variables, the API not starting without a key), password hashing and tokens (expired, signed with another key, tampered with, unsigned or missing claims), and error headers.
 - **`incidents` (24):** file reading, the briefing values, the analysis JSON, the exported CSV, and every input error. The rules are also covered by the 32 tests of the console script (`scripts/incident-report/`), which uses the same service.
@@ -77,13 +77,13 @@ The 351 tests cover:
   - the seeder: that it does not duplicate and that it reports the count on the console;
   - the repository, including persistence and writes from two processes;
   - every endpoint with its HTTP codes.
-- **`users` (78), `profiles` (20) and `auth` (27):**
+- **`users` (78), `profiles` (30) and `auth` (27):**
   - the briefing roles, the normalized email and the password limits;
   - that plain text never reaches the file and that `name`, `phone` and `address` only live in the profile;
   - the profile created with the user and deleted with it;
   - `uv run create-admin`;
   - sign-in with JSON and with a form, `get_current_user` (401 without a token, or with a malformed or expired one, or one for a deleted user; 403 if deactivated);
-  - every endpoint, including the 403 when a user tries to read, change or delete someone else's account.
+  - every endpoint, including the 403 when a user tries to read, change or delete someone else's account or profile (an admin can read any profile, but not change it).
 - **Protected routes (59):** the 8 `incidents` and `suppliers` routes respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token, and work as before with a valid token. `/health` stays public, and no route is open other than the declared public ones. The existing `incidents` and `suppliers` tests send the token of a test user.
 
 Each test uses temporary TinyDB databases and its own configuration, so it never touches `storage/` or depends on `.env`.
@@ -114,7 +114,7 @@ app/
     ├── profiles/
     │   ├── models.py       # Profile, ProfileUpdate
     │   ├── repository.py   # Profile reads and writes
-    │   └── router.py       # GET and PUT /profiles/me
+    │   └── router.py       # GET and PUT /profiles/me and /profiles/{user_id}
     ├── incidents/
     │   ├── router.py       # Endpoints: HTTP translation only
     │   ├── service.py      # Validation and analysis rules (standard library only)
@@ -229,9 +229,11 @@ No route that exposes or changes sensitive data may respond without a valid sess
 | `DELETE /api/v1/users/{id}` | Own account or admin | 200 with the deleted user (also deletes their profile) | 401, 403, 404 |
 | `GET /api/v1/profiles/me` | Token | 200 | 401, 404 `profile_not_found` |
 | `PUT /api/v1/profiles/me` | Token (own profile only) | 200 | 401, 404, 422 |
+| `GET /api/v1/profiles/{user_id}` | Own profile or admin | 200 | 401, 403 `forbidden`, 404 (admin only) |
+| `PUT /api/v1/profiles/{user_id}` | Profile owner only, even for an admin | 200 | 401, 403 `forbidden`, 404, 422 |
 
 - **Sign-in:** accepts JSON `{"email", "password"}` and also the `username`/`password` form sent by the **Authorize** button in `/docs` (`username` is the email). If the email does not exist or the password is wrong, the response is the same, and bcrypt runs in both cases so that response times do not reveal which emails are registered.
-- **`PUT`:** changes only the fields sent. In `/profiles/me`, `null` clears a field.
+- **`PUT`:** changes only the fields sent. In profiles, `null` clears a field.
 - **403 between users:** a non-admin user gets 403 when accessing another account, whether or not that ID exists, so that existing IDs are not revealed.
 - **First administrator:** `uv run create-admin` asks for the email and the password (without showing it) and creates the admin. If the email already exists, it makes that user an admin and reactivates them without changing their password. After that, an admin changes roles with `PUT /users/{id}`.
 
