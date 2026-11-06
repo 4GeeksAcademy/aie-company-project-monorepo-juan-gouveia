@@ -5,10 +5,12 @@ import Button from "@/components/Button";
 import FormField from "@/components/FormField";
 import LabeledSelect from "@/components/LabeledSelect";
 import Modal from "@/components/Modal";
-import { createSupplier, SupplierApiError } from "@/lib/proveedores/api";
+import { ApiError } from "@/lib/api-client";
+import { createSupplier } from "@/lib/proveedores/api";
 import { CATEGORIES, COUNTRY_OPTIONS, CURRENCY_BY_COUNTRY, STATUS_OPTIONS } from "@/lib/proveedores/labels";
 import { validateSupplierForm, type SupplierFormValues } from "@/lib/proveedores/validation";
-import type { ApiFieldError, Category, Supplier } from "@/types/supplier";
+import type { ApiFieldError } from "@/types/api";
+import type { Category, Supplier } from "@/types/supplier";
 
 interface SupplierFormModalProps {
   onClose: () => void;
@@ -78,7 +80,7 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
     } catch (err) {
       setApiFailure({
         message: err instanceof Error ? err.message : "No se pudo registrar el proveedor",
-        details: err instanceof SupplierApiError ? err.details : [],
+        details: err instanceof ApiError ? err.details : [],
       });
     } finally {
       setSubmitting(false);

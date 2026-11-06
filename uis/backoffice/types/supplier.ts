@@ -38,12 +38,3 @@ export interface SupplierFilters {
   country: Country | "";
   category: Category | "";
 }
-
-export interface ApiFieldError {
-  field: string;
-  message: string;
-}
-
-export interface SupplierApiErrorBody {
-  error: { code: string; message: string; details?: ApiFieldError[] };
-}

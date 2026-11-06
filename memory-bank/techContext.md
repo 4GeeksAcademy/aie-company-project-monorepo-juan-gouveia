@@ -48,8 +48,14 @@
   - `GET /records/{id}/notes` — listar notas
   - `POST /records/{id}/notes` — crear nota
   - `DELETE /records/{id}/notes/{noteId}` — eliminar nota
-- **BFF del backoffice implementado:** `uis/backoffice/app/api/[...path]/route.ts` reenvía `GET`, `POST`, `PATCH` y `DELETE` de `/api/<ruta>` a la variable de servidor `API_BASE_URL` (`http://localhost:8000/api/v1`) sin lógica ni token. Como la API ya protege `incidents` y `suppliers`, esas herramientas reciben 401 hasta que el BFF envíe el token (fase posterior). Responde 500 `api_not_configured` si falta la variable y 502 `api_unavailable` si la API no responde. El tracker no lo usa todavía.
-- **Sigue pendiente:** enviar el token desde el BFF del backoffice, la base de datos definitiva (TinyDB es provisional) y el resto de dominios. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
+- **BFF del backoffice implementado:** `uis/backoffice/app/api/[...path]/route.ts` reenvía `GET`, `POST`, `PUT`, `PATCH` y `DELETE` de `/api/<ruta>` a la variable de servidor `API_BASE_URL` (`http://localhost:8000/api/v1`) sin lógica. Copia `Content-Type`, `Accept` y `Authorization`. Responde 500 `api_not_configured` si falta la variable y 502 `api_unavailable` si la API no responde. El tracker no lo usa: llama a la API de playground y no recibe el token.
+- **Sesión en el backoffice (ticket AUTH-02, rama `feature/auth-frontend`, completada; divergencias en `docs/BRIEFING_DIVERGENCES.md`):**
+  - **Token:** JWT en `localStorage` (`lib/auth/token.ts`, clave `brasaland.access_token`), con un evento propio para la pestaña actual y `storage` para las demás.
+  - **`lib/api-client.ts`:** `apiFetch`/`apiJson` añaden `Authorization: Bearer` y convierten los errores en `ApiError` (`status`, `code`, `message`, `details`). Ante un 401, o un 403 `inactive_user`, borran el token y redirigen a `/login?next=&reason=`, salvo con `endSessionOnAuthError: false` (login y registro).
+  - **Rutas:** grupos `app/(protegido)/` (portada y herramientas) y `app/(publico)/` (`/login`, `/register`); las URL no cambian. El layout protegido usa `SessionProvider`, un guard en el cliente: sin token redirige y con token valida con `GET /auth/me` antes de mostrar nada. `ProtectedShell` y `AccountMenu` completan la cabecera; `useSession()` da acceso al usuario.
+  - **Sin `proxy.ts`:** el servidor no puede leer `localStorage`.
+  - **Perfil:** `/account/profile` (`components/account/`) usa el usuario de `useSession()` y guarda con `PUT /profiles/me`, enviando solo los campos cambiados (vacío → `null`). Después actualiza la sesión con `setUser`.
+- **Sigue pendiente:** la base de datos definitiva (TinyDB es provisional) y el resto de dominios. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
 
 ### Paquetes Compartidos
 
@@ -179,7 +185,7 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 - Existen los dominios `incidents` y `suppliers` de `services/brasaland-api/`. El último análisis de incidentes vive en memoria y se pierde al reiniciar. Los proveedores persisten en TinyDB, que es provisional hasta Postgres con ORM y no está pensado para muchos procesos escribiendo a la vez.
 - El tracker sigue usando la API de playground (ver sección de Stack → Backend).
-- La autenticación JWT protege todas las rutas salvo login, registro y `/health` (rama `feature/auth-api`). No hay permisos por rol fuera de la gestión de usuarios. El BFF del backoffice aún no envía el token.
+- La autenticación JWT protege todas las rutas salvo login, registro y `/health` (rama `feature/auth-api`). No hay permisos por rol fuera de la gestión de usuarios. El backoffice envía el token a través del BFF (rama `feature/auth-frontend`).
 
 ### Agentes / IA
 
