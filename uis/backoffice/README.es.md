@@ -34,12 +34,14 @@ npm run build
 
 ## Sesión
 
-Todas las vistas exigen sesión salvo `/login` y `/register` (ticket AUTH-02). El website público (`uis/website`) no se ve afectado.
+Todas las vistas exigen sesión salvo `/login`, `/register` (ticket AUTH-02), `/forgot-password` y `/reset-password` (ticket AUTH-03). El website público (`uis/website`) no se ve afectado.
 
 | Ruta | Vista |
 |---|---|
-| `/login` | Email y contraseña (con botón para mostrarla). Guarda el token y vuelve a la ruta de `?next=` (solo rutas internas), o a `/`. Muestra un aviso si la sesión caducó (`?reason=expired`) o la cuenta está desactivada (`?reason=inactive`) |
+| `/login` | Email y contraseña (con botón para mostrarla). Guarda el token y vuelve a la ruta de `?next=` (solo rutas internas), o a `/`. Muestra un aviso si la sesión caducó (`?reason=expired`), si la cuenta está desactivada (`?reason=inactive`) o tras restablecer la contraseña (`?reset=success`). Tiene el enlace "¿Olvidaste tu contraseña?" |
 | `/register` | Email, contraseña (con botón para mostrarla) y perfil opcional (nombre y apellido, teléfono y dirección). Llama a `POST /users` y luego a `POST /auth/login`. Los errores de la API se muestran junto a cada campo |
+| `/forgot-password` | Email. Llama a `POST /auth/forgot-password` y muestra siempre "Si esa dirección está registrada, recibirás un enlace en breve", sin revelar si la cuenta existe. Tras el envío, el formulario queda desactivado. Si la petición no llega a la API (sin conexión), muestra el error y deja reintentar |
+| `/reset-password` | Abre el enlace del correo (`?token=`). Comprueba el enlace al abrirse (`POST /auth/reset-password/validate`): si no es válido, caducó o ya se usó, muestra el error y "Solicitar un nuevo enlace". Si sirve, pide la contraseña nueva y su confirmación (deben coincidir antes de llamar a la API), llama a `POST /auth/reset-password` y vuelve a `/login?reset=success`. No envía la URL con el token como `Referer` (`referrer: no-referrer`) |
 | `/account/profile` | Requiere sesión. Muestra el email y el perfil (de `GET /auth/me`) y permite editar nombre y apellido, teléfono y dirección con `PUT /profiles/me`. Solo envía los campos cambiados; un campo vacío se borra. Al guardar se actualiza el nombre de la cabecera |
 
 Cómo funciona:
@@ -84,7 +86,7 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
   - Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`).
 - `components/`:
   - componentes base reutilizables, entre ellos `PasswordField`, con botón para mostrar la contraseña, y `FileDropzone`, para cualquier herramienta que reciba archivos;
-  - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` y los formularios de login y registro) y `account/` (perfil);
+  - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` y los formularios de login, registro y recuperación de contraseña) y `account/` (perfil);
   - `talento/`, `funciones/`, `incidencias/` y `proveedores/`.
 - `hooks/`: hooks personalizados, entre ellos `useSession`.
 - `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/` y una carpeta por herramienta.

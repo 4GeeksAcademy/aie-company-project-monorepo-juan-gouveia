@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
+from app.core.email import EmailMessage, get_email_sender
 from app.core.security import create_access_token
 from app.domains.users import service as user_service
 from app.domains.users.models import Role, UserCreate
@@ -29,6 +30,25 @@ def auth_settings(monkeypatch):
     get_settings.cache_clear()
     yield get_settings()
     get_settings.cache_clear()
+
+
+class FakeEmailSender:
+    """Guarda los mensajes en vez de enviarlos: ninguna prueba llama a Resend."""
+
+    def __init__(self):
+        self.sent: list[EmailMessage] = []
+
+    def send(self, message: EmailMessage) -> None:
+        self.sent.append(message)
+
+
+@pytest.fixture(autouse=True)
+def email_sender():
+    """Emisor de correo falso en todas las pruebas (AUTH-03); `email_sender.sent` tiene lo enviado."""
+    sender = FakeEmailSender()
+    app.dependency_overrides[get_email_sender] = lambda: sender
+    yield sender
+    app.dependency_overrides.pop(get_email_sender, None)
 
 
 @pytest.fixture(autouse=True)

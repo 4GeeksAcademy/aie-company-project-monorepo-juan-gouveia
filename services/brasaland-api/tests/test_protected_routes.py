@@ -40,6 +40,10 @@ IDS = [f"{method.upper()} {path}" for method, path, _, _ in PROTECTED_ROUTES]
 PUBLIC_ROUTES = {
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/users"),
+    # AUTH-03: quien olvidó la contraseña no tiene sesión.
+    ("POST", "/api/v1/auth/forgot-password"),
+    ("POST", "/api/v1/auth/reset-password"),
+    ("POST", "/api/v1/auth/reset-password/validate"),
     ("GET", "/health"),
 }
 

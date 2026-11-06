@@ -32,3 +32,34 @@ export function updateMyProfile(fields: Partial<ProfileFields>): Promise<Profile
     ...jsonBody("PUT", fields),
   });
 }
+
+// --- Restablecimiento de contraseña (AUTH-03) ---------------------------------------------------
+// Rutas públicas: quien olvidó la contraseña no tiene sesión, así que un error no debe cerrar nada.
+
+// POST /auth/forgot-password: responde siempre 200 con el mismo mensaje, exista o no el email.
+export function forgotPassword(email: string): Promise<{ message: string }> {
+  return apiJson("/auth/forgot-password", {
+    fallback: "no se pudo enviar la solicitud",
+    endSessionOnAuthError: false,
+    ...jsonBody("POST", { email }),
+  });
+}
+
+// POST /auth/reset-password: 400 si el enlace no es válido, caducó o ya se usó.
+export function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  return apiJson("/auth/reset-password", {
+    fallback: "no se pudo restablecer la contraseña",
+    endSessionOnAuthError: false,
+    ...jsonBody("POST", { token, new_password: newPassword }),
+  });
+}
+
+// POST /auth/reset-password/validate: comprueba el enlace sin usarlo (400 con el motivo si no sirve).
+// El token va en el cuerpo, no en la URL de la API, para que no quede en los logs de acceso.
+export function validateResetToken(token: string): Promise<{ message: string }> {
+  return apiJson("/auth/reset-password/validate", {
+    fallback: "no se pudo comprobar el enlace",
+    endSessionOnAuthError: false,
+    ...jsonBody("POST", { token }),
+  });
+}

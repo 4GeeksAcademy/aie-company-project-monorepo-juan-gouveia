@@ -176,3 +176,22 @@ def test_db_path_is_configurable(monkeypatch, tmp_path):
     assert get_auth_db_path() == (tmp_path / "otra.json").resolve()
     monkeypatch.delenv("AUTH_DB_PATH")
     assert get_auth_db_path().parts[-2:] == ("storage", "auth-db.json")
+
+
+def test_users_created_from_two_processes_do_not_collide(tmp_path):
+    """Dos AuthStore sobre el mismo archivo simulan la API y `uv run create-admin` en otro proceso.
+
+    Antes, el registro posterior en la API fallaba con ValueError (500) por la caché de doc_id de TinyDB.
+    """
+    path = tmp_path / "shared-auth.json"
+    api, admin_script = AuthStore.from_path(path), AuthStore.from_path(path)
+    try:
+        service.create_user(api, UserCreate(email="a@brasaland.com", password=PASSWORD))
+        service.create_user(admin_script, UserCreate(email="b@brasaland.com", password=PASSWORD), role=Role.ADMIN)
+        user, profile = service.create_user(api, UserCreate(email="c@brasaland.com", password=PASSWORD, name="Carla"))
+        assert api.users.get(user.id) is not None
+        assert api.profiles.get_by_user_id(user.id) == profile
+        assert len(api.users.list()) == 3
+    finally:
+        api.close()
+        admin_script.close()
