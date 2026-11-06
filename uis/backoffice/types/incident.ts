@@ -46,7 +46,3 @@ export interface IncidentAnalysis {
   statuses: CodeCount[];
   satisfaction: Satisfaction;
 }
-
-export interface ApiErrorBody {
-  error: { code: string; message: string };
-}

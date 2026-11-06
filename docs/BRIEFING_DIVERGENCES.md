@@ -14,6 +14,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 1. [Procesador de reportes de incidentes](#procesador-de-reportes-de-incidentes) (briefing "Utilidad de Análisis de Datos", Fases 1 y 2)
 2. [Directorio de proveedores](#directorio-de-proveedores) (briefing del milestone 09, "Lightweight Storage API")
 3. [Autenticación y protección de rutas](#autenticación-y-protección-de-rutas) (ticket AUTH-01)
+4. [Autenticación en el frontend](#autenticación-en-el-frontend) (ticket AUTH-02)
 
 ---
 
@@ -235,7 +236,7 @@ Estas decisiones no se apartan del briefing, pero concretan lo que no especifica
 | Login fallido: mismo 401 `invalid_credentials` si el email no existe o la contraseña falla, y bcrypt se ejecuta en ambos casos | No revelar qué emails están registrados | Sin límite de intentos |
 | Cuenta desactivada: 403 `inactive_user` en el login y con un token ya emitido | Distinguir "no te conozco" (401) de "te conozco, pero no puedes entrar" (403) | — |
 | `/health` sigue siendo pública | Lo usan las comprobaciones de disponibilidad y no expone datos | — |
-| `/incidencias` y `/proveedores` del backoffice reciben 401 | El briefing lo da por esperado: el frontend enviará el token en una fase posterior | Esas herramientas no funcionan hasta entonces |
+| `/incidencias` y `/proveedores` del backoffice reciben 401 | El briefing lo da por esperado: el frontend enviará el token en una fase posterior | Resuelto en AUTH-02 ([sección siguiente](#autenticación-en-el-frontend)): con sesión vuelven a funcionar |
 
 ### 5. Cómo verificarlo
 
@@ -252,3 +253,76 @@ Todo lo de esta tabla se ejecutó el 4 de noviembre de 2026.
 | Rutas existentes | curl a 6 rutas de `suppliers` e `incidents` con y sin token | Sin token, 401; con token, las respuestas de siempre (200, o 404 en el export sin análisis previo) |
 | Ninguna ruta abierta por olvido | `tests/test_protected_routes.py` sobre `/openapi.json` | Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`. Al quitar la protección de `suppliers`, la prueba falla |
 | Primer admin | `uv run create-admin` con datos inválidos | Mensaje en español y no escribe nada; los casos válidos están cubiertos por pruebas |
+
+---
+
+## Autenticación en el frontend
+
+Ticket AUTH-02: vistas de login, registro y perfil, protección de las vistas que requieren sesión y ciclo de vida del token en las apps Next.js del monorepo, salvo el website público. Coinciden con el ticket:
+
+- las rutas `/login`, `/register` y `/account/profile`;
+- los endpoints que llaman (`POST /users`, `POST /auth/login`, `GET /auth/me`, `PUT /profiles/me`);
+- el token en `localStorage` y la cabecera `Authorization: Bearer <token>`;
+- el guard en el cliente;
+- el comportamiento al cerrar sesión y ante un `401`.
+
+Las diferencias son de camino (el token pasa por el intermediario), de la propuesta de arquitectura y de lo que el ticket no concreta.
+
+> **Estado:** implementado y verificado. Solo hay una app afectada, `uis/backoffice`: es la única app Next.js aparte del website, que sigue intacto.
+
+| Qué | Ticket o propuesta | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Destino de las llamadas | "Adjuntar el token a cada llamada protegida a la API" | El navegador envía el token al intermediario del backoffice (`/api/...`), que lo reenvía a `/api/v1/...` | Mantiene la URL de la API en el servidor, sin CORS; el intermediario sigue sin lógica |
+| Dónde vive la sesión | Propuesta 5.2: cookie inaccesible desde JavaScript; el token nunca llega al navegador | `localStorage`, como exige el ticket | Manda el ticket; la propuesta se ha actualizado |
+| Cuenta desactivada | Solo se menciona el `401` | Un 403 `inactive_user` también cierra la sesión | La API responde 403 a una cuenta desactivada con un token válido |
+| Protección | "Layout guard o hook personalizado" | Grupo de rutas `app/(protegido)/`, cuyo layout es el guard; valida el token con `GET /auth/me` | Toda vista nueva del grupo queda protegida sin acordarse de nada; "no es válido" se comprueba con la API |
+| Registro | "Formulario de registro" | Sin campo "Repite la contraseña"; botón para mostrarla (también en el login) | Decisión del desarrollador |
+
+### 1. El token pasa por el intermediario
+
+El backoffice ya llamaba a la API a través de su intermediario (BFF) `app/api/[...path]/route.ts` ([directorio de proveedores](#directorio-de-proveedores)). Para AUTH-02:
+
+- **Lo que cumple del ticket:** el navegador lee el token de `localStorage` y lo envía en `Authorization: Bearer <token>` en cada llamada protegida.
+- **Lo que hace el intermediario:** ahora copia la cabecera `Authorization` (antes la descartaba) y reenvía también `PUT`, que necesita `PUT /profiles/me`. No valida el token ni aplica permisos: eso lo hace la API.
+- **Por qué no llamar a la API directamente:** obligaría a abrir CORS en la API y a publicar su URL en una variable `NEXT_PUBLIC_`, contra la propuesta (5.3 y 5.4), sin ninguna ventaja para el ticket.
+- **Las rutas:** desde el navegador son `/api/auth/login`, `/api/users`, `/api/auth/me` y `/api/profiles/me`. El intermediario las reenvía a `/api/v1/...`, como en los ejercicios anteriores.
+
+### 2. `localStorage` frente a la propuesta de arquitectura
+
+La propuesta (5.2) preveía que el servidor de Next.js guardara la sesión en una cookie `httpOnly` y añadiera el token en el intermediario, de modo que el token nunca llegara al navegador. El ticket exige `localStorage`, y manda el ticket. La propuesta se ha actualizado para reflejarlo.
+
+- **Coste:** un script inyectado en la página (XSS) podría leer el token. Con una cookie `httpOnly` no podría.
+- **Lo que lo limita:** el token caduca (`ACCESS_TOKEN_EXPIRE_MINUTES`); la API vuelve a leer el usuario en cada petición, así que desactivar o borrar una cuenta corta el acceso al momento; y la interfaz no inserta HTML de terceros.
+- **Sin `proxy.ts`:** el servidor no puede leer `localStorage`, así que la comprobación de sesión se hace en el cliente, como indica el ticket.
+
+### 3. Decisiones de funcionamiento
+
+Estas decisiones no se apartan del ticket, pero concretan lo que no especifica.
+
+| Decisión | Motivo | Límite conocido |
+| --- | --- | --- |
+| Cliente común `lib/api-client.ts`: añade el token, convierte los errores en `ApiError` (con `details` por campo) y gestiona el 401 | El ticket pide el token "en cada llamada protegida" y el 401 en todas; centralizarlo evita que una herramienta lo olvide | El tracker no lo usa: llama a una API de terceros (playground) que no debe recibir el token |
+| El guard valida el token con `GET /auth/me` antes de mostrar nada; sin token, redirige sin llamar a la API | El ticket pide redirigir si el token "está ausente o no es válido"; solo la API sabe si es válido. Además, el usuario se reutiliza en la cabecera y el perfil | Una petición más al entrar en la zona protegida. Si la API está caída, se muestra el error con "Reintentar" en vez de redirigir |
+| Tras el login, vuelta a la ruta pedida (`?next=`), o a `/` si no hay | "Redirige a la vista autenticada principal"; un enlace directo no obliga a navegar otra vez | `next` solo admite rutas internas (empieza por `/`, no por `//`), para que no pueda enviar a otro sitio |
+| Al expirar la sesión, el login muestra el motivo (`?reason=expired` o `inactive`) | El usuario entiende por qué tiene que volver a entrar | — |
+| En el login, un 401 se muestra como "credenciales incorrectas" y no cierra la sesión | Es el único sitio donde un 401 no significa sesión inválida | — |
+| Sincronización entre pestañas con el evento `storage` | Cerrar sesión en una pestaña la cierra en todas; con otra cuenta, las demás recargan el usuario | — |
+| Registro: si el login automático falla tras crear la cuenta, se muestra "Cuenta creada" con enlace al login | La cuenta ya existe; repetir el registro daría 409 | — |
+| Perfil: solo se envían los campos cambiados, y un campo vacío se envía como `null` | `PUT /profiles/me` cambia solo los campos enviados y `null` vacía el campo; así no se pisan datos sin querer | — |
+| Por debajo de `xl`, "Mi perfil" y "Cerrar sesión" se muestran como iconos con `aria-label` | `FilterBar` depende de la altura fija de la cabecera, y con 4 herramientas el texto no cabe | El nombre del usuario solo se ve desde `xl` (y al pasar el ratón) |
+| Registro abierto | El ticket pide `/register` y `POST /users` es público (AUTH-01) | Cualquiera puede crearse una cuenta `user` y entrar en el backoffice; aún no hay permisos por herramienta |
+
+### 4. Cómo verificarlo
+
+Ejecutado el 4 y el 6 de noviembre de 2026, con la API y el backoffice en local y bases TinyDB temporales (`AUTH_DB_PATH` y `BRASALAND_DB_PATH`).
+
+| Qué se comprueba | Comando o acción | Resultado |
+| --- | --- | --- |
+| Compilación | `npx tsc --noEmit`, `npm run lint` y `npm run build` en `uis/backoffice` | Sin errores; las URL no cambian con los grupos de rutas |
+| API sin regresiones | `cd services/brasaland-api && uv run pytest` | 361 pruebas pasan |
+| Website intacto | `git status uis/website` y búsqueda de `localStorage`, `Authorization` y `/login` en `uis/website` | Sin cambios ni rastro de sesión |
+| Intermediario y token | curl a `/api/...` del backoffice sin token, con token y con un token alterado | 401 `not_authenticated`; las respuestas normales (15 proveedores, análisis 100/96, export `text/csv`); 401 `invalid_token` |
+| Registro | `POST /api/users` con email duplicado, datos inválidos y datos válidos | 409 `duplicate_email`; 422 con `details` de `email` y `password`; 201 y login correcto |
+| Perfil | `PUT /api/profiles/me` parcial, con `null`, con un nombre de 121 caracteres y sin token | Cambia solo lo enviado; vacía el campo; 422 con `details.name`; 401 |
+| Sin contenido antes de validar | HTML de servidor de `/`, `/proveedores`, `/incidencias`, `/talento`, `/funciones` y `/account/profile` | Solo "Comprobando la sesión...", sin navegación ni contenido |
+| Flujos en el navegador | Sin sesión a `/proveedores` → `/login?next=...` → vuelta; registro; perfil y nombre en la cabecera; cerrar sesión (token borrado); dos pestañas; token alterado a mano → `/login?reason=expired` | Revisado por el desarrollador |
