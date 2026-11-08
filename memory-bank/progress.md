@@ -37,7 +37,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Commit:** `fb35b8d`, hecho por el desarrollador.
 - **Pendiente:** PR (contra `feature/auth-api` mientras no se fusione) y entrega con las justificaciones de `docs/BRIEFING_DIVERGENCES.md`.
 
-**Recuperación y cambio de contraseña (ticket AUTH-03) en curso en la rama `feature/password-reset`**, creada desde `feature/auth-frontend` (`fb35b8d`). Las fases 0 a 3 están hechas y revisadas por el desarrollador (2026-11-06):
+**Recuperación y cambio de contraseña (ticket AUTH-03) completada en la rama `feature/password-reset`**, creada desde `feature/auth-frontend` (`fb35b8d`). Las 6 fases (0 a 5) están hechas y revisadas por el desarrollador (2026-11-06 y 2026-11-08):
 
 - **Correo:** Resend (elegido frente a SendGrid: plan gratuito permanente, alta simple y funciona sin dominio propio enviando al email de la cuenta). SDK `resend`; la API key va en `RESEND_API_KEY` (`.env`). Sin ella, la API arranca pero no envía nada. Envío real comprobado por el desarrollador.
 - **API:** `POST /auth/forgot-password` (siempre 200, envío en segundo plano, máximo 3 enlaces por cuenta y hora), `POST /auth/reset-password/validate` (comprueba el enlace sin usarlo), `POST /auth/reset-password` (400 si el enlace no es válido, caducó o se usó) y `POST /auth/change-password` (protegido, 400 si la contraseña actual es incorrecta, devuelve un token nuevo).
@@ -45,12 +45,11 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Correcciones de paso:**
   - Colisión de `doc_id` de TinyDB entre procesos en `users`, `profiles` y `password_resets` (`app/core/storage.py`): `uv run create-admin` con la API arrancada hacía fallar el siguiente registro.
   - En `/login` y `/register`, un error de la API borrado tapaba el aviso local (`mergeFieldErrors`).
-- **Frontend:** `/forgot-password`, `/reset-password` (comprueba el enlace al abrirse, sin `Referer`) y el enlace "¿Olvidaste tu contraseña?" en `/login`.
-- **Verificación:** 433 pruebas de la API; `tsc`, `lint` y `build` del backoffice; flujo completo con correo real revisado por el desarrollador.
+- **Frontend:** `/forgot-password`, `/reset-password` (comprueba el enlace al abrirse, sin `Referer`) y el enlace "¿Olvidaste tu contraseña?" en `/login`. `/account/change-password` (protegida, enlazada desde "Mi perfil") guarda el token nuevo que devuelve la API y muestra "Contraseña actualizada."; una contraseña actual incorrecta se marca en su campo.
+- **Verificación:** 433 pruebas de la API; `tsc`, `lint` y `build` del backoffice; flujo completo con correo real revisado por el desarrollador. El cambio de contraseña se probó en vivo por el BFF (400, 422, 401, token nuevo y `session_revoked` del anterior) y lo revisó el desarrollador en el navegador. Sin claves en el código ni en el historial de Git.
+- **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Recuperación y cambio de contraseña": rutas `/api/v1`, Resend, endpoint `validate`, `password_changed_at`, 422 ante un email mal formado, opcionales, correcciones de `doc_id` (AUTH-01) y `mergeFieldErrors` (AUTH-02), y la tabla de los 12 criterios. README de la API y del backoffice.
 - **Pendiente:**
-  - Fase 4: `/account/change-password` y su enlace desde "Mi perfil".
-  - Fase 5: verificación de los criterios y documentación (`BRIEFING_DIVERGENCES.md`: rutas `/api/v1`, Resend, endpoint `validate`, límite por hora, `password_changed_at` y corrección de `doc_id`).
-  - Commit y PR los hace el desarrollador.
+  - Commit de las fases 4 y 5, PR (contra `feature/auth-frontend` mientras no se fusione) y entrega; los hace el desarrollador.
 
 ### 1. Contexto y Configuración Inicial
 
@@ -76,7 +75,7 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 | **Análisis de incidencias** (`app/incidencias/`) — carga del CSV con `FileDropzone`, resumen, registros inválidos y descarga de `results.csv` | ✅ Implementado; último análisis en la memoria de la API |
 | **Directorio de proveedores** (`app/proveedores/`) — listado con badges de estado, filtros por país y categoría sin recargar, formulario de alta con validación y errores de la API, edición de tarifa y activar/suspender | ✅ Implementado; datos en el TinyDB de la API |
 | **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
-| **Autenticación** (`/login`, `/register`, grupo `(protegido)` con `SessionProvider`, `lib/api-client.ts`) | ✅ Implementado en `feature/auth-frontend` (`fb35b8d`), incluido `/account/profile`. AUTH-03 añade `/forgot-password` y `/reset-password` (`feature/password-reset`); falta `/account/change-password`. El filtro de `lib/tools.ts` por permisos sigue sin implementar |
+| **Autenticación** (`/login`, `/register`, grupo `(protegido)` con `SessionProvider`, `lib/api-client.ts`) | ✅ Implementado en `feature/auth-frontend` (`fb35b8d`), incluido `/account/profile`. AUTH-03 añade `/forgot-password`, `/reset-password` y `/account/change-password` (`feature/password-reset`). El filtro de `lib/tools.ts` por permisos sigue sin implementar |
 | **Formación** | ❌ No iniciado; será una herramienta del backoffice, no una aplicación aparte |
 
 **Intermediario (BFF)** (`app/api/[...path]/route.ts`): reenvía `GET`, `POST`, `PUT`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL` (la API de Brasaland) sin lógica, incluida la cabecera `Authorization`. ✅ Implementado; lo usan `/incidencias`, `/proveedores`, el login y el registro.
@@ -184,7 +183,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Terminar AUTH-03 (rama `feature/password-reset`)** — Fases 0-3 hechas. Falta la Fase 4 (`/account/change-password`) y la 5 (verificación y divergencias).
+0. **Entregar AUTH-03 (rama `feature/password-reset`)** — Implementado, verificado y documentado. Las fases 0-3 están en el commit `e87121c`; faltan el commit de las fases 4 y 5 y el PR, que apunta a `feature/auth-frontend` mientras esa rama no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Recuperación y cambio de contraseña", con la verificación de los 12 criterios).
 
 0. **Entregar AUTH-02 (rama `feature/auth-frontend`)** — Implementado, verificado, documentado y con commit (`fb35b8d`). Falta el PR, que apunta a `feature/auth-api` mientras esa rama no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend").
 
@@ -249,4 +248,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-11-06_
+_Actualizado: 2026-11-08_

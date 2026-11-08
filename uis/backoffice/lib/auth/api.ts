@@ -1,5 +1,13 @@
 import { apiJson, jsonBody } from "@/lib/api-client";
-import type { CurrentUser, Profile, ProfileFields, RegisteredUser, RegisterInput, Token } from "@/types/auth";
+import type {
+  CurrentUser,
+  PasswordChanged,
+  Profile,
+  ProfileFields,
+  RegisteredUser,
+  RegisterInput,
+  Token,
+} from "@/types/auth";
 
 // Login: un 401 aquí significa "credenciales incorrectas" y una cuenta desactivada se muestra
 // en el formulario, así que no deben cerrar ninguna sesión ni redirigir.
@@ -61,5 +69,17 @@ export function validateResetToken(token: string): Promise<{ message: string }> 
     fallback: "no se pudo comprobar el enlace",
     endSessionOnAuthError: false,
     ...jsonBody("POST", { token }),
+  });
+}
+
+// --- Cambio de contraseña con sesión (AUTH-03) -------------------------------------------------
+
+// POST /auth/change-password: 400 si la contraseña actual no es correcta. Con éxito, las sesiones
+// anteriores dejan de valer y la respuesta trae el token que las sustituye. Un 401 (sesión caducada
+// o cerrada) sí cierra la sesión, como en el resto de la zona protegida.
+export function changePassword(currentPassword: string, newPassword: string): Promise<PasswordChanged> {
+  return apiJson("/auth/change-password", {
+    fallback: "no se pudo cambiar la contraseña",
+    ...jsonBody("POST", { current_password: currentPassword, new_password: newPassword }),
   });
 }

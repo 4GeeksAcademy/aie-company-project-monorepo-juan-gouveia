@@ -86,3 +86,14 @@ export function validateNewPassword(values: NewPasswordValues): FieldErrors<NewP
   else if (values.confirmPassword !== values.newPassword) errors.confirmPassword = "Las contraseñas no coinciden.";
   return errors;
 }
+
+// Cambio de contraseña con sesión: la actual, más la nueva con su confirmación.
+export interface ChangePasswordValues extends NewPasswordValues {
+  currentPassword: string;
+}
+
+export function validateChangePassword(values: ChangePasswordValues): FieldErrors<ChangePasswordValues> {
+  const errors: FieldErrors<ChangePasswordValues> = validateNewPassword(values);
+  if (!values.currentPassword) errors.currentPassword = "Escribe tu contraseña actual.";
+  return errors;
+}

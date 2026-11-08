@@ -42,7 +42,8 @@ Every view requires a session except `/login`, `/register` (ticket AUTH-02), `/f
 | `/register` | Email, password (with a button to show it) and an optional profile (full name, phone and address). Calls `POST /users` and then `POST /auth/login`. API errors are shown next to each field |
 | `/forgot-password` | Email. Calls `POST /auth/forgot-password` and always shows "Si esa dirección está registrada, recibirás un enlace en breve", without revealing whether the account exists. After sending, the form is disabled. If the request does not reach the API (no connection), it shows the error and lets the user retry |
 | `/reset-password` | Opens the email link (`?token=`). It checks the link on load (`POST /auth/reset-password/validate`): if it is not valid, expired or already used, it shows the error and "Solicitar un nuevo enlace". If it works, it asks for the new password and its confirmation (they must match before calling the API), calls `POST /auth/reset-password` and returns to `/login?reset=success`. It does not send the URL with the token as `Referer` (`referrer: no-referrer`) |
-| `/account/profile` | Requires a session. Shows the email and profile (from `GET /auth/me`) and lets the user edit full name, phone and address with `PUT /profiles/me`. Only changed fields are sent; an empty field is cleared. Saving updates the name in the header |
+| `/account/profile` | Requires a session. Shows the email and profile (from `GET /auth/me`) and lets the user edit full name, phone and address with `PUT /profiles/me`. Only changed fields are sent; an empty field is cleared. Saving updates the name in the header. It links to `/account/change-password` |
+| `/account/change-password` | Requires a session. Current password, new password and confirmation (they must match before calling the API). Calls `POST /auth/change-password`: on success it stores the new token the API returns (earlier sessions stop working), clears the form and shows "Contraseña actualizada."; a wrong current password (400) is shown next to that field |
 
 How it works:
 
@@ -86,7 +87,7 @@ Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client
   - If the variable is missing it returns 500 (`api_not_configured`); if the API does not respond, 502 (`api_unavailable`).
 - `components/`:
   - reusable base components, including `PasswordField`, with a button to show the password, and `FileDropzone`, for any tool that receives files;
-  - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` and the login, registration and password recovery forms) and `account/` (profile);
+  - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` and the login, registration and password recovery forms) and `account/` (profile and password change);
   - `talento/`, `funciones/`, `incidencias/` and `proveedores/`.
 - `hooks/`: custom hooks, including `useSession`.
 - `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, and one folder per tool.
