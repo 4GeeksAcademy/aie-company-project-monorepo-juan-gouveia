@@ -2,12 +2,21 @@
 
 El código es estable y legible por máquina; el mensaje está pensado para mostrarse al usuario.
 Los errores de validación (422) añaden `details`: una lista de {field, message} en español.
+Las rutas del gestor de incidencias responden a esos mismos errores con 400 (`BadRequestValidationRoute`),
+como pide su consigna. Cualquier excepción no controlada se convierte en un 500 con un mensaje genérico:
+el detalle solo queda en el log del servidor, nunca en la respuesta.
 """
 
-from fastapi import FastAPI, Request
+from collections.abc import Callable, Coroutine
+from typing import Any
+
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+INTERNAL_ERROR_MESSAGE = "Ha ocurrido un error inesperado. Inténtalo de nuevo más tarde."
 
 
 class ApiError(Exception):
@@ -102,15 +111,45 @@ async def handle_http_exception(_request: Request, error: StarletteHTTPException
     return error_response(error.status_code, code, str(error.detail), headers=getattr(error, "headers", None))
 
 
-async def handle_validation_error(_request: Request, error: RequestValidationError) -> JSONResponse:
+def validation_error_response(error: RequestValidationError, status_code: int = 422) -> JSONResponse:
     # Datos con forma incorrecta según los esquemas de FastAPI, con el mismo formato que el resto.
     # `details` indica qué campo falló y por qué, para que el cliente pueda señalarlo.
     details = describe_validation_errors(error.errors())
     fields = ", ".join(dict.fromkeys(item["field"] for item in details))
-    return error_response(422, "invalid_request", f"La petición no es válida. Revisa: {fields}.", details)
+    return error_response(status_code, "invalid_request", f"La petición no es válida. Revisa: {fields}.", details)
+
+
+async def handle_validation_error(_request: Request, error: RequestValidationError) -> JSONResponse:
+    return validation_error_response(error)
+
+
+async def handle_unexpected_error(_request: Request, _error: Exception) -> JSONResponse:
+    # Starlette vuelve a lanzar la excepción después de esta respuesta, así que el servidor registra
+    # el traceback completo en su log. Al cliente solo le llega el mensaje genérico.
+    return error_response(500, "internal_error", INTERNAL_ERROR_MESSAGE)
+
+
+class BadRequestValidationRoute(APIRoute):
+    """Ruta cuyos errores de validación responden 400 en vez de 422, con el mismo cuerpo.
+
+    La usa el gestor de incidencias: su consigna pide 400 con el campo problemático. El resto de la
+    API mantiene el 422 de siempre.
+    """
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+
+        async def route_handler(request: Request) -> Response:
+            try:
+                return await handler(request)
+            except RequestValidationError as error:
+                return validation_error_response(error, status_code=400)
+
+        return route_handler
 
 
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ApiError, handle_api_error)
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     app.add_exception_handler(RequestValidationError, handle_validation_error)
+    app.add_exception_handler(Exception, handle_unexpected_error)

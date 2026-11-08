@@ -1,0 +1,3 @@
+# Metadatos que genera la instalación editable del paquete Python (uv sync en la API).
+*.egg-info/
+build/

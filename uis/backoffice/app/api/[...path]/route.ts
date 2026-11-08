@@ -6,6 +6,10 @@
 
 const API_BASE_URL = process.env.API_BASE_URL;
 
+// Si la API no responde en este tiempo, se corta la petición y se responde 504: el navegador no
+// se queda esperando indefinidamente.
+const API_TIMEOUT_MS = 15_000;
+
 // Cabeceras que se copian en cada sentido; el resto (host, cookies…) no se reenvía.
 const REQUEST_HEADERS = ["content-type", "accept", "authorization"];
 const RESPONSE_HEADERS = ["content-type", "content-disposition"];
@@ -45,8 +49,12 @@ async function forward(request: Request, { params }: RouteContext) {
       // El cuerpo se reenvía tal cual; content-type conserva el boundary del multipart.
       body: hasBody ? await request.arrayBuffer() : undefined,
       cache: "no-store",
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return errorResponse(504, "api_timeout", "La API tarda demasiado en responder. Inténtalo de nuevo en unos minutos.");
+    }
     return errorResponse(502, "api_unavailable", "La API de Brasaland no está disponible. Inténtalo más tarde.");
   }
 

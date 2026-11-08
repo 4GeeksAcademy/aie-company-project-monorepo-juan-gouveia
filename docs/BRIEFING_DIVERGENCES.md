@@ -16,6 +16,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 3. [Autenticación y protección de rutas](#autenticación-y-protección-de-rutas) (ticket AUTH-01)
 4. [Autenticación en el frontend](#autenticación-en-el-frontend) (ticket AUTH-02)
 5. [Recuperación y cambio de contraseña](#recuperación-y-cambio-de-contraseña) (ticket AUTH-03)
+6. [Gestor de incidencias centralizado](#gestor-de-incidencias-centralizado) (briefing "Gestor de Incidencias Centralizado")
 
 ---
 
@@ -28,7 +29,7 @@ Los valores del análisis coinciden exactamente con el briefing; las diferencias
 | Carpeta del script | `incidents-analysis/` (briefing) | `scripts/incident-report/` | La consigna pide `/scripts` |
 | Carpeta del backend | `/services/api` | `services/brasaland-api/` | Propuesta de arquitectura del CTO |
 | Rutas de la API | `/api/incidents/...` | `/api/v1/incidents/...` | Versión única de la API (propuesta) |
-| Lógica compartida | Extraída a módulos compartidos | `service.py` en la API, importado por el script | El backend es la fuente de verdad |
+| Lógica compartida | Extraída a módulos compartidos | Primero en `service.py` de la API; desde el gestor de incidencias, en `packages/shared` | **Resuelta:** ver el apartado 3 |
 | Pregunta de exportación | `Export results to CSV? [y / n]` | `¿Deseas exportar los resultados a CSV? [s / n]` | La consigna la pide en español |
 | Detalle de inválidos | Solo conteos por regla | Conteos + ID, fila y motivo de cada uno | Criterio "muestra los registros inválidos" |
 | Regla de estado | No existe | `invalid_status` | Un estado desconocido no debe contar como válido |
@@ -53,9 +54,11 @@ La consigna pide `/services/api` y las rutas `/api/incidents/...`; se siguió la
 
 La propuesta incorpora el dominio `incidents` al árbol de carpetas (2.3), a las dependencias entre dominios (2.5) y al mapa de rutas (3.3). La justificación también está en `services/brasaland-api/README.md` y `README.es.md`.
 
-### 3. Lógica compartida en `service.py`
+### 3. Lógica compartida en `service.py` (resuelta)
 
-La validación y el análisis existen una sola vez, en `services/brasaland-api/app/domains/incidents/service.py`; el script y la API la importan.
+> **Actualización (gestor de incidencias):** esta divergencia ya no existe. La consigna del gestor exige que la validación esté en `packages/shared/` y la reutilicen el script y la API, así que las reglas se movieron, sin cambios, al paquete Python [`packages/shared`](../packages/shared/README.es.md) (`brasaland_shared.incidents`). La API lo instala como dependencia local, `service.py` solo lo reexporta y `analyze.py` lo importa añadiendo `packages/shared` a la ruta de Python, igual que antes hacía con la API. Las 32 pruebas del script y las 24 del analizador de la API pasaron sin modificarse. Lo que sigue describe la situación anterior y se conserva como historial.
+
+La validación y el análisis existían una sola vez, en `services/brasaland-api/app/domains/incidents/service.py`; el script y la API la importaban.
 
 - **Qué se extrajo:** las constantes (campos, sedes, categorías, estados, reglas, etiquetas de puntaje y límites) y las funciones `validate_record`, `split_records`, `analyze`, `percentage`, `rounded_average`, `build_export_rows` y `export_csv_text`.
 - **Qué queda en el script:** solo la consola (formato del reporte, pregunta de exportación y escritura del archivo).
@@ -445,3 +448,111 @@ Ejecutado el 6 y el 8 de noviembre de 2026, con la API y el backoffice en local 
 | `change-password` responde 400 a una contraseña actual incorrecta | `test_change_password_rejects_a_wrong_current_password`; en vivo por el intermediario | 400 `invalid_current_password` |
 | Ninguna API key en el código: los secretos vienen del entorno | `git grep` y `git log -p` buscando claves de Resend; `git check-ignore services/brasaland-api/.env` | Sin coincidencias en el árbol ni en el historial; `.env` está ignorado; `.env.example` deja `RESEND_API_KEY=` vacía |
 | Sin regresiones | `cd services/brasaland-api && uv run pytest`; `npx tsc --noEmit`, `npm run lint` y `npm run build` en `uis/backoffice` | Pasan 433 pruebas (361 anteriores y 72 nuevas); el backoffice compila sin errores |
+
+---
+
+## Gestor de incidencias centralizado
+
+Registro y seguimiento de incidencias desde el backoffice, con el histórico del analizador cargado como seed. Coinciden exactamente con el briefing:
+
+- los campos del modelo (`id`, `title`, `description`, `category`, `status`, `origin`, `branch`, `created_at`, `updated_at`) y todos sus valores permitidos: 8 categorías, 4 estados, 3 orígenes y 15 sedes, con los nombres para mostrar del briefing;
+- el ciclo de vida (`open → in_progress | discarded`, `in_progress → resolved | discarded`; `resolved` y `discarded` finales);
+- las transformaciones del seed (mapas de estado, categoría y sede, `title` con los primeros 120 caracteres de `description`, `date` como medianoche UTC y `origin: "customer"`);
+- los totales esperados tras el seed: 96 registros válidos; `open` 32, `resolved` 50, `discarded` 14; `customer_complaint` 48, `equipment_failure` 17, `supply_issue` 22, `staff_issue` 9;
+- la estructura del monorepo: `scripts/seed_incidents.py`, `packages/shared/`, `services/brasaland-api/` y `uis/backoffice/`.
+
+Las diferencias son de rutas, de cómo se evita duplicar el seed, del alcance del 400 y de lo que el briefing no concreta.
+
+> **Estado:** implementado y verificado. El desarrollador revisó en el navegador el formulario y el panel, incluida la reversión del estado con la API apagada.
+
+| Qué | Consigna o briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Rutas | `/api/incidents`, `/api/incidents/{id}`, `/api/incidents/summary`… | Bajo `/api/v1/incidents...`; desde el navegador, el intermediario expone exactamente `/api/incidents...` | Versión única de la API, como en todos los ejercicios anteriores |
+| Control de duplicados del seed | Por `incident_id`, que "no se almacena"; si falta, `title + created_at` | `incident_id` en una tabla aparte, `incident_seed_log`, fuera del modelo | Sin guardarlo no se puede comprobar después; `title + created_at` no sirve con este CSV |
+| Código de los errores de validación | 400 | 400 en las rutas del gestor; el resto de la API mantiene 422 | No cambiar el contrato de proveedores y autenticación, ya entregados |
+| `status` en el formulario | "Incluye todos los campos del modelo" | Se muestra fijo en `open`, no editable; la API solo acepta `open` al crear | Una incidencia recién registrada no puede nacer resuelta o descartada |
+| Menú en móvil y tablet | Registro "accesible desde el menú de la aplicación" | Desde `xl`, en la cabecera; por debajo, en la portada (logo), que es el menú en esas pantallas | Con 6 herramientas, la cabecera no tiene sitio en pantallas pequeñas (decisión del desarrollador) |
+| Lógica compartida | Extraída a `packages/shared/` | Paquete Python `brasaland-shared` junto al paquete TypeScript que ya había en esa carpeta | La carpeta ya existía con `@repo/shared-types`; los dos conviven sin tocarse |
+
+### 1. Rutas bajo `/api/v1`
+
+Es la misma decisión que en [el analizador](#2-backend-servicesbrasaland-api-y-rutas-bajo-apiv1), los proveedores y la autenticación. Desde el navegador, las rutas se ven como en la consigna: el backoffice llama a `/api/incidents`, `/api/incidents/summary`, `/api/incidents/{id}/status`…, y su intermediario las reenvía a `/api/v1/incidents/...`. La comprobación de los totales tras el seed se hizo por esa ruta, `/api/incidents/summary`.
+
+La carpeta del servicio ya no es una divergencia: la estructura de este ejercicio admite `services/<nombre-del-servicio-api>/`.
+
+### 2. Cómo no duplica el seed: `incident_seed_log`
+
+El briefing pide usar `incident_id` para la idempotencia, pero también dice que ese campo "no se almacena". Para comprobar en una segunda ejecución que una fila ya se cargó, el identificador tiene que estar guardado en algún sitio.
+
+- **Qué se hizo:** el repositorio guarda cada `incident_id` cargado en una tabla aparte, `incident_seed_log` (`source_id` → `incident_id`). La incidencia no tiene ese campo, así que el modelo y la API son exactamente los del briefing. La comprobación y las dos inserciones se hacen con el mismo bloqueo.
+- **Por qué no `title + created_at`:** el briefing lo propone para cuando falta `incident_id`. Con `incidents-brasaland.csv` no sirve como clave: tres parejas de registros válidos comparten descripción y fecha, así que el seed cargaría 93 registros y los totales no cuadrarían. Se usa solo si una fila no trae `incident_id` (en este CSV, ninguna).
+
+### 3. 400 solo en el gestor
+
+La consigna pide que los errores de validación devuelvan 400. El resto de la API responde 422 desde el primer ejercicio, y AUTH-01 a AUTH-03 y el directorio de proveedores ya están entregados con ese contrato (el backoffice y sus pruebas cuentan con él). Por eso:
+
+- las rutas del gestor usan una clase de ruta propia (`BadRequestValidationRoute`) que convierte el error de validación en 400;
+- el cuerpo es el mismo de siempre: `{"error": {"code": "invalid_request", "message": ..., "details": [{"field", "message"}]}}`, con el campo problemático y un mensaje en español;
+- el resto de la API no cambia (una prueba lo comprueba).
+
+Una transición no válida también responde 400 (`invalid_transition`), con un mensaje que dice a qué estados se puede pasar.
+
+### 4. `status` fijo al registrar
+
+El formulario "incluye todos los campos del modelo". `id`, `created_at` y `updated_at` los genera el sistema; `status` se muestra en el formulario, pero fijo en `open` con su descripción del briefing ("Incidencia recién registrada, pendiente de asignar"). Una incidencia no puede nacer `in_progress`, `resolved` o `discarded`: el ciclo de vida empieza en `open`. La API acepta `status` al crear solo si es `open` y responde 400 con cualquier otro. El histórico del seed sí entra con su estado (`resolved` o `discarded`), porque ya ocurrió.
+
+### 5. El menú en móvil y tablet
+
+La consigna pide que la página de registro sea "accesible desde el menú de la aplicación". Desde 1280 px (`xl`), la cabecera muestra los enlaces a las 6 herramientas, entre ellos "Registrar incidencia" y "Gestor de incidencias". Por debajo, el desarrollador pidió que la tablet se comporte como el móvil: la cabecera solo muestra el logo y la cuenta, y se navega desde la portada, que tiene una tarjeta por herramienta (las dos del gestor incluidas). Con 6 herramientas, los enlaces no caben junto a la cuenta y no pueden pasar a una segunda línea, porque la barra de filtros de `/talento` depende de la altura fija de la cabecera.
+
+### 6. Decisiones de funcionamiento
+
+Estas decisiones no se apartan del briefing, pero concretan lo que no especifica.
+
+| Decisión | Motivo | Límite conocido |
+| --- | --- | --- |
+| La lógica del CSV se movió a `packages/shared` sin cambiar ninguna regla; la API la instala como dependencia local editable (uv) y los scripts la importan por `sys.path` | La consigna lo evalúa ("sin duplicación"); cada función existe una sola vez | Los scripts deben ejecutarse dentro del repositorio |
+| El seed se ejecuta con el entorno de la API: `uv run --project services/brasaland-api python scripts/seed_incidents.py` | Escribe con el repositorio de la API (TinyDB) | Necesita `uv sync` en la API |
+| La API no siembra al arrancar; el seed es un paso explícito | "A partir de ahí, el formulario es la única vía de entrada" | — |
+| Los inválidos se listan al final con su fila y la etiqueta de la regla del analizador (en inglés, como en su briefing) | Criterio "se reportan en consola" | Las etiquetas no se tradujeron para que coincidan con el analizador |
+| Incidencias en la tabla `incidents` de `brasaland-db.json`, con un bloqueo por archivo compartido con proveedores | "Reutiliza la base de datos"; TinyDB reescribe el archivo entero en cada escritura | No protege frente a otro proceso escribiendo a la vez (el seed con la API arrancada solo evita la colisión de IDs) |
+| `id` entero (el `doc_id` de TinyDB), como proveedores | "Identificador único generado automáticamente" | — |
+| `title` de 1 a 120 caracteres y `description` de 1 a 2.000, sin espacios en los extremos | 120 es el recorte del seed; 2.000 basta para una descripción detallada | — |
+| `GET /incidents/summary` devuelve todas las claves de cada desglose, también en 0 | "Métricas en cero" con la base vacía; el panel no tiene que adivinar qué falta | — |
+| El listado se ordena de la más reciente a la más antigua | Lo primero que interesa a Operaciones | — |
+| Sin campo de autor (`reported_by`) | El modelo del briefing no lo incluye | El briefing menciona "quién reportó"; con la sesión ya disponible, sería una mejora sencilla |
+| Prioridad futura: `customer_complaint` abiertas más de 48 h | El briefing pide que el filtro sea fácil de implementar | Basta con `category`, `status` y `created_at` (UTC), que el modelo ya tiene |
+| Cualquier excepción no controlada de la API responde 500 `internal_error` con un mensaje genérico | "Nunca el stack trace completo" | El detalle queda en el log del servidor |
+| El intermediario corta a los 15 s (504 `api_timeout`) y el cliente muestra un texto comprensible ante cualquier 5xx sin mensaje propio | "Tiene que funcionar bien aunque la API tarde, aunque devuelva un 500" | Afecta a todas las herramientas del backoffice |
+| Cambio de estado optimista en el listado, solo con las transiciones válidas | El briefing pide que, si falla, vuelva al valor anterior y avise | La fila se restaura completa, también `updated_at` |
+| Fechas del panel en UTC, con la zona explícita | El histórico se cargó como medianoche UTC; en hora de Colombia aparecería el día anterior | Las incidencias nuevas también se ven en UTC |
+| Campos y botón grandes en el formulario (`size="lg"`) | "Los campos deben ser suficientemente grandes" (tablets en cocina y sala) | — |
+| Categorías, estados y orígenes se muestran con su código exacto y la descripción del briefing como apoyo; las sedes, con su nombre para mostrar | Regla de nombres exactos; el briefing pide expresamente el nombre legible de la sede | — |
+
+### 7. Cómo verificarlo
+
+Ejecutado el 8 de noviembre de 2026. Las pruebas en vivo usaron la API y el backoffice en local; las del seed y los totales, una base TinyDB temporal (`BRASALAND_DB_PATH`). Hay una fila por cada criterio de evaluación de la consigna.
+
+| Criterio | Comando o acción | Resultado |
+| --- | --- | --- |
+| El modelo incluye todos los campos con sus restricciones | `tests/domains/incidents/test_manager_models.py` | Valores exactos del briefing, obligatorios, límites y valores no permitidos rechazados |
+| El seed carga el histórico con `origin: "customer"` | `uv run --project services/brasaland-api python scripts/seed_incidents.py` sobre una base temporal | 96 insertadas; `by_origin.customer` 96 |
+| El seed aplica las transformaciones del briefing | `scripts/test_seed_incidents.py` (mapas, título, fecha, sede, `central` sin mapeo) | Pasan |
+| Los inválidos no se insertan y se reportan en consola | El mismo comando | 4 inválidos (`BRS-000044`, `BRS-000049`, `BRS-000079`, `BRS-000086`) con su fila y motivo; ninguno en la base |
+| El seed es idempotente | Segunda ejecución | 0 insertadas y 96 omitidas; el total sigue en 96 |
+| Tras el seed, `/api/incidents/summary` da los totales esperados | `GET /api/incidents/summary` por el intermediario del backoffice | `open` 32, `resolved` 50, `discarded` 14; `customer_complaint` 48, `equipment_failure` 17, `supply_issue` 22, `staff_issue` 9 |
+| Códigos HTTP correctos en éxito y error | `tests/domains/incidents/test_manager_router.py`; rutas protegidas | 201, 200, 400, 404 y 401 sin token |
+| Los errores de validación identifican el campo | Las mismas pruebas; en vivo, alta sin sede y con categoría inválida | 400 con `details` de `category` y `branch` |
+| Ningún endpoint expone un stack trace | `test_unexpected_error_is_500_with_a_generic_message` | 500 `internal_error` con mensaje genérico, sin el detalle interno |
+| Las transiciones inválidas se rechazan con 400 | Pruebas de transiciones; en vivo, `open → resolved` | 400 `invalid_transition`: "Desde open solo se puede pasar a in_progress o discarded." |
+| `/summary` es correcto sin incidencias | `test_summary_is_all_zeros_with_an_empty_database` | `total` 0 y todas las claves en 0 |
+| El formulario valida los obligatorios en el cliente | Navegador: enviar vacío | Cada campo marcado, sin llamar a la API. Revisado por el desarrollador |
+| Con `origin = branch`, la sede se resalta y el desplegable usa las etiquetas del briefing | Navegador | Borde ámbar y aviso; "Medellín Centro", "Central (Medellín / Miami)"… Revisado por el desarrollador |
+| Carga visible y botón deshabilitado durante el envío | Navegador | Indicador y "Registrando incidencia...". Revisado por el desarrollador |
+| Errores de la API comprensibles, nunca técnicos | Navegador con la API apagada; en vivo, API colgada | "La API de Brasaland no está disponible…" (502) y "La API tarda demasiado en responder…" (504 a los 15 s). Revisado por el desarrollador |
+| El listado gestiona cargando, vacío y con datos | Navegador | Los tres estados, más el error con "Reintentar" y "sin resultados con los filtros". Revisado por el desarrollador |
+| El cambio de estado se revierte si falla | Navegador con la API apagada | La fila vuelve al estado anterior y avisa. Revisado por el desarrollador |
+| El resumen no rompe la página si falla | Navegador con la API apagada | Solo ese bloque muestra el error con "Reintentar". Revisado por el desarrollador |
+| La validación está en `packages/shared/` y la reutilizan script y API, sin duplicación | `git grep` de cada definición; pruebas del analizador | Cada función y constante existe una sola vez, en `packages/shared/brasaland_shared/incidents/`; 32 pruebas del script y 24 de la API sin cambios |
+| El código sigue la estructura del monorepo | Árbol del repositorio | `scripts/seed_incidents.py`, `packages/shared/`, `services/brasaland-api/` y `uis/backoffice/` |
+| Sin regresiones | `uv run pytest` en la API; `python -m unittest` en `scripts/incident-report`; pruebas del seed; `tsc`, `lint` y `build` en `uis/backoffice` | 539, 32 y 16 pruebas pasan; el backoffice compila sin errores |

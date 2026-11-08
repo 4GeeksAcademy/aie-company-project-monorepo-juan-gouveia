@@ -63,6 +63,8 @@ Cómo funciona:
 | `/` | Portada con una tarjeta por herramienta | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidatos, status, stage y notas | API REST |
 | `/incidencias` | Análisis de incidencias: sube el CSV de Operaciones, muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv` | API de Brasaland, a través del intermediario |
+| `/gestor-incidencias` | Gestor de incidencias: resumen (totales por estado, categoría, origen y sede, de `GET /incidents/summary`) y listado con filtros por `status`, `origin` y `branch`, de la más reciente a la más antigua. Cada bloque tiene su propia carga y su error con "Reintentar", así que un fallo del resumen no rompe el listado. Lista vacía y "sin resultados con los filtros" tienen su mensaje. Cada incidencia cambia de estado desde el listado (solo las transiciones válidas): el cambio se ve al momento y, si la API lo rechaza o falla, vuelve al estado anterior y avisa. Las fechas se muestran en UTC, porque el histórico se cargó como medianoche UTC | API de Brasaland (dominio `incidents`, TinyDB), a través del intermediario |
+| `/gestor-incidencias/nueva` | Registrar incidencia (gestor de incidencias centralizado): título, descripción, categoría, origen y sede, con campos grandes para tablet. Valida los obligatorios antes de enviar; con `origin = branch` resalta la sede; el desplegable de sedes muestra los nombres del briefing ("Medellín Centro"). Durante el envío, el botón queda deshabilitado con un indicador de carga; los errores de la API aparecen junto a su campo y, tras el éxito, el formulario se limpia y confirma. Toda incidencia nueva empieza en `open` | API de Brasaland (dominio `incidents`, TinyDB), a través del intermediario |
 | `/proveedores` | Directorio de proveedores: listado de activos y suspendidos, filtros por país y categoría, alta, actualización de tarifa y activar o suspender | API de Brasaland (dominio `suppliers`, TinyDB), a través del intermediario |
 | `/funciones` | Pruebas manuales de filtros, búsquedas, reportes y validaciones | Datos de ejemplo de `@repo/brasa-core` |
 
@@ -84,11 +86,11 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
 - `app/api/[...path]/route.ts`: intermediario (BFF) hacia la API de Brasaland.
   - Reenvía `GET`, `POST`, `PUT`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL/<ruta>`, con las cabeceras `Content-Type`, `Accept` y `Authorization`, sin aplicar lógica.
   - La URL de la API se queda en el servidor y no hace falta CORS.
-  - Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`).
+  - Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`); si tarda más de 15 segundos, corta la petición y responde 504 (`api_timeout`).
 - `components/`:
-  - componentes base reutilizables, entre ellos `PasswordField`, con botón para mostrar la contraseña, y `FileDropzone`, para cualquier herramienta que reciba archivos;
+  - componentes base reutilizables, entre ellos `PasswordField`, con botón para mostrar la contraseña, `FileDropzone`, para cualquier herramienta que reciba archivos, y `TextAreaField`. `FormField`, `TextAreaField` y `LabeledSelect` admiten `size="lg"` para formularios táctiles;
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` y los formularios de login, registro y recuperación de contraseña) y `account/` (perfil y cambio de contraseña);
-  - `talento/`, `funciones/`, `incidencias/` y `proveedores/`.
+  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/` y `proveedores/`.
 - `hooks/`: hooks personalizados, entre ellos `useSession`.
 - `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/` y una carpeta por herramienta.
 - `types/`: tipos de la API (`api.ts` para los errores y `auth.ts` para usuarios y perfiles).
@@ -101,6 +103,6 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
 - **`/funciones` es temporal:** prueba las reglas de `@repo/brasa-core`, un paquete transitorio. Cuando esas reglas pasen al backend, debe retirarse o llamar a la API. No añadas cálculos de negocio a los frontends.
 - **`/incidencias` descarga el último análisis de la API:** se guarda en memoria, así que si la API se reinicia hay que volver a subir el archivo, y si dos personas analizan a la vez, se descarga el más reciente.
 - **`/proveedores` escribe en la base local de la API:** las altas y los cambios de tarifa o estado se guardan en `services/brasaland-api/storage/brasaland-db.json`. Para volver a los datos iniciales, borra ese archivo y reinicia la API. La interfaz no ofrece borrar proveedores: el flujo habitual es suspenderlos.
-- **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). En móvil no se muestran los enlaces a herramientas; se navega desde la portada. Por debajo de `xl`, "Mi perfil" y "Cerrar sesión" se muestran solo como iconos.
+- **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). En móvil y tablet (por debajo de `xl`) no se muestran los enlaces a herramientas, porque con 6 herramientas no caben junto al menú de cuenta; se navega desde la portada (el logo lleva a ella). Por debajo de `xl`, "Mi perfil" y "Cerrar sesión" se muestran solo como iconos.
 - **API compartida:** el tracker usa una API de playground compartida, así que evita escrituras de prueba. Esa API es de terceros y no recibe el token de sesión.
 - **Tras mover rutas, `tsc` puede fallar con tipos antiguos de `.next`:** se arregla borrando `.next`, que es un artefacto generado.

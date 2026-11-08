@@ -1,4 +1,5 @@
-"""Protección de las rutas existentes (AUTH-01): incidentes y proveedores exigen un token válido.
+"""Protección de las rutas existentes (AUTH-01): incidentes, proveedores y el gestor de incidencias
+exigen un token válido.
 
 Cubre los criterios del briefing:
 - al menos 5 rutas fuera de /users y /auth requieren token (aquí, las 8 de incidents y suppliers);
@@ -22,6 +23,13 @@ SUPPLIER = {
     "status": "active",
 }
 CSV = {"file": ("incidentes.csv", b"incident_id\n1\n", "text/csv")}
+INCIDENT = {
+    "title": "Freidora sin temperatura",
+    "description": "La freidora 2 no pasa de 120 grados.",
+    "category": "equipment_failure",
+    "origin": "branch",
+    "branch": "miami_doral",
+}
 
 # (método, ruta, argumentos de la petición, códigos esperados con un token válido)
 PROTECTED_ROUTES = [
@@ -33,6 +41,12 @@ PROTECTED_ROUTES = [
     ("patch", "/api/v1/suppliers/1/rate", {"json": {"rate_per_unit": 28600}}, {200}),
     ("patch", "/api/v1/suppliers/1/status", {"json": {"status": "suspended"}}, {200}),
     ("delete", "/api/v1/suppliers/2", {}, {200}),
+    # Gestor de incidencias: la base de cada prueba empieza vacía.
+    ("post", "/api/v1/incidents", {"json": INCIDENT}, {201}),
+    ("get", "/api/v1/incidents", {}, {200}),
+    ("get", "/api/v1/incidents/summary", {}, {200}),
+    ("get", "/api/v1/incidents/1", {}, {404}),
+    ("patch", "/api/v1/incidents/1/status", {"json": {"status": "in_progress"}}, {404}),
 ]
 IDS = [f"{method.upper()} {path}" for method, path, _, _ in PROTECTED_ROUTES]
 

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 
 from tinydb import TinyDB
 from tinydb.table import Document
 
+from app.core.storage import lock_for
 from app.domains.suppliers.database import SUPPLIERS_TABLE, open_db
 from app.domains.suppliers.exceptions import DuplicateSupplierError
 from app.domains.suppliers.models import Category, Country, Supplier, SupplierCreate, SupplierStatus
@@ -28,16 +29,17 @@ def utc_now() -> datetime:
 
 
 class SupplierRepository:
-    def __init__(self, db: TinyDB):
+    def __init__(self, db: TinyDB, lock: RLock | None = None):
         self._db = db
         # Sin caché de consultas: así se ven también los cambios de `uv run seed` hechos desde otro proceso.
         self._table = db.table(SUPPLIERS_TABLE, cache_size=0)
         # TinyDB no es seguro entre hilos, y FastAPI ejecuta los endpoints síncronos en un pool.
-        self._lock = Lock()
+        # El bloqueo es el del archivo: lo comparte el gestor de incidencias, que escribe en el mismo.
+        self._lock = lock or RLock()
 
     @classmethod
     def from_path(cls, path: Path) -> "SupplierRepository":
-        return cls(open_db(path))
+        return cls(open_db(path), lock_for(path))
 
     def close(self) -> None:
         self._db.close()

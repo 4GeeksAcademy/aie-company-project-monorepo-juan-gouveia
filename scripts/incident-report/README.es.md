@@ -9,9 +9,9 @@ Script de consola que valida y resume el CSV de incidentes operativos de Brasala
 
 ## Dónde está la lógica
 
-Las reglas de validación y el análisis están en el backend, en [`services/brasaland-api/app/domains/incidents/service.py`](../../services/brasaland-api/app/domains/incidents/service.py), que es su fuente de verdad. La API usa ese mismo servicio, así que el script y el backoffice dan siempre los mismos resultados.
+Las reglas de validación y el análisis están en el paquete compartido [`packages/shared`](../../packages/shared/README.es.md) (`brasaland_shared.incidents`). La API y el seed del gestor de incidencias usan ese mismo paquete, así que el script y el backoffice dan siempre los mismos resultados.
 
-El script solo se ocupa de la consola: resolver la ruta, dar formato al reporte, preguntar y exportar. Importa el servicio añadiendo `services/brasaland-api` a la ruta de Python. Como el servicio solo usa la librería estándar, no hace falta instalar nada. Eso sí, el script tiene que ejecutarse dentro del repositorio: si se copia `analyze.py` a otro sitio, no encuentra el servicio.
+El script solo se ocupa de la consola: resolver la ruta, dar formato al reporte, preguntar y exportar. Importa el paquete añadiendo `packages/shared` a la ruta de Python. Como el paquete solo usa la librería estándar, no hace falta instalar nada. Eso sí, el script tiene que ejecutarse dentro del repositorio: si se copia `analyze.py` a otro sitio, no encuentra el paquete.
 
 ## Uso
 
