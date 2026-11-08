@@ -2,10 +2,15 @@
 
 - Contraseñas: bcrypt mediante libpass (fork mantenido de passlib; se importa como `passlib`).
   El texto plano nunca se guarda ni se compara directamente.
-- Tokens: JWT firmados con HS256 mediante python-jose. Solo llevan el ID del usuario (`sub`),
-  la fecha de emisión (`iat`) y la de caducidad (`exp`); el rol se lee de la base en cada petición.
+- Tokens de acceso: JWT firmados con HS256 mediante python-jose. Solo llevan el ID del usuario
+  (`sub`), la fecha de emisión (`iat`) y la de caducidad (`exp`); el rol se lee de la base en cada
+  petición.
+- Tokens de restablecimiento de contraseña (AUTH-03): JWT con la misma firma, más `jti` (su ID en
+  la tabla `password_resets`, que permite usarlos una sola vez) y `purpose: "password_reset"`.
+  Un token de acceso nunca lleva `purpose`: así ninguno de los dos sirve en lugar del otro.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
@@ -25,6 +30,22 @@ class InvalidTokenError(Exception):
 
 class TokenExpiredError(InvalidTokenError):
     """El token era válido, pero ya caducó."""
+
+
+PASSWORD_RESET_PURPOSE = "password_reset"
+
+
+@dataclass(frozen=True)
+class AccessTokenClaims:
+    subject: str
+    # Emisión en segundos desde epoch; se compara con `password_changed_at` del usuario.
+    issued_at: int
+
+
+@dataclass(frozen=True)
+class PasswordResetClaims:
+    subject: str
+    token_id: str
 
 
 # --- Contraseñas ---------------------------------------------------------------------------
@@ -75,8 +96,8 @@ def create_access_token(
     return jwt.encode(claims, settings.secret_key, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> str:
-    """Valida firma, algoritmo y caducidad, y devuelve el ID del usuario (`sub`)."""
+def _decode(token: str, required: list[str]) -> dict:
+    """Valida firma, algoritmo y caducidad, y exige los claims indicados."""
     settings = get_settings()
     try:
         claims = jwt.decode(
@@ -84,14 +105,60 @@ def decode_access_token(token: str) -> str:
             settings.secret_key,
             # Solo HS256: un token con "alg": "none" u otro algoritmo se rechaza.
             algorithms=[ALGORITHM],
-            options={"require_exp": True, "require_iat": True, "require_sub": True},
+            options={f"require_{name}": True for name in required},
         )
     except ExpiredSignatureError:
         raise TokenExpiredError() from None
     except (JWTError, ValueError, TypeError):
         raise InvalidTokenError() from None
+    return claims
 
-    subject = claims.get("sub")
-    if not isinstance(subject, str) or not subject:
+
+def _non_empty_str(claims: dict, name: str) -> str:
+    value = claims.get(name)
+    if not isinstance(value, str) or not value:
         raise InvalidTokenError()
-    return subject
+    return value
+
+
+def decode_access_token_claims(token: str) -> AccessTokenClaims:
+    """Valida un token de acceso y devuelve el ID del usuario y la fecha de emisión.
+
+    Rechaza los tokens con `purpose` (por ejemplo, un enlace de restablecimiento): no son sesiones.
+    """
+    claims = _decode(token, ["exp", "iat", "sub"])
+    if "purpose" in claims:
+        raise InvalidTokenError()
+    issued_at = claims.get("iat")
+    if not isinstance(issued_at, int):
+        raise InvalidTokenError()
+    return AccessTokenClaims(subject=_non_empty_str(claims, "sub"), issued_at=issued_at)
+
+
+def decode_access_token(token: str) -> str:
+    """Valida firma, algoritmo y caducidad, y devuelve el ID del usuario (`sub`)."""
+    return decode_access_token_claims(token).subject
+
+
+def create_password_reset_token(
+    subject: str, token_id: str, *, expires_at: datetime, now: datetime | None = None
+) -> str:
+    """Firma el token del enlace de restablecimiento. `token_id` es el `jti` guardado en la base."""
+    settings = get_settings()
+    issued_at = now or datetime.now(timezone.utc)
+    claims = {
+        "sub": subject,
+        "jti": token_id,
+        "purpose": PASSWORD_RESET_PURPOSE,
+        "iat": int(issued_at.timestamp()),
+        "exp": int(expires_at.timestamp()),
+    }
+    return jwt.encode(claims, settings.secret_key, algorithm=ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> PasswordResetClaims:
+    """Valida firma, caducidad y propósito. Que no se haya usado ya lo comprueba el servicio."""
+    claims = _decode(token, ["exp", "iat", "sub", "jti"])
+    if claims.get("purpose") != PASSWORD_RESET_PURPOSE:
+        raise InvalidTokenError()
+    return PasswordResetClaims(subject=_non_empty_str(claims, "sub"), token_id=_non_empty_str(claims, "jti"))

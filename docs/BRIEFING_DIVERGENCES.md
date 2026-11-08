@@ -15,6 +15,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 2. [Directorio de proveedores](#directorio-de-proveedores) (briefing del milestone 09, "Lightweight Storage API")
 3. [Autenticación y protección de rutas](#autenticación-y-protección-de-rutas) (ticket AUTH-01)
 4. [Autenticación en el frontend](#autenticación-en-el-frontend) (ticket AUTH-02)
+5. [Recuperación y cambio de contraseña](#recuperación-y-cambio-de-contraseña) (ticket AUTH-03)
 
 ---
 
@@ -224,7 +225,7 @@ Estas decisiones no se apartan del briefing, pero concretan lo que no especifica
 | Decisión | Motivo | Límite conocido |
 | --- | --- | --- |
 | `id` del usuario y del perfil: UUID4 en texto (el `doc_id` de TinyDB queda interno) | Otros módulos lo guardarán como `user_uuid`; un UUID no es enumerable | — |
-| El JWT lleva solo `sub` (el `id`), `iat` y `exp`, firmado con HS256 | "El token debe llevar como mínimo el ID del usuario"; el rol se lee de TinyDB en cada petición, así un cambio de rol o una desactivación aplica al momento | No hay revocación de tokens: un token robado vale hasta que caduca, salvo que se desactive o borre la cuenta |
+| El JWT lleva solo `sub` (el `id`), `iat` y `exp`, firmado con HS256 | "El token debe llevar como mínimo el ID del usuario"; el rol se lee de TinyDB en cada petición, así un cambio de rol o una desactivación aplica al momento | No hay revocación de tokens: un token robado vale hasta que caduca, salvo que se desactive o borre la cuenta. Desde AUTH-03, cambiar o restablecer la contraseña también lo invalida ([apartado 4](#4-invalidación-del-token-y-cierre-de-sesiones)) |
 | `SECRET_KEY` y `ACCESS_TOKEN_EXPIRE_MINUTES` son obligatorias y sin valor por defecto; la API no arranca sin ellas | "Se leen desde variables de entorno, no están hardcodeadas" | En local se cargan con `uv run --env-file .env` |
 | `GET`, `PUT` y `DELETE /users/{id}`: solo la propia cuenta o un admin; 403 aunque el ID no exista | Criterio "acceder o actualizar las credenciales de otro usuario recibe 403"; no revelar qué IDs existen | — |
 | `role` e `is_active` solo los cambia un admin (403) | Un usuario no puede darse más permisos | Un admin puede quitarse a sí mismo el rol |
@@ -326,3 +327,121 @@ Ejecutado el 4 y el 6 de noviembre de 2026, con la API y el backoffice en local 
 | Perfil | `PUT /api/profiles/me` parcial, con `null`, con un nombre de 121 caracteres y sin token | Cambia solo lo enviado; vacía el campo; 422 con `details.name`; 401 |
 | Sin contenido antes de validar | HTML de servidor de `/`, `/proveedores`, `/incidencias`, `/talento`, `/funciones` y `/account/profile` | Solo "Comprobando la sesión...", sin navegación ni contenido |
 | Flujos en el navegador | Sin sesión a `/proveedores` → `/login?next=...` → vuelta; registro; perfil y nombre en la cabecera; cerrar sesión (token borrado); dos pestañas; token alterado a mano → `/login?reason=expired` | Revisado por el desarrollador |
+
+---
+
+## Recuperación y cambio de contraseña
+
+Ticket AUTH-03: restablecimiento de la contraseña por correo y cambio con la sesión iniciada, en la API y en el backoffice. Coinciden con el ticket:
+
+- los tres endpoints (`forgot-password`, `reset-password` y `change-password`) y sus cuerpos (`{email}`, `{token, new_password}` y `{current_password, new_password}`);
+- los códigos que pide: 200 siempre en `forgot-password` y 400 en `reset-password` y `change-password`;
+- las vistas `/forgot-password`, `/reset-password` y `/account/change-password`, y el enlace "¿Olvidaste tu contraseña?" en `/login`;
+- el mensaje "Si esa dirección está registrada, recibirás un enlace en breve";
+- la caducidad entre 15 y 60 minutos, el token de un solo uso y la API key en una variable de entorno (`RESEND_API_KEY`, documentada en `.env.example` y en el README de la API).
+
+Las diferencias son de rutas, de un endpoint añadido, del cierre de sesiones y de lo que el ticket deja por decidir.
+
+> **Estado:** implementado y verificado. De los opcionales se hicieron la plantilla HTML y el límite por hora; el registro de auditoría no.
+
+| Qué | Ticket | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Rutas | `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password` | Bajo `/api/v1/auth/...` | Versión única de la API, como en AUTH-01 |
+| Proveedor de correo | Resend o SendGrid | Resend, con el remitente `onboarding@resend.dev` | Plan gratuito permanente; funciona sin dominio propio |
+| Comprobar el enlace | Solo `POST /auth/reset-password` | También `POST /auth/reset-password/validate`, que lo comprueba sin usarlo | Avisar al abrir un enlace caducado o usado, no después de escribir la contraseña |
+| Invalidación del token | Persistir estado en el servidor (uno de tres mecanismos) | JWT con `jti` y la tabla `password_resets`, **más** `password_changed_at` | El primero hace el enlace de un solo uso; el segundo cierra las sesiones abiertas |
+| Respuesta de `change-password` | Actualiza la contraseña | Devuelve además un token de acceso nuevo | Las sesiones anteriores dejan de valer, también la actual |
+| `forgot-password` con un email mal formado | "Devuelve siempre `200`" | 422 | Es un error de formato; no revela si la cuenta existe |
+| Opcionales | Plantilla HTML, límite por hora y auditoría | Plantilla HTML (con versión en texto) y 3 enlaces por cuenta y hora; sin auditoría | Decisión del desarrollador (P-8 y P-9) |
+| Código de tickets anteriores | — | Corregidos el `doc_id` de TinyDB (AUTH-01) y los errores por campo del login y el registro (AUTH-02) | Fallos encontrados al probar este ticket |
+
+### 1. Rutas bajo `/api/v1`
+
+Es la misma decisión que en [AUTH-01, apartado 1](#1-rutas-bajo-apiv1): todas las rutas de `auth` viven bajo el prefijo común. El backoffice las llama a través de su intermediario (`/api/auth/...`), que las reenvía a `/api/v1/auth/...`, como en [AUTH-02](#1-el-token-pasa-por-el-intermediario).
+
+### 2. Resend frente a SendGrid
+
+El ticket deja elegir entre los dos. El desarrollador eligió Resend, tras comparar el 6 de noviembre de 2026 la documentación oficial de ambos:
+
+1. **Gratis sin fecha de fin:** 3.000 correos al mes y 100 al día. SendGrid ofrece una prueba de 60 días, y después su plan más barato es de pago. El proyecto se evaluará después de esta entrega, y la prueba podría haber caducado.
+2. **Alta más sencilla:** una cuenta y una API key con permiso "Sending access". SendGrid exige una cuenta de Twilio, 2FA y verificar un remitente con una dirección física.
+3. **Funciona sin dominio propio:** el remitente `onboarding@resend.dev` es el que propone el propio ticket. Con SendGrid sin dominio, el remitente sería un correo personal (Gmail, Outlook…), y su consola avisa de que esos envíos pueden fallar la comprobación DMARC y no llegar.
+4. **Integración simple:** el SDK `resend` lanza una excepción si el envío falla, así que el error se gestiona en un solo sitio (`core/email.py`).
+
+- **Coste:** sin un dominio verificado, Resend solo entrega al email de su cuenta; a cualquier otro destinatario responde 403. Para la demo basta con registrar en Brasaland un usuario con ese email.
+- **Cómo se trata el rechazo:** la API lo registra en el log, sin destinatario ni enlace, y al cliente le responde lo mismo (200). Con un dominio propio bastará con verificarlo y cambiar `EMAIL_FROM`; el código no cambia.
+- **Sin API key:** la API arranca, avisa en el log y no envía nada. Las pruebas sustituyen el emisor por uno falso, sin llamar a Resend ni gastar cuota.
+
+### 3. Endpoint añadido: `POST /auth/reset-password/validate`
+
+El ticket solo pide que `reset-password` rechace los enlaces no válidos. Así, quien abría un enlace usado o caducado se enteraba después de escribir dos veces la contraseña nueva. En la primera revisión, el desarrollador pidió que se avisara antes.
+
+- **Qué hace:** comprueba la firma, la caducidad, el propósito, que el enlace no se haya usado y que la cuenta siga activa, **sin consumirlo**. Responde 400 con los mismos códigos que `reset-password` (`invalid_reset_token`, `reset_token_expired` y `reset_token_used`).
+- **Cómo lo usa el frontend:** `/reset-password` lo llama al abrirse. Si el enlace no sirve, muestra el error y "Solicitar un nuevo enlace" sin enseñar el formulario.
+- **El token va en el cuerpo,** no en la URL de la API, para que no quede en los logs de acceso.
+- **Si la API no responde:** el formulario sigue disponible con el aviso, porque `reset-password` vuelve a comprobar el enlace al guardar.
+- **Es público,** como `forgot-password` y `reset-password`; la prueba de rutas protegidas lo incluye en su lista de rutas públicas.
+
+### 4. Invalidación del token y cierre de sesiones
+
+El ticket avisa de que codificar la expiración en el JWT no basta, y propone tres mecanismos. Se usan dos, porque resuelven problemas distintos:
+
+- **Enlace de un solo uso:** el token del enlace es un JWT con `purpose: "password_reset"` y un `jti`, que tiene una fila en `password_resets`. Al usarlo, la fila se marca y el enlace deja de valer. Usar un enlace anula también los demás enlaces pendientes del usuario, y cambiar la contraseña con sesión, también.
+- **Cierre de sesiones (`password_changed_at`):** el ticket deja abierto si cambiar la contraseña cierra las demás sesiones. Se decidió que sí (P-6): tras un restablecimiento o un cambio, la API rechaza con 401 `session_revoked` los tokens de acceso emitidos antes. Quien conociera la contraseña antigua y tuviera una sesión abierta la pierde.
+- **Tokens separados:** un token de restablecimiento no sirve como sesión, ni un token de acceso como enlace. Antes de este ticket, `decode_access_token` aceptaba cualquier JWT firmado con `SECRET_KEY`.
+- **Por qué `change-password` devuelve un token:** el cierre alcanza también a la sesión desde la que se cambia la contraseña. La respuesta trae un token nuevo; `/account/change-password` lo guarda y el usuario sigue dentro. Las demás pestañas del mismo navegador lo leen de `localStorage`.
+- **Límite conocido:** `iat` va en segundos, así que un token emitido en el mismo segundo que el cambio sigue valiendo. Así funciona el token nuevo de `change-password`; la ventana es despreciable.
+
+### 5. `forgot-password` responde 422 a un email mal formado
+
+El ticket pide responder "siempre `200`, se haya encontrado o no el email", para no revelar qué cuentas existen. A un texto que ni siquiera es un email (`no-es-un-email`), la API responde 422, como en el resto de rutas: es un error de la petición, igual para todos, y no dice nada de las cuentas registradas. Con cualquier email bien formado (exista o no, esté inactivo o por encima del límite por hora) la respuesta es la misma: 200 y el mismo mensaje.
+
+### 6. Opcionales: plantilla HTML y límite por hora
+
+- **Plantilla HTML (P-8):** el correo lleva una versión HTML, con un botón y el enlace también en texto, y otra en texto plano para los clientes que no muestran HTML. Es de una columna y con ancho máximo, así que se lee bien en el móvil (lo comprueban las pruebas de `core/test_email.py`).
+- **Límite por hora (P-9, opción B):** como máximo 3 enlaces por cuenta y hora. Las solicitudes de más se ignoran en silencio y reciben la misma respuesta, para no revelar nada. Se cuenta por cuenta y no por dirección IP, porque la API aún no tiene un mecanismo común de límite de peticiones.
+- **Sin auditoría:** registrar la dirección IP obligaría a que el intermediario reenviara `X-Forwarded-For` y a decidir cuándo fiarse de esa cabecera. `password_resets` ya deja constancia de cuándo se pidió y se usó cada enlace.
+
+### 7. Correcciones en el código de tickets anteriores
+
+Al probar este ticket aparecieron dos fallos en código de AUTH-01 y AUTH-02. Se corrigieron aquí, con la aprobación del desarrollador, porque afectaban al flujo:
+
+- **`doc_id` de TinyDB entre procesos (AUTH-01):** TinyDB guarda en memoria el siguiente `doc_id`. Si otro proceso insertaba en el mismo archivo (por ejemplo, `uv run create-admin` con la API arrancada), la siguiente inserción de la API daba 500. Ahora `app/core/storage.py` (`insert_with_file_id`) calcula el `doc_id` a partir del archivo en los repositorios de usuarios, perfiles y `password_resets`, como ya hacía `suppliers`. Tiene su prueba.
+- **Errores por campo en `/login` y `/register` (AUTH-02):** al editar un campo, su error de la API quedaba en `undefined` y tapaba el error local de ese campo. `mergeFieldErrors` (`lib/auth/validation.ts`) solo deja pasar los errores de la API que tienen texto. También lo usan `/reset-password` y `/account/change-password`.
+
+### 8. Decisiones de funcionamiento
+
+Estas decisiones no se apartan del ticket, pero concretan lo que no especifica.
+
+| Decisión | Motivo | Límite conocido |
+| --- | --- | --- |
+| El correo sale en segundo plano (`BackgroundTasks`), después de responder | Ni la respuesta ni su tiempo revelan si la cuenta existe; un fallo de Resend no llega al cliente | Si el envío falla, solo queda en el log |
+| Una cuenta desactivada no recibe enlace (y la respuesta es la misma) | No puede iniciar sesión, así que restablecer la contraseña no le sirve | — |
+| `PASSWORD_RESET_EXPIRE_MINUTES`: 30 por defecto; fuera de 15–60, la API no arranca | El ticket fija el rango de 15 a 60 minutos | — |
+| El enlace es `<FRONTEND_URL>/reset-password?token=...` | El ticket pide leer el token del query string | `FRONTEND_URL` apunta al backoffice; por defecto, `http://localhost:3001` |
+| `/reset-password` no envía la URL como `Referer` (`referrer: no-referrer`) | El token va en la URL; así no llega a otros sitios | — |
+| Tras restablecer, `/login?reset=success` muestra el aviso de éxito | El ticket pide redirigir a `/login` "con un mensaje de éxito" | — |
+| `/forgot-password` se desactiva tras un 200; si la petición no llega a la API, deja reintentar | El ticket pide evitar envíos duplicados; si falló la red, no se envió nada | — |
+| `/account/change-password` está en `(protegido)`, se enlaza desde "Mi perfil" y avisa de que se cerrarán las demás sesiones | Queda protegida como el resto de vistas, y el usuario sabe lo que pasará | — |
+| Un 400 de `change-password` se muestra junto a "Contraseña actual" | Es el único campo que puede estar mal | — |
+| La contraseña nueva sigue las reglas del registro (de 8 caracteres a 72 bytes) | Mismas reglas en toda la API | No se impide repetir la contraseña actual |
+
+### 9. Cómo verificarlo
+
+Ejecutado el 6 y el 8 de noviembre de 2026, con la API y el backoffice en local y bases TinyDB temporales (`AUTH_DB_PATH` y `BRASALAND_DB_PATH`). Hay una fila por cada criterio de evaluación del ticket, más la de regresiones.
+
+| Criterio | Comando o acción | Resultado |
+| --- | --- | --- |
+| `forgot-password` envía un correo real con el enlace a una dirección registrada | `POST /auth/forgot-password` con el email de la cuenta de Resend | Correo recibido y revisado por el desarrollador |
+| `forgot-password` responde 200 con una dirección no registrada | Prueba `test_forgot_password_answers_the_same_for_unknown_emails` y las del límite por hora; curl con un email no registrado | 200 con el mismo mensaje y tiempos parecidos (83 ms frente a 67 ms) |
+| El token caduca tras la ventana configurada | Pruebas `test_expired_reset_token_is_rejected` y `test_token_expires_after_the_configured_window` (ventana de 15 minutos y enlace de hace 16) | 400 `reset_token_expired`; la contraseña no cambia |
+| `reset-password` cambia la contraseña e invalida el token | Pruebas de `test_password_router.py`; en vivo, restablecimiento y login | 200; login con la contraseña antigua 401 y con la nueva 200; la sesión anterior da 401 `session_revoked` |
+| `reset-password` responde 400 a tokens caducados o usados | `test_reset_token_cannot_be_used_twice` y las de caducidad; en vivo, el mismo enlace dos veces | 400 `reset_token_used` y `reset_token_expired`; un token basura da 400 `invalid_reset_token` |
+| `/forgot-password` confirma tras el envío, sea cual sea el resultado | Navegador; por el intermediario, con un email no registrado | Mismo mensaje y formulario desactivado. Revisado por el desarrollador |
+| `/reset-password` lee el token, envía el formulario y redirige a `/login` | Navegador, con el enlace del correo | Vuelta a `/login?reset=success` con el aviso. Revisado por el desarrollador |
+| `/reset-password` muestra un error claro y el enlace a `/forgot-password` | Navegador, con un enlace ya usado; por el intermediario, con un token basura | El error de la API y "Solicitar un nuevo enlace" (revisado por el desarrollador); 400 `invalid_reset_token` |
+| `/login` tiene un enlace visible "¿Olvidaste tu contraseña?" | Navegador | Bajo el campo de la contraseña. Revisado por el desarrollador |
+| `/account/change-password` comprueba la confirmación, llama a la API y muestra el resultado | Navegador; por el intermediario: contraseña actual incorrecta, nueva demasiado corta, sin token y datos válidos | Aviso si no coinciden, sin llamar a la API; 400, 422 con el campo, 401 y 200 con token nuevo ("Contraseña actualizada."). Revisado por el desarrollador |
+| `change-password` responde 400 a una contraseña actual incorrecta | `test_change_password_rejects_a_wrong_current_password`; en vivo por el intermediario | 400 `invalid_current_password` |
+| Ninguna API key en el código: los secretos vienen del entorno | `git grep` y `git log -p` buscando claves de Resend; `git check-ignore services/brasaland-api/.env` | Sin coincidencias en el árbol ni en el historial; `.env` está ignorado; `.env.example` deja `RESEND_API_KEY=` vacía |
+| Sin regresiones | `cd services/brasaland-api && uv run pytest`; `npx tsc --noEmit`, `npm run lint` y `npm run build` en `uis/backoffice` | Pasan 433 pruebas (361 anteriores y 72 nuevas); el backoffice compila sin errores |

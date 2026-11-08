@@ -8,8 +8,12 @@ from app.core.security import (
     ALGORITHM,
     InvalidTokenError,
     TokenExpiredError,
+    PASSWORD_RESET_PURPOSE,
     create_access_token,
+    create_password_reset_token,
     decode_access_token,
+    decode_access_token_claims,
+    decode_password_reset_token,
     hash_password,
     verify_password,
 )
@@ -116,3 +120,49 @@ def test_token_missing_claims_is_rejected(auth_settings, claims):
     token = jwt.encode(claims, auth_settings.secret_key, algorithm=ALGORITHM)
     with pytest.raises(InvalidTokenError):
         decode_access_token(token)
+
+
+# --- Tokens de restablecimiento (AUTH-03) ---------------------------------------------------
+
+
+def reset_token(expires_in: timedelta = timedelta(minutes=30)) -> str:
+    return create_password_reset_token(USER_ID, "jti-1", expires_at=datetime.now(timezone.utc) + expires_in)
+
+
+def test_reset_token_round_trip():
+    claims = decode_password_reset_token(reset_token())
+    assert (claims.subject, claims.token_id) == (USER_ID, "jti-1")
+
+
+def test_reset_token_carries_its_purpose():
+    claims = jwt.get_unverified_claims(reset_token())
+    assert claims["purpose"] == PASSWORD_RESET_PURPOSE
+    assert {"sub", "jti", "iat", "exp"} <= set(claims)
+
+
+def test_reset_token_is_not_accepted_as_an_access_token():
+    with pytest.raises(InvalidTokenError):
+        decode_access_token(reset_token())
+
+
+def test_access_token_is_not_accepted_as_a_reset_token():
+    with pytest.raises(InvalidTokenError):
+        decode_password_reset_token(create_access_token(USER_ID))
+
+
+def test_expired_reset_token_raises_expired():
+    with pytest.raises(TokenExpiredError):
+        decode_password_reset_token(reset_token(timedelta(seconds=-1)))
+
+
+def test_reset_token_without_jti_is_rejected(auth_settings):
+    claims = {"sub": USER_ID, "purpose": PASSWORD_RESET_PURPOSE, "iat": 0, "exp": 4_000_000_000}
+    with pytest.raises(InvalidTokenError):
+        decode_password_reset_token(jwt.encode(claims, auth_settings.secret_key, ALGORITHM))
+
+
+def test_access_token_claims_include_issue_time():
+    now = datetime(2026, 11, 6, 10, 0, 0, tzinfo=timezone.utc)
+    token = create_access_token(USER_ID, now=now, expires_delta=timedelta(days=36500))
+    claims = decode_access_token_claims(token)
+    assert (claims.subject, claims.issued_at) == (USER_ID, int(now.timestamp()))

@@ -11,7 +11,7 @@ import { login } from "@/lib/auth/api";
 import { formErrorsFromApi } from "@/lib/auth/api-errors";
 import { safeNext, type LoginReason } from "@/lib/auth/navigation";
 import { setToken } from "@/lib/auth/token";
-import { validateLogin, type FieldErrors, type LoginValues } from "@/lib/auth/validation";
+import { mergeFieldErrors, validateLogin, type FieldErrors, type LoginValues } from "@/lib/auth/validation";
 
 const REASON_MESSAGES: Record<LoginReason, string> = {
   expired: "Tu sesión ha caducado o no es válida. Vuelve a iniciar sesión.",
@@ -29,6 +29,8 @@ export default function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
   const reason = searchParams.get("reason");
+  // Vuelta de /reset-password tras restablecer la contraseña (AUTH-03).
+  const passwordReset = searchParams.get("reset") === "success";
 
   const [values, setValues] = useState<LoginValues>({ email: "", password: "" });
   const [attempted, setAttempted] = useState(false);
@@ -37,7 +39,7 @@ export default function LoginForm() {
   const [apiMessage, setApiMessage] = useState<string | null>(null);
 
   const errors = attempted ? validateLogin(values) : {};
-  const shown = { ...errors, ...apiFields };
+  const shown = mergeFieldErrors(errors, apiFields);
 
   function setField(field: keyof LoginValues, value: string) {
     setValues((prev) => ({ ...prev, [field]: value }));
@@ -70,6 +72,9 @@ export default function LoginForm() {
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-red-700 md:text-2xl">Iniciar sesión</h1>
 
+      {passwordReset && !apiMessage && (
+        <FormAlert tone="success">Contraseña actualizada. Inicia sesión con tu nueva contraseña.</FormAlert>
+      )}
       {isLoginReason(reason) && !apiMessage && <FormAlert tone="info">{REASON_MESSAGES[reason]}</FormAlert>}
       {apiMessage && <FormAlert>{apiMessage}</FormAlert>}
 
@@ -93,6 +98,11 @@ export default function LoginForm() {
         name="password"
         autoComplete="current-password"
       />
+      <p className="-mt-2 text-right text-sm">
+        <Link href="/forgot-password" className="font-semibold text-red-700 underline hover:text-red-800">
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </p>
 
       <Button type="submit" size="md" disabled={submitting}>
         {submitting ? "Entrando..." : "Entrar"}
