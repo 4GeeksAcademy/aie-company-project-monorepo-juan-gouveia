@@ -11,6 +11,6 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 
 | Service | What it does |
 |---|---|
-| [`brasaland-api/`](./brasaland-api/README.md) | Brasaland's central API (FastAPI), organized by domain. It implements the `incidents` domain: incident CSV analysis and results export. |
+| [`brasaland-api/`](./brasaland-api/README.md) | Brasaland's central API (FastAPI), organized by domain. It implements the `incidents` domain (incident CSV analysis and results export) and the `suppliers` domain (supplier directory in TinyDB). |
 
 > _Spanish version: [README.es.md](./README.es.md)._
