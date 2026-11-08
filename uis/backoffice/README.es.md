@@ -12,11 +12,14 @@ Next.js 16 (App Router), React 19, TypeScript y Tailwind CSS 4. Es un proyecto i
 
 ## Cómo ejecutarlo
 
-Copia `.env.example` como `.env.local` e indica la URL de la API:
+Copia `.env.example` como `.env.local` e indica las URL de las API:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=<url-base-de-la-api>
+NEXT_PUBLIC_API_BASE_URL=<url-base-de-la-api>     # API del tracker
+API_BASE_URL=http://localhost:8000/api/v1         # API de Brasaland (services/brasaland-api)
 ```
+
+Las herramientas que usan la API de Brasaland necesitan que esté arrancada; las instrucciones están en [`services/brasaland-api/README.es.md`](../../services/brasaland-api/README.es.md).
 
 Después ejecuta:
 
@@ -35,6 +38,7 @@ npm run build
 |---|---|---|
 | `/` | Portada con una tarjeta por herramienta | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidatos, status, stage y notas | API REST |
+| `/incidencias` | Análisis de incidencias: sube el CSV de Operaciones, muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv` | API de Brasaland, a través del intermediario |
 | `/funciones` | Pruebas manuales de filtros, búsquedas, reportes y validaciones | Datos de ejemplo de `@repo/brasa-core` |
 
 ## Añadir una herramienta
@@ -48,7 +52,8 @@ Las áreas internas, incluida la formación, se incorporan aquí como herramient
 ## Estructura
 
 - `app/`: layout raíz, portada y una carpeta por herramienta.
-- `components/`: componentes base reutilizables, más `talento/` y `funciones/`.
+- `app/api/[...path]/route.ts`: intermediario (BFF) hacia la API de Brasaland. Reenvía `/api/<ruta>` a `API_BASE_URL/<ruta>` sin aplicar lógica, así que la URL de la API se queda en el servidor y no hace falta CORS. Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`).
+- `components/`: componentes base reutilizables, más `talento/`, `funciones/` e `incidencias/`. `FileDropzone` sirve para cualquier herramienta que reciba archivos.
 - `hooks/`: hooks personalizados.
 - `lib/`: `tools.ts`, `format.ts` y una carpeta por herramienta.
 - `types/`: tipos de la API.
@@ -57,5 +62,6 @@ Las áreas internas, incluida la formación, se incorporan aquí como herramient
 
 - **Sin autenticación:** no debe publicarse hasta que exista el login.
 - **`/funciones` es temporal:** prueba las reglas de `@repo/brasa-core`, un paquete transitorio. Cuando esas reglas pasen al backend, debe retirarse o llamar a la API. No añadas cálculos de negocio a los frontends.
+- **`/incidencias` descarga el último análisis de la API:** se guarda en memoria, así que si la API se reinicia hay que volver a subir el archivo, y si dos personas analizan a la vez, se descarga el más reciente.
 - **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). En móvil no se muestran los enlaces a herramientas; se navega desde la portada.
 - **API compartida:** el tracker usa una API de playground compartida, así que evita escrituras de prueba.

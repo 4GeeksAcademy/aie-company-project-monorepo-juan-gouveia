@@ -199,6 +199,7 @@ services/brasaland-api/
 │   │   ├── people/             # Empleados, ausencias, vacaciones y alta administrativa
 │   │   ├── recruitment/        # Candidatos y notas (API del tracker del backoffice)
 │   │   ├── telemetry/          # Eventos en tiempo real de los locales
+│   │   ├── incidents/          # Incidentes operativos: validación y análisis de reportes (implementado)
 │   │   └── reporting/          # Métricas y dashboards (solo lectura)
 │   │
 │   ├── integrations/           # Adaptadores a sistemas externos (sección 1.4)
@@ -255,7 +256,7 @@ Un único backend con una única base de datos hace muy fácil que los dominios 
    auth · locations · menu                        ← dominios base
           ▲
    recipes · training · sales · inventory · procurement
-   customers · loyalty · people · recruitment · telemetry
+   customers · loyalty · people · recruitment · telemetry · incidents
           ▲
    reporting                                      ← solo lee
    ```
@@ -282,6 +283,8 @@ Propuesta inicial, sujeta a las prioridades del sprint:
    - Operaciones: `menu/`, `sales/` e `inventory/`.
    - Formación: `recipes/` y `training/`.
 5. **El resto** (`procurement/`, `people/`, `telemetry/`, `reporting/`) según las prioridades de negocio.
+
+**Primer dominio implementado: `incidents/`.** Se adelantó al orden anterior porque Operaciones necesitaba validar y resumir el CSV de incidentes que hasta ahora llevaba en una hoja de cálculo. No depende de base de datos, autenticación ni otros dominios, así que sirvió para validar la estructura de punta a punta. Mientras no exista `locations/`, valida los códigos de local (`COL-01`, `FLA-01`…) contra una lista fija; cuando exista, deberá consultarlos a `locations.service`. Su último análisis se guarda en memoria hasta que haya base de datos.
 
 ---
 
@@ -330,6 +333,7 @@ Todas las rutas van precedidas de `/api/v1`. El mapa muestra los recursos princi
 | **loyalty** | `POST /loyalty/enrollments` (alta pública, ver 3.6) · `POST /loyalty/enrollments/verify` (confirmación del correo) · `GET /loyalty/accounts/{customer_id}` (saldo de Brasa Points) · `GET /loyalty/accounts/{customer_id}/transactions` · `POST /loyalty/redemptions` (canje). La acumulación de puntos no tiene endpoint público: la genera el sistema a partir de las ventas. | Web (alta), app de fidelización |
 | **people** | `GET, POST /employees` · `GET, PATCH /employees/{id}` · `GET, POST /absences` · `PATCH /absences/{id}` (aprobación o rechazo de vacaciones y ausencias) | Backoffice (RRHH) |
 | **recruitment** | `GET, POST /candidates` · `GET, PATCH /candidates/{id}` · `GET, POST /candidates/{id}/notes` · `DELETE /candidates/{id}/notes/{note_id}` | Backoffice (Talent Pipeline Tracker) |
+| **incidents** | `POST /incidents/analyze` (sube el CSV de incidentes y devuelve el resumen: válidos, inválidos con su motivo, categorías, estados y satisfacción) · `GET /incidents/results/export` (descarga el último análisis como CSV) | Backoffice (operaciones) |
 | **telemetry** | `POST /telemetry/events` (eventos enviados por los locales) · `GET /telemetry/stream` (flujo en tiempo real para el dashboard; tecnología pendiente, ver sección 7) | Locales, dashboard operativo |
 | **reporting** | `GET /reports/sales` (por país, local y periodo, en `currency`) · `GET /reports/locations/ranking` (p. ej. ticket promedio por local) · `GET /reports/hr` (rotación, absentismo, cobertura por país) · `GET /reports/executive-summary` | Dashboards, asistente de IA de dirección |
 

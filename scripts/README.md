@@ -5,4 +5,10 @@ This folder contains **helper scripts** for the monorepo: development automation
 - **Main purpose**: group support tools that do not belong to a specific app, agent, or pipeline but make the team’s work easier.
 - **Recommendation**: document each script (what it does, parameters, requirements, usage examples) and keep them reproducible (and safe) across environments.
 
+## Available scripts
+
+| Script | What it does |
+|---|---|
+| [`incident-report/`](./incident-report/README.md) | Validates and summarizes the operational incidents CSV, and exports the metrics to `data/process/results.csv` (Python, no dependencies). |
+
 > _Spanish version: [README.es.md](./README.es.md)._

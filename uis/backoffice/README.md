@@ -12,11 +12,14 @@ Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS 4. It is an inde
 
 ## How to run it
 
-Copy `.env.example` as `.env.local` and set the API URL:
+Copy `.env.example` as `.env.local` and set the API URLs:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=<api-base-url>
+NEXT_PUBLIC_API_BASE_URL=<api-base-url>           # Tracker API
+API_BASE_URL=http://localhost:8000/api/v1         # Brasaland API (services/brasaland-api)
 ```
+
+Tools that use the Brasaland API need it to be running; see [`services/brasaland-api/README.md`](../../services/brasaland-api/README.md).
 
 Then run:
 
@@ -35,6 +38,7 @@ npm run build
 |---|---|---|
 | `/` | Home page with a card for each tool | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidates, status, stage, and notes | REST API |
+| `/incidencias` | Incident analysis: uploads the Operations CSV, shows the summary and the invalid records with their reason, and downloads `results.csv` | Brasaland API, through the intermediary |
 | `/funciones` | Manual tests for filters, search, reports, and validations | `@repo/brasa-core` sample data |
 
 ## Adding a tool
@@ -48,7 +52,8 @@ Internal areas, including training, join this project as tools, not as separate 
 ## Structure
 
 - `app/`: root layout, home page, and one folder per tool.
-- `components/`: reusable base components, plus `talento/` and `funciones/`.
+- `app/api/[...path]/route.ts`: intermediary (BFF) to the Brasaland API. It forwards `/api/<path>` to `API_BASE_URL/<path>` with no logic, so the API URL stays on the server and CORS is not needed. If the variable is missing it returns 500 (`api_not_configured`); if the API does not respond, 502 (`api_unavailable`).
+- `components/`: reusable base components, plus `talento/`, `funciones/`, and `incidencias/`. `FileDropzone` works for any tool that receives files.
 - `hooks/`: custom hooks.
 - `lib/`: `tools.ts`, `format.ts`, and one folder per tool.
 - `types/`: API types.
@@ -57,5 +62,6 @@ Internal areas, including training, join this project as tools, not as separate 
 
 - **No authentication:** do not publish it until login exists.
 - **`/funciones` is temporary:** it tests the rules in `@repo/brasa-core`, a transitional package. Once those rules move to the backend, it must be retired or call the API. Do not add business calculations to the frontends.
+- **`/incidencias` downloads the API's latest analysis:** it is kept in memory, so if the API restarts the file must be uploaded again, and if two people analyze at the same time, the most recent one is downloaded.
 - **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). Tool links are hidden on mobile, where staff navigate from the home page.
 - **Shared API:** the tracker uses a shared playground API, so avoid test writes against it.

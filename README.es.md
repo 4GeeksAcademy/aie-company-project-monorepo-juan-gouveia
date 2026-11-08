@@ -49,13 +49,22 @@ Estás construyendo **una sola empresa** a lo largo de muchos hitos y proyectos.
 
 ---
 
-## Estado actual de la plantilla
+## Estado actual del proyecto
 
-> 💡 Actualmente el repositorio ofrece solo una **estructura base de carpetas y documentación**. Todavía no incluye aplicaciones ejecutables ni scripts globales en la raíz.
->
-> - `CONTEXT.md` es un placeholder y debe sustituirse por el contexto de la empresa asignada.
-> - No existe todavía un `AGENTS.md` en la raíz.
-> - Existe metadata del paquete compartido en `packages/shared/package.json` (`@repo/shared-types`), pero aún no hay runner de workspace en raíz.
+Este repositorio contiene el proyecto de **Brasaland**. `CONTEXT.md` (y su versión en español, `CONTEXT.es.md`) recoge el briefing de la empresa, y [`memory-bank/progress.md`](./memory-bank/progress.md) lleva el estado detallado y los próximos pasos.
+
+| Área | Ruta | Estado |
+| --- | --- | --- |
+| Web corporativa | [`uis/website/`](./uis/website/README.es.md) | App Next.js en el puerto 3000. El envío del formulario de Brasa Points es simulado |
+| Backoffice | [`uis/backoffice/`](./uis/backoffice/README.es.md) | App Next.js en el puerto 3001: Talent Pipeline Tracker (`/talento`), análisis de incidencias (`/incidencias`) y pruebas de funciones (`/funciones`). Aún no tiene autenticación, así que no debe publicarse |
+| API de Brasaland | [`services/brasaland-api/`](./services/brasaland-api/README.es.md) | FastAPI, organizada por dominios. Solo está implementado el dominio `incidents`, todavía sin base de datos ni autenticación |
+| Script de reporte de incidentes | [`scripts/incident-report/`](./scripts/incident-report/README.es.md) | CLI en Python que valida y resume el CSV de incidentes y exporta `data/process/results.csv`. Reutiliza la lógica de análisis de la API |
+| Paquetes compartidos | [`packages/`](./packages/README.es.md) | `@repo/brasa-core` es transitorio (lo usa `/funciones`); `@repo/shared-types` aún no tiene consumidores |
+| Datos | [`data/raw/`](./data/raw/README.es.md) | `incidents-brasaland.csv` (100 incidentes de prueba) |
+| IA, automatización e infraestructura | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Solo la estructura y los ejemplos de la plantilla |
+
+- Las instrucciones para agentes de código están en el [`AGENTS.md`](./AGENTS.md) raíz, con reglas y skills de desarrollo en `.agents/`.
+- Todavía no hay `docker-compose.yml` en la raíz ni runner de workspace: cada proyecto se instala y ejecuta desde su carpeta, siguiendo su README.
 
 ---
 
@@ -269,8 +278,11 @@ Guía rápida de decisión:
 ```text
 ai-engineering-company-project-monorepo/
 ├── README.md / README.es.md   # Esta guía
-├── CONTEXT.md                 # ← Reemplazar con el briefing de tu empresa
-├── docker-compose.yml         # ← Orquestación local (raíz del repo)
+├── AGENTS.md                  # Instrucciones para agentes de código (+ reglas y skills en .agents/)
+├── CONTEXT.md / CONTEXT.es.md # Briefing de Brasaland
+├── company-choice.md          # Elección de empresa y enfoque personal
+├── memory-bank/               # Brief, contexto técnico y progreso del proyecto
+├── docker-compose.yml         # ← Orquestación local (raíz del repo; aún no creado)
 ├── uis/                       # Frontends (website, backoffice, dashboards)
 ├── services/                  # API FastAPI centralizada de la empresa
 ├── data/
