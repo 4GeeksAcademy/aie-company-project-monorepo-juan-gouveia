@@ -7,6 +7,8 @@ import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 // El tracker (lib/talento/api.ts) no lo usa: llama a una API de terceros que no debe recibir el token.
 const BFF_PREFIX = "/api";
 
+const SERVER_ERROR_MESSAGE = "El servidor tuvo un problema y no pudo completar la operación. Inténtalo de nuevo en unos minutos.";
+
 // Error de la API con su mensaje en español y, en los 422, el detalle por campo.
 export class ApiError extends Error {
   constructor(
@@ -36,6 +38,10 @@ async function toApiError(res: Response, fallback: string): Promise<ApiError> {
     }
   } catch {
     // El cuerpo no es JSON: se usa el mensaje genérico.
+  }
+  if (res.status >= 500) {
+    // Error del servidor sin mensaje propio: nunca se muestra un texto técnico al usuario.
+    return new ApiError(SERVER_ERROR_MESSAGE, res.status, "server_error");
   }
   return new ApiError(`Error ${res.status}: ${fallback}`, res.status, "unknown_error");
 }

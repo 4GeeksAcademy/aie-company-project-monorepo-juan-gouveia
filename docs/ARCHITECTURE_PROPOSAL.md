@@ -302,6 +302,17 @@ Cubre la parte de directorio que esta propuesta asignaba a `procurement/`: alta,
 - **Frontend (ticket AUTH-02):** el backoffice tiene `/login`, `/register` y `/account/profile`, y protege el resto de vistas con un guard en el cliente. El token vive en `localStorage` y pasa por el intermediario (5.2). El website público no cambia.
 - **Pendiente:** los permisos por rol, fuera de la gestión de cuentas, y la asignación de locales o país a cada cuenta.
 
+**Cuarto bloque implementado: gestor de incidencias centralizado (dentro de `incidents/`).** Cualquier sede, la central o el equipo de atención al cliente registra incidencias desde el backoffice, y Operaciones las sigue desde un panel. Se resolvió así:
+
+- **Mismo dominio:** el modelo (`models.py`), su repositorio (`incident_repository.py`) y sus rutas (`manager_router.py`, bajo `/api/v1/incidents`) conviven con el analizador del CSV, que no cambia.
+- **Datos:** tabla `incidents` en el mismo archivo TinyDB que los proveedores. Los dos dominios comparten un bloqueo por archivo (`core/storage.py`), porque TinyDB reescribe el archivo entero en cada escritura.
+- **Ciclo de vida:** `open → in_progress | discarded` e `in_progress → resolved | discarded`. La API rechaza cualquier otra transición con 400.
+- **Histórico:** `scripts/seed_incidents.py` carga el CSV del analizador una sola vez (idempotente), con las transformaciones del briefing.
+- **Errores:** desde este bloque, cualquier excepción no controlada de la API responde 500 con un mensaje genérico; el detalle solo va al log.
+- **Pendiente:** cuando exista `locations/`, `branch` deberá validarse contra sus locales en vez de una lista fija, y el filtro de "quejas de cliente abiertas más de 48 horas" que pide Operaciones (el modelo ya tiene lo necesario).
+
+**Excepción a "el backend es la fuente de verdad": `packages/shared`.** Las reglas del CSV de incidentes (validación y análisis) viven en un paquete Python del monorepo, `packages/shared` (`brasaland_shared`), porque la consigna del gestor exige que el script y la API compartan esa lógica desde `packages/shared/`. No contradice la decisión de 6.2, que va contra duplicar reglas en dos lenguajes: aquí hay una sola implementación, en Python, que la API instala como dependencia local y los scripts importan sin instalar nada. `packages/brasa-core` sigue siendo transitorio.
+
 ---
 
 ## 3. Organización de rutas y routers
@@ -618,7 +629,7 @@ La estructura propuesta solo funciona si se aplica con constancia: FastAPI no im
 
 | Riesgo | Por qué importa | Respuesta propuesta |
 |---|---|---|
-| **Reglas de negocio duplicadas en TypeScript y en Python.** El paquete `packages/brasa-core` ya implementa validaciones y cálculos (margen, ticket promedio, métricas por país), y la herramienta `/funciones` del backoffice los usa. | Si el backend las reimplementa y alguien sigue usando las de `brasa-core`, habrá dos versiones de la misma regla que divergen con el tiempo. | El backend pasa a ser la fuente de verdad de las reglas de negocio. `brasa-core` es transitorio: queda como referencia para portar la lógica y no se amplía con reglas ni consumidores nuevos. Cuando se complete la migración, `/funciones` se retira o pasa a usar la API, y el paquete se elimina. |
+| **Reglas de negocio duplicadas en TypeScript y en Python.** El paquete `packages/brasa-core` ya implementa validaciones y cálculos (margen, ticket promedio, métricas por país), y la herramienta `/funciones` del backoffice los usa. | Si el backend las reimplementa y alguien sigue usando las de `brasa-core`, habrá dos versiones de la misma regla que divergen con el tiempo. | El backend pasa a ser la fuente de verdad de las reglas de negocio. `brasa-core` es transitorio: queda como referencia para portar la lógica y no se amplía con reglas ni consumidores nuevos. Cuando se complete la migración, `/funciones` se retira o pasa a usar la API, y el paquete se elimina. Las reglas que deben compartir la API y los scripts de `scripts/` (hoy, las del CSV de incidentes) van en el paquete Python `packages/shared`, que la API instala: siguen existiendo una sola vez y en Python (ver el cuarto bloque de 2.7). |
 | **No sabemos cómo funcionan los POS.** Solo sabemos que hay uno distinto en cada país y que no están integrados. | Determina si las ventas llegan por carga periódica, por avisos automáticos (webhooks) o por exportación de archivos. Eso afecta a `sales` y a la puntualidad de las alertas. | Averiguarlo antes de empezar `sales/`. La interfaz común (`integrations/pos/`) permite avanzar con un adaptador de prueba mientras tanto. |
 | **Base de datos, autenticación e infraestructura sin decidir.** | La estructura no depende de ellas, pero el primer endpoint real sí. | Cerrar las decisiones de la sección 7 antes del primer sprint de desarrollo. |
 | **Construir los 14 dominios antes de tiempo.** | El árbol de 2.3 es un mapa de destino. Crear carpetas vacías o modelos especulativos para todos los dominios ralentiza al equipo y fija fronteras antes de conocer bien el negocio. | Crear cada dominio cuando se empiece a trabajar en él (2.7). |

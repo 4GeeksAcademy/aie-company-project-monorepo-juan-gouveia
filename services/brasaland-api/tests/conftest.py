@@ -8,7 +8,8 @@ from app.core.email import EmailMessage, get_email_sender
 from app.core.security import create_access_token
 from app.domains.users import service as user_service
 from app.domains.users.models import Role, UserCreate
-from app.domains.incidents.dependencies import get_repository
+from app.domains.incidents.dependencies import get_incident_repository, get_repository
+from app.domains.incidents.incident_repository import IncidentRepository
 from app.domains.incidents.repository import LastAnalysisRepository
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.repository import SupplierRepository
@@ -72,6 +73,16 @@ def supplier_repository(tmp_path):
     app.dependency_overrides[get_supplier_repository] = lambda: repository
     yield repository
     app.dependency_overrides.pop(get_supplier_repository, None)
+    repository.close()
+
+
+@pytest.fixture(autouse=True)
+def incident_repository(tmp_path):
+    """Gestor de incidencias sobre una base TinyDB temporal: ninguna prueba toca storage/brasaland-db.json."""
+    repository = IncidentRepository.from_path(tmp_path / "incidents-test.json")
+    app.dependency_overrides[get_incident_repository] = lambda: repository
+    yield repository
+    app.dependency_overrides.pop(get_incident_repository, None)
     repository.close()
 
 

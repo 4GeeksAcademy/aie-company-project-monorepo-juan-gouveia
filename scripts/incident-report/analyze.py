@@ -5,31 +5,33 @@ Uso:
 
 Si la ruta no existe desde la carpeta actual, se busca el mismo nombre en data/raw/.
 
-Las reglas de validación y el análisis viven en el backend
-(services/brasaland-api/app/domains/incidents/service.py); este script solo se ocupa
-de la consola y de la exportación. El servicio usa solo la librería estándar, así que
-no hace falta instalar nada.
+Las reglas de validación y el análisis viven en el paquete compartido packages/shared
+(brasaland_shared.incidents), que también usan la API y el seed del gestor de incidencias;
+este script solo se ocupa de la consola y de la exportación. El paquete usa solo la
+librería estándar, así que no hace falta instalar nada.
 """
 
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "services" / "brasaland-api"))
+sys.path.insert(0, str(REPO_ROOT / "packages" / "shared"))
 
 # FIELDS, EXPORT_COLUMNS y validate_record no se usan aquí: se reexportan para las pruebas.
-from app.domains.incidents.service import (  # noqa: E402
+from brasaland_shared.incidents.analysis import (  # noqa: E402
     EXPORT_COLUMNS,
-    FIELDS,
-    MAX_SCORE,
-    RULES,
     SCORE_LABELS,
     analyze,
     build_export_rows,
     export_csv_text,
-    load_records,
     percentage,
     rounded_average,
+)
+from brasaland_shared.incidents.validation import (  # noqa: E402
+    FIELDS,
+    MAX_SCORE,
+    RULES,
+    load_records,
     validate_record,
 )
 

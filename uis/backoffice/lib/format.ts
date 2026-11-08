@@ -27,3 +27,15 @@ export function formatDateTime(iso: string): string {
     timeStyle: "short",
   });
 }
+
+// Fecha y hora en UTC, con la zona explícita. Ej.: "14 ene 2024, 0:00 UTC".
+// La usa el gestor de incidencias: el histórico se cargó como medianoche UTC (briefing), y en hora
+// local de Colombia o Florida se vería como el día anterior.
+export function formatDateTimeUtc(iso: string): string {
+  const text = new Date(iso).toLocaleString(LOCALE, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  });
+  return `${text} UTC`;
+}
