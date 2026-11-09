@@ -27,9 +27,15 @@ export default function FuncionesPanel() {
     try {
       setResult({ title, payload: action() });
     } catch (error) {
+      // Herramienta de pruebas: además del mensaje legible se conserva el error técnico, que es lo
+      // que necesita quien prueba las funciones. @repo/brasa-core no lanza errores propios, así que
+      // aquí solo llegan fallos inesperados (p. ej. un TypeError).
       setResult({
         title: `Error en ${title}`,
-        payload: { message: error instanceof Error ? error.message : String(error) },
+        payload: {
+          message: "La función falló de forma inesperada. Revisa el detalle técnico y los datos de entrada.",
+          detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        },
       });
     }
   }

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { getRecordById, updateRecord } from "@/lib/talento/api";
+import { getRecordById, PartialSaveError, updateRecord } from "@/lib/talento/api";
 import BackLink from "@/components/BackLink";
+import Button from "@/components/Button";
 import CandidateDetails from "@/components/talento/CandidateDetails";
 import CandidateFormModal from "@/components/talento/CandidateFormModal";
 import CandidateHeader from "@/components/talento/CandidateHeader";
@@ -12,6 +13,7 @@ import LoadingMessage from "@/components/LoadingMessage";
 import NotesSection from "@/components/talento/NotesSection";
 import StatusStageSelectors from "@/components/talento/StatusStageSelectors";
 import type { RecordCreateInput, RecordDetail } from "@/types/record";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchStatus = "loading" | "success" | "error";
 
@@ -21,6 +23,8 @@ export default function CandidateDetailPage() {
   const [record, setRecord] = useState<RecordDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  // "Reintentar" tras un error de carga: vuelve a pedir el candidato.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function loadRecord() {
@@ -30,17 +34,22 @@ export default function CandidateDetailPage() {
         setRecord(data);
         setStatus("success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error desconocido");
+        setError(toUserMessage(err, "No se pudo cargar el candidato. Vuelve a intentarlo en unos minutos."));
         setStatus("error");
       }
     }
 
     loadRecord();
-  }, [id]);
+  }, [id, reloadKey]);
 
   async function handleEdit(input: RecordCreateInput) {
-    const updated = await updateRecord(id, input);
-    setRecord(updated);
+    try {
+      setRecord(await updateRecord(id, input));
+    } catch (err) {
+      // Guardado parcial: la ficha muestra los datos que sí se guardaron.
+      if (err instanceof PartialSaveError) setRecord(err.record);
+      throw err;
+    }
   }
 
   return (
@@ -49,7 +58,14 @@ export default function CandidateDetailPage() {
 
       {status === "loading" && <LoadingMessage>Cargando candidato...</LoadingMessage>}
 
-      {status === "error" && <ErrorMessage>{error}</ErrorMessage>}
+      {status === "error" && (
+        <div role="alert" className="flex flex-col items-start gap-3">
+          <ErrorMessage>{error}</ErrorMessage>
+          <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       {status === "success" && record && (
         <article className="rounded-lg bg-white p-4 shadow-md md:p-6">

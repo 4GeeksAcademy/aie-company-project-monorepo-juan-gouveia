@@ -164,8 +164,16 @@ def main(argv):
     try:
         source = resolve_source(argv[0])
         records = load_records(source)
+    except UnicodeDecodeError:
+        # Hereda de ValueError, pero su mensaje es técnico ("'utf-8' codec can't decode byte...").
+        print(f"Error: {argv[0]} is not valid UTF-8. Export it again as \"CSV UTF-8\".", file=sys.stderr)
+        return 1
     except (FileNotFoundError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
+        return 1
+    except OSError as error:
+        # Por ejemplo, sin permiso de lectura o un archivo bloqueado por otro programa.
+        print(f"Error: could not read {argv[0]} ({error.strerror or error}).", file=sys.stderr)
         return 1
 
     # La consola de Windows usa cp1252 por defecto y no puede imprimir ├─ ni └─.
@@ -173,8 +181,25 @@ def main(argv):
     summary = analyze(records)
     print(format_report(summary, source.name))
 
-    if wants_export():
-        path = export_csv(build_export_rows(summary))
+    try:
+        export = wants_export()
+    except KeyboardInterrupt:
+        # Ctrl+C en la pregunta: el reporte ya se mostró; solo se cancela la exportación.
+        # 130 es el código habitual de una interrupción con Ctrl+C (128 + SIGINT).
+        print("\nExport cancelled.", file=sys.stderr)
+        return 130
+
+    if export:
+        try:
+            path = export_csv(build_export_rows(summary))
+        except OSError as error:
+            # Caso habitual en Windows: results.csv está abierto en Excel, que lo bloquea.
+            print(
+                f"Error: could not write {EXPORT_PATH} ({error.strerror or error}). "
+                "If it is open in another program (e.g. Excel), close it and run the script again.",
+                file=sys.stderr,
+            )
+            return 1
         print(f"Results exported to {path}")
     else:
         print("Export skipped.")

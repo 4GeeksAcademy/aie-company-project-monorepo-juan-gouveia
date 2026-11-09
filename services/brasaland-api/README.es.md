@@ -331,6 +331,7 @@ Todos los errores responden con el formato `{"error": {"code": "...", "message":
 | Supera 5 MB | 413 | `file_too_large` |
 | No está en UTF-8 | 422 | `invalid_encoding` |
 | Faltan columnas; el mensaje dice cuáles | 422 | `missing_columns` |
+| CSV mal formado (por ejemplo, una comilla sin cerrar); el mensaje indica la línea | 422 | `malformed_csv` |
 | Solo tiene el encabezado | 422 | `no_records` |
 | Export sin análisis previo | 404 | `no_analysis` |
 | Proveedor inexistente | 404 | `supplier_not_found` |
@@ -371,6 +372,12 @@ Ejemplo de 422:
   }
 }
 ```
+
+### Comandos de consola
+
+`uv run seed` y `uv run create-admin` escriben el resultado en `stdout` y los errores en `stderr`, sin traceback, y terminan con código 0 si todo va bien y 1 si falla (`create-admin` termina con 130 si se cancela con Ctrl+C). Detectan una base de datos que no se puede abrir, que no es un JSON válido (no se modifica) o que no se puede escribir.
+
+Los dos muestran la ruta absoluta de la base de datos que usan, a propósito: solo la ve quien opera el servidor, en su propia consola, y como `BRASALAND_DB_PATH` y `AUTH_DB_PATH` pueden apuntar a cualquier sitio, es la forma de confirmar qué archivo se modificó. La API nunca devuelve esa ruta a un cliente.
 
 ## Quién la usa
 

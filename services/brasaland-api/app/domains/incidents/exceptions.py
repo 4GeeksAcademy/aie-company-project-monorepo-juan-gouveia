@@ -9,6 +9,7 @@ from brasaland_shared.incidents.exceptions import (
     EmptyFileError,
     IncidentFileError,
     InvalidEncodingError,
+    MalformedCsvError,
     MissingColumnsError,
     NoRecordsError,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "IncidentFileError",
     "InvalidEncodingError",
     "InvalidTransitionError",
+    "MalformedCsvError",
     "MissingColumnsError",
     "NoRecordsError",
 ]

@@ -1,5 +1,6 @@
 "use client";
 
+import Button from "@/components/Button";
 import ErrorMessage from "@/components/ErrorMessage";
 import FileDropzone from "@/components/FileDropzone";
 import LoadingMessage from "@/components/LoadingMessage";
@@ -25,7 +26,7 @@ function toRows(items: CodeCount[], describe?: (code: string) => string | undefi
 }
 
 export default function IncidentAnalysisPanel() {
-  const { state, analyze } = useIncidentAnalysis();
+  const { state, analyze, retry } = useIncidentAnalysis();
   const loading = state.status === "loading";
 
   return (
@@ -48,8 +49,17 @@ export default function IncidentAnalysisPanel() {
         {loading && <LoadingMessage>Analizando el archivo...</LoadingMessage>}
 
         {state.status === "error" && (
-          <div role="alert">
+          <div role="alert" className="flex flex-col items-start gap-3">
             <ErrorMessage>{state.message}</ErrorMessage>
+            {state.retryable ? (
+              <Button variant="secondary" onClick={retry}>
+                Reintentar con el mismo archivo
+              </Button>
+            ) : (
+              <p className="text-sm text-black">
+                Corrige el archivo y vuelve a elegirlo en la zona de arriba.
+              </p>
+            )}
           </div>
         )}
 

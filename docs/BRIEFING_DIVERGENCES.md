@@ -17,6 +17,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 4. [Autenticación en el frontend](#autenticación-en-el-frontend) (ticket AUTH-02)
 5. [Recuperación y cambio de contraseña](#recuperación-y-cambio-de-contraseña) (ticket AUTH-03)
 6. [Gestor de incidencias centralizado](#gestor-de-incidencias-centralizado) (briefing "Gestor de Incidencias Centralizado")
+7. [Auditoría de gestión de errores](#auditoría-de-gestión-de-errores) (briefing "Auditoría de gestión de errores", rama `feature/error-handling-audit`)
 
 ---
 
@@ -556,3 +557,53 @@ Ejecutado el 8 de noviembre de 2026. Las pruebas en vivo usaron la API y el back
 | La validación está en `packages/shared/` y la reutilizan script y API, sin duplicación | `git grep` de cada definición; pruebas del analizador | Cada función y constante existe una sola vez, en `packages/shared/brasaland_shared/incidents/`; 32 pruebas del script y 24 de la API sin cambios |
 | El código sigue la estructura del monorepo | Árbol del repositorio | `scripts/seed_incidents.py`, `packages/shared/`, `services/brasaland-api/` y `uis/backoffice/` |
 | Sin regresiones | `uv run pytest` en la API; `python -m unittest` en `scripts/incident-report`; pruebas del seed; `tsc`, `lint` y `build` en `uis/backoffice` | 539, 32 y 16 pruebas pasan; el backoffice compila sin errores |
+
+---
+
+## Auditoría de gestión de errores
+
+Revisión transversal del repositorio (frontend, backend y scripts) para aplicar una estrategia de errores coherente, sin funcionalidades nuevas. Coinciden con el briefing:
+
+- la rama `feature/error-handling-audit`;
+- los ocho criterios de evaluación: tres estados en las operaciones asíncronas, mensajes legibles con llamada a la acción, capturas acotadas, `finally` para limpiar la carga, `?.` y valores por defecto, errores del backend estructurados con su código HTTP, nada sensible en la salida al cliente, y scripts que gestionan la E/S y terminan con un código distinto de cero;
+- un commit por corrección, con qué se corrigió y por qué.
+
+Las diferencias son tres puntos en que el código se aparta a propósito de la letra del checklist, cada uno con su motivo.
+
+> **Estado:** los 29 hallazgos de la auditoría están corregidos (2026-11-09). Pruebas: 559 de la API, 36 del analizador y 20 del seed de incidencias; `tsc`, `lint` y `build` sin errores en el backoffice y la web. La prueba manual en el navegador de los estados de error queda pendiente.
+
+| Qué | Consigna o briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Errores en `/funciones` | Ningún mensaje técnico en crudo | Mensaje en español y, aparte, el error técnico (`detail`) | Es una herramienta manual de pruebas para quien desarrolla; ocultar el error le quita su utilidad |
+| Ruta de la base en los comandos de consola | Las respuestas de error no exponen rutas internas; quitar los `print` con información interna sensible | `uv run seed`, `uv run create-admin` y `seed_incidents.py` muestran la ruta absoluta de la base | Solo la ve quien opera el servidor, en su consola; confirma qué archivo se modificó |
+| Ámbito de las capturas en `create-admin` | Capturas acotadas a operaciones específicas, no a funciones enteras | Un `try` alrededor de toda la lógica captura la cancelación y los errores de la base | La cancelación puede llegar en cualquiera de las tres preguntas y la base se usa en tres puntos |
+
+### 1. `/funciones` muestra el error técnico
+
+`/funciones` (página "Pruebas del Sistema (Manual)") ejecuta las funciones de `@repo/brasa-core` con datos de muestra, sin red. Esa librería no lanza errores propios, así que solo pueden llegar fallos inesperados de JavaScript, como un `TypeError`. Si se tradujeran a un mensaje genérico, como en el resto del backoffice, quien prueba las funciones perdería justo el dato que necesita.
+
+El resultado muestra primero un mensaje en español ("La función falló de forma inesperada. Revisa el detalle técnico y los datos de entrada.") y, en un campo aparte, el nombre y el mensaje del error. El README del backoffice lo explica en sus limitaciones. La página ya está marcada como temporal: cuando esas reglas pasen al backend, se retira o llama a la API.
+
+### 2. Ruta absoluta de la base en los comandos de consola
+
+El checklist pide que las respuestas de error no expongan rutas internas y que se eliminen los `print` con información interna sensible. Los tres comandos que escriben en las bases TinyDB (`uv run seed`, `uv run create-admin` y `scripts/seed_incidents.py`) muestran la ruta absoluta del archivo que usan. Se mantiene por tres motivos:
+
+- **No llega a ningún cliente.** Solo la ve quien opera el servidor, en su propia consola. La API nunca la devuelve.
+- **Una ruta relativa sería ambigua.** `BRASALAND_DB_PATH` y `AUTH_DB_PATH` pueden apuntar fuera del servicio, y la ruta absoluta es la que confirma qué archivo se modificó. Durante la propia auditoría sirvió para eso: un comando lanzado con la variable equivocada mostró que había ido a la base real.
+- **Ya estaba probado así.** Una prueba del seed de incidencias comprueba que se muestra la ruta resuelta.
+
+Cada punto del código lleva un comentario con el motivo, y los README de la API (apartado "Comandos de consola") y de `scripts/` lo documentan. La búsqueda final de `console.*`, `print` y `logger` no encontró nada sensible: el intermediario del backoffice registra el método, la ruta sin query y la causa, nunca cabeceras ni cuerpo, y el correo registra solo el asunto.
+
+### 3. Capturas de `create-admin` alrededor de toda su lógica
+
+El resto de los scripts captura cada operación por separado (leer el CSV, abrir la base, cargar los datos). `create-admin` usa un único `try` alrededor de su lógica, que pasó a una función interna, `_create_or_promote`. Ese `try` no engulle todos los errores: solo captura cuatro tipos concretos, con un mensaje propio para cada uno:
+
+- `KeyboardInterrupt` (código 130);
+- `EOFError`;
+- `json.JSONDecodeError`, una base corrupta;
+- `OSError`.
+
+Se hace así porque esos errores no pertenecen a una sola operación. Ctrl+C o el fin de la entrada pueden llegar en cualquiera de las tres preguntas (email, contraseña y repetición), y la base se lee o se escribe en tres puntos (buscar el email, promover y crear). Una captura por operación repetiría los mismos cuatro bloques en seis sitios.
+
+Como todas las preguntas se hacen antes de escribir, cancelar nunca deja cambios a medias. Los errores de validación del email y la contraseña sí se capturan en su operación, como antes.
+

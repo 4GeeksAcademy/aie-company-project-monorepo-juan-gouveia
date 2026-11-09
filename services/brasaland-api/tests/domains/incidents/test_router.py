@@ -137,6 +137,17 @@ def test_analyze_missing_columns_lists_them(client):
     assert "location_id" in message and "reporter_id" in message
 
 
+def test_analyze_malformed_csv_is_a_file_error(client):
+    # Una comilla sin cerrar convierte el resto del archivo en un único campo que supera el límite del
+    # módulo csv (131 072 caracteres): debe ser un 422 del archivo, no un 500.
+    good = "BRS-{n:06d},2024-01-01,COL-01,STAFF,Retraso en el turno,OPEN,,,MGR-01\n"
+    text = HEADER + "\n" + good.format(n=1) + 'BRS-000002,2024-01-01,COL-01,STAFF,"Sin cerrar,OPEN,,,MGR-01\n'
+    text +="".join(good.format(n=n) for n in range(3, 2500))
+    upload = ("comilla.csv", text.encode(), "text/csv")
+    message = assert_error(client.post(ANALYZE_URL, files={"file": upload}), 422, "malformed_csv")
+    assert "línea 3" in message
+
+
 def test_analyze_file_too_large(client, monkeypatch):
     monkeypatch.setattr("app.domains.incidents.router.MAX_UPLOAD_BYTES", 100)
     upload = ("grande.csv", b"x" * 101, "text/csv")

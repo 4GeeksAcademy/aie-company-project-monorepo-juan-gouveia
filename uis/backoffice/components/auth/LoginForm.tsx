@@ -54,15 +54,20 @@ export default function LoginForm() {
     setSubmitting(true);
     setApiMessage(null);
     setApiFields({});
+    // Tras el éxito el formulario sigue bloqueado mientras navega: router.replace no se espera, y
+    // reactivarlo permitiría un segundo envío. En cualquier otro caso, finally lo libera.
+    let navigating = false;
     try {
       const { access_token } = await login(values.email.trim(), values.password);
       setToken(access_token);
+      navigating = true;
       router.replace(safeNext(next));
     } catch (err) {
       const result = formErrorsFromApi(err, FIELDS, "No se pudo iniciar sesión.");
       setApiFields(result.fields);
       setApiMessage(result.message);
-      setSubmitting(false);
+    } finally {
+      if (!navigating) setSubmitting(false);
     }
   }
 

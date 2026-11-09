@@ -69,14 +69,58 @@ def test_main_prints_inserted_count(tmp_path, monkeypatch, capsys):
     db_path = tmp_path / "cli.json"
     monkeypatch.setenv(DB_PATH_ENV, str(db_path))
 
-    seed_module.main()
+    assert seed_module.main() == 0
     first = capsys.readouterr().out
-    seed_module.main()
+    assert seed_module.main() == 0
     second = capsys.readouterr().out
 
     assert "15 proveedores insertados, 0 ya existían. Total en la base: 15" in first
     assert "0 proveedores insertados, 15 ya existían. Total en la base: 15" in second
     assert db_path.exists()
+
+
+def test_main_reports_corrupt_database_and_leaves_it_untouched(tmp_path, monkeypatch, capsys):
+    db_path = tmp_path / "cli.json"
+    db_path.write_text("{corrupto", encoding="utf-8")
+    monkeypatch.setenv(DB_PATH_ENV, str(db_path))
+
+    assert seed_module.main() == 1
+    assert "no es un JSON válido" in capsys.readouterr().err
+    assert db_path.read_text(encoding="utf-8") == "{corrupto"
+
+
+def test_main_reports_database_that_cannot_be_opened(tmp_path, monkeypatch, capsys):
+    def denied(_path):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setenv(DB_PATH_ENV, str(tmp_path / "cli.json"))
+    monkeypatch.setattr(SupplierRepository, "from_path", staticmethod(denied))
+    assert seed_module.main() == 1
+    assert "No se puede abrir la base de proveedores" in capsys.readouterr().err
+
+
+def test_main_reports_write_failure(tmp_path, monkeypatch, capsys):
+    def full(_repository):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setenv(DB_PATH_ENV, str(tmp_path / "cli.json"))
+    monkeypatch.setattr(seed_module, "seed", full)
+    assert seed_module.main() == 1
+    err = capsys.readouterr().err
+    assert "No space left on device" in err and "no se duplica" in err
+
+
+def test_main_rejects_invalid_seed_data_without_writing(tmp_path, monkeypatch, capsys):
+    db_path = tmp_path / "cli.json"
+    monkeypatch.setenv(DB_PATH_ENV, str(db_path))
+    broken = [{**SUPPLIERS_SEED[0], "rate_per_unit": -1}]
+    monkeypatch.setattr(seed_module, "SUPPLIERS_SEED", broken)
+
+    assert seed_module.main() == 1
+    assert "rate_per_unit" in capsys.readouterr().err
+    repository = SupplierRepository.from_path(db_path)
+    assert repository.count() == 0
+    repository.close()
 
 
 def test_api_startup_seeds_an_empty_database(supplier_repository):

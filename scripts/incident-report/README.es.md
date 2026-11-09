@@ -27,7 +27,7 @@ Desde la raíz del repositorio:
 python scripts/incident-report/analyze.py data/raw/incidents-brasaland.csv
 ```
 
-La ruta se interpreta desde la carpeta actual. Si no existe ahí, el script busca el mismo nombre en `data/raw/`. Si no encuentra el archivo, o si al CSV le faltan columnas, muestra un error y termina con código 1.
+La ruta se interpreta desde la carpeta actual. Si no existe ahí, el script busca el mismo nombre en `data/raw/`. Si no encuentra o no puede leer el archivo, si no está en UTF-8, o si al CSV le faltan columnas o está mal formado (por ejemplo, una comilla sin cerrar), muestra un error y termina con código 1.
 
 ## Qué hace
 
@@ -53,7 +53,7 @@ Los porcentajes y el promedio se redondean hacia arriba en caso de empate, por e
 
 ## Exportación
 
-El resultado se guarda en `data/process/results.csv`, lances el comando desde donde lo lances, y sobrescribe la exportación anterior. El archivo está ignorado en Git.
+El resultado se guarda en `data/process/results.csv`, lances el comando desde donde lo lances, y sobrescribe la exportación anterior. El archivo está ignorado en Git. Si no se puede escribir, por ejemplo porque está abierto en Excel, el script muestra un error y termina con código 1; cierra el archivo y vuelve a ejecutarlo.
 
 Hay una fila por métrica, con las columnas `metric`, `value` y `percentage`. Esta última queda vacía cuando no aplica.
 
