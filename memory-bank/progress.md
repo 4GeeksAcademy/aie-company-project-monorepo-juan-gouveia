@@ -64,6 +64,16 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestor de incidencias centralizado" (rutas `/api/v1`, `incident_seed_log`, 400 solo en el gestor, `status` fijo, menú en móvil y tablet, decisiones y la tabla de los 21 criterios), y la divergencia 3 del analizador marcada como resuelta. `ARCHITECTURE_PROPOSAL.md` (cuarto bloque en 2.7 y `packages/shared` en 6.2) y los README.
 - **Pendiente:** fusionar el PR #11 (tras el #10) y la entrega; los hace el desarrollador.
 
+**Auditoría de gestión de errores completada en la rama `feature/error-handling-audit`**, creada desde `feature/incident-manager` (2026-11-09). Es local: todavía no se ha subido a GitHub ni tiene PR. Se auditó todo el repositorio y se corrigieron los 29 hallazgos (1 crítico, 6 altos, 11 medios y 11 bajos), uno por commit, sin funcionalidades nuevas:
+
+- **Frontend (backoffice y web):** pantallas de error de Next.js (`error.tsx`, `global-error.tsx` y `not-found.tsx`) con "Reintentar" y "Volver al inicio". Mensajes legibles para cualquier estado HTTP o respuesta no JSON, y `toUserMessage` para no mostrar nunca un error técnico. Cliente del tracker de talento con timeout, captura de red y listas comprobadas. Guardado parcial distinguido, "Reintentar" en todas las cargas, indicación de qué hacer tras un error del análisis, `finally` en los formularios, fechas no válidas como "—", y `localStorage` bloqueado sin romper la sesión.
+- **Intermediario (BFF):** mensaje genérico si falta `API_BASE_URL`, y log `[BFF]` de los 502 y 504 sin cabeceras ni cuerpo.
+- **API:** un CSV mal formado da 422 `malformed_csv` en lugar de 500. Los 404 y 405 del framework y los errores de validación de Pydantic están en español. Los fallos de Resend se registran con su estado y tipo, sin el destinatario, y el envío tiene un timeout de 10 s. `uv run seed` y `uv run create-admin` escriben los errores en `stderr` y terminan con su código de salida.
+- **Scripts:** `analyze.py` gestiona los errores de lectura, de codificación y de escritura de `results.csv`, y la cancelación con Ctrl+C. `seed_incidents.py` gestiona la lectura del CSV y la apertura, corrupción y escritura de la base.
+- **Verificación:** 559 pruebas pytest (20 nuevas), 36 del analizador y 20 del seed; `tsc`, `lint` y `build` del backoffice y la web. Cada corrección se probó por separado (simulaciones en Node, servidores reales para el BFF y ejecuciones reales de los scripts).
+- **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Auditoría de gestión de errores", con tres divergencias: el detalle técnico en `/funciones`, la ruta absoluta de la base en los comandos de consola y el ámbito de las capturas de `create-admin`. También los README de la API, del backoffice, de `scripts/` y del analizador, y `techContext.md` (código `malformed_csv`).
+- **Pendiente:** la prueba manual en el navegador de los estados de error (opcional), subir la rama, abrir el PR y la entrega; lo hace el desarrollador.
+
 **Pull requests (2026-11-09).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
@@ -209,6 +219,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 ## Propuesta de Próximos Pasos
 
 ### Inmediatos (Sprint Actual)
+
+0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Falta subir la rama y abrir el PR, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
 0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado, documentado y con commit (`ccd09cc`). PR #11 abierto, contra `feature/password-reset` mientras el #10 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
 
