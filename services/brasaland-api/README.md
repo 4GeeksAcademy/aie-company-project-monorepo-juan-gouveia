@@ -373,6 +373,12 @@ The incident file type is validated by extension, not by `Content-Type`, because
 }
 ```
 
+### Console commands
+
+`uv run seed` and `uv run create-admin` write the result to `stdout` and errors to `stderr`, without a traceback, and exit with code 0 on success and 1 on failure (`create-admin` exits with 130 when cancelled with Ctrl+C). They detect a database that cannot be opened, is not valid JSON (it is left untouched) or cannot be written.
+
+Both show the absolute path of the database they use, on purpose: only the person operating the server sees it, in their own console, and since `BRASALAND_DB_PATH` and `AUTH_DB_PATH` can point anywhere, it is how they confirm which file was changed. The API never returns that path to a client.
+
 ## Who uses it
 
 - **`uis/backoffice`:** through its intermediary `app/api/[...path]/route.ts` (BFF pattern), with the server variable `API_BASE_URL=http://localhost:8000/api/v1`. The browser never calls the API directly, so no CORS is needed. The `/incidencias` and `/proveedores` tools use it, and so do the session views (`/login`, `/register`). The browser stores the token in `localStorage` and sends it in `Authorization: Bearer`; the intermediary forwards it as is (ticket AUTH-02).

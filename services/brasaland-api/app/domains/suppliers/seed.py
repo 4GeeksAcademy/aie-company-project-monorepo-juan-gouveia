@@ -229,6 +229,8 @@ def main() -> int:
         return 1
     finally:
         repository.close()
+    # Ruta absoluta a propósito: confirma a quien lo ejecuta qué archivo se modificó
+    # (BRASALAND_DB_PATH puede apuntar a cualquier sitio).
     print(
         f"Seeder completado: {result.inserted} proveedores insertados, "
         f"{result.skipped} ya existían. Total en la base: {total} ({path})."

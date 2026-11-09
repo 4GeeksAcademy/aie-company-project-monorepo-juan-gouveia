@@ -108,5 +108,7 @@ def _create_or_promote(
 
 def run() -> int:
     """Punto de entrada de `uv run create-admin` (el código devuelto es el de salida del proceso)."""
+    # Ruta absoluta a propósito: solo la ve quien opera el servidor y le confirma qué archivo se usa
+    # (AUTH_DB_PATH puede apuntar a cualquier sitio). La API nunca la devuelve a un cliente.
     print(f"Base de usuarios: {get_auth_db_path()}")
     return main()

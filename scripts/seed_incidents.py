@@ -159,6 +159,8 @@ def format_report(result: SeedResult, source: Path, db_path: Path) -> str:
     ]
     for incident_id, row, reasons in result.invalid:
         lines.append(f"    - {incident_id or '(sin incident_id)'} (fila {row}): {'; '.join(reasons)}")
+    # Ruta absoluta a propósito: confirma a quien lo ejecuta qué archivo se modificó
+    # (BRASALAND_DB_PATH puede apuntar a cualquier sitio).
     lines.append(f"Base de datos: {db_path}")
     return "\n".join(lines)
 

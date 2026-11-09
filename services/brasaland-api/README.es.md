@@ -373,6 +373,12 @@ Ejemplo de 422:
 }
 ```
 
+### Comandos de consola
+
+`uv run seed` y `uv run create-admin` escriben el resultado en `stdout` y los errores en `stderr`, sin traceback, y terminan con código 0 si todo va bien y 1 si falla (`create-admin` termina con 130 si se cancela con Ctrl+C). Detectan una base de datos que no se puede abrir, que no es un JSON válido (no se modifica) o que no se puede escribir.
+
+Los dos muestran la ruta absoluta de la base de datos que usan, a propósito: solo la ve quien opera el servidor, en su propia consola, y como `BRASALAND_DB_PATH` y `AUTH_DB_PATH` pueden apuntar a cualquier sitio, es la forma de confirmar qué archivo se modificó. La API nunca devuelve esa ruta a un cliente.
+
 ## Quién la usa
 
 - **`uis/backoffice`:** a través de su intermediario `app/api/[...path]/route.ts` (patrón BFF), con la variable de servidor `API_BASE_URL=http://localhost:8000/api/v1`. El navegador nunca llama a la API directamente, así que no hace falta CORS. Lo usan las herramientas `/incidencias` y `/proveedores`, y las vistas de sesión (`/login`, `/register`). El navegador guarda el token en `localStorage` y lo envía en `Authorization: Bearer`; el intermediario lo reenvía tal cual (ticket AUTH-02).
