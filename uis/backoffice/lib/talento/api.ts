@@ -26,6 +26,9 @@ const TIMEOUT_MESSAGE = "El servicio de candidatos tarda demasiado en responder.
 const WRITE_TIMEOUT_MESSAGE =
   "El servicio de candidatos tarda demasiado en responder. Recarga la página para comprobar si el cambio se guardó antes de repetirlo.";
 
+const UNEXPECTED_DATA_MESSAGE =
+  "El servicio de candidatos respondió con datos que no se pueden mostrar. Inténtalo de nuevo en unos minutos.";
+
 export interface RecordFilters {
   status?: RecordStatus;
   stage?: RecordStage;
@@ -56,6 +59,14 @@ async function talentFetch(path: string, fallback: string, init?: RequestInit): 
   return res;
 }
 
+// La lista `data` de una respuesta del tracker. Si no es una lista (el servicio de terceros cambió su
+// formato o respondió null), se lanza un error en vez de devolver undefined, que rompería la página, o
+// una lista vacía, que haría creer que no hay datos. Así la pantalla muestra su estado de error.
+function listFrom<T>(body: { data?: unknown } | null): T[] {
+  if (Array.isArray(body?.data)) return body.data as T[];
+  throw new ApiError(UNEXPECTED_DATA_MESSAGE, 200, "invalid_response");
+}
+
 export async function getRecords(filters: RecordFilters = {}): Promise<RecordListItem[]> {
   const params = new URLSearchParams({ limit: "200" });
   if (filters.status) params.set("status", filters.status);
@@ -63,8 +74,7 @@ export async function getRecords(filters: RecordFilters = {}): Promise<RecordLis
   if (filters.search) params.set("search", filters.search);
 
   const res = await talentFetch(`/records?${params.toString()}`, "no se pudieron obtener los candidatos");
-  const body = await readJson<RecordListResponse>(res);
-  return body.data;
+  return listFrom<RecordListItem>(await readJson<RecordListResponse | null>(res));
 }
 
 export async function getRecordById(id: string): Promise<RecordDetail> {
@@ -79,8 +89,7 @@ export async function patchRecord(id: string, patch: RecordPatch): Promise<Recor
 
 export async function getNotes(recordId: string): Promise<Note[]> {
   const res = await talentFetch(`/records/${recordId}/notes`, "no se pudieron obtener las notas");
-  const body = await readJson<NoteListResponse>(res);
-  return body.data;
+  return listFrom<Note>(await readJson<NoteListResponse | null>(res));
 }
 
 export async function createNote(recordId: string, note: NoteCreate): Promise<Note> {
