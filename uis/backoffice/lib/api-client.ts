@@ -26,7 +26,8 @@ export class ApiError extends Error {
 }
 
 export interface ApiRequestOptions extends RequestInit {
-  // Mensaje si la API no explica el error: "Error <status>: <fallback>".
+  // Qué falló, si la API no lo explica (por ejemplo, "no se pudo guardar el perfil"). Se muestra
+  // con mayúscula inicial y una indicación según el tipo de error, nunca con el código de estado.
   fallback: string;
   // Si es false, un 401 o una cuenta desactivada se devuelven como error y no cierran la sesión.
   // Lo usa el login, donde un 401 significa "credenciales incorrectas".
@@ -46,7 +47,27 @@ async function toApiError(res: Response, fallback: string): Promise<ApiError> {
     // Error del servidor sin mensaje propio: nunca se muestra un texto técnico al usuario.
     return new ApiError(SERVER_ERROR_MESSAGE, res.status, "server_error");
   }
-  return new ApiError(`Error ${res.status}: ${fallback}`, res.status, "unknown_error");
+  return new ApiError(clientErrorMessage(res.status, fallback), res.status, "unknown_error");
+}
+
+// Qué puede hacer el usuario según el tipo de error, cuando la API no envía su propio mensaje.
+const CLIENT_ERROR_HINTS: Record<number, string> = {
+  400: "Revisa los datos e inténtalo de nuevo.",
+  401: "Inicia sesión de nuevo e inténtalo otra vez.",
+  403: "No tienes permiso para realizar esta acción.",
+  404: "Lo que buscas ya no existe o cambió. Recarga la página.",
+  409: "Los datos cambiaron mientras tanto. Recarga la página e inténtalo de nuevo.",
+  413: "El archivo o los datos son demasiado grandes.",
+  415: "El formato del archivo no es compatible.",
+  422: "Revisa los datos e inténtalo de nuevo.",
+  429: "Hay demasiadas solicitudes. Espera un momento e inténtalo de nuevo.",
+};
+const DEFAULT_CLIENT_ERROR_HINT = "Inténtalo de nuevo; si el problema continúa, recarga la página.";
+
+// Ej.: 404 + "no se pudo cambiar el estado" → "No se pudo cambiar el estado. Lo que buscas ya no existe…".
+function clientErrorMessage(status: number, fallback: string): string {
+  const action = fallback.charAt(0).toUpperCase() + fallback.slice(1);
+  return `${action}. ${CLIENT_ERROR_HINTS[status] ?? DEFAULT_CLIENT_ERROR_HINT}`;
 }
 
 // 401: falta el token, es inválido o caducó. 403 `inactive_user`: la cuenta se desactivó.
