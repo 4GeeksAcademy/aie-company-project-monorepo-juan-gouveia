@@ -331,6 +331,7 @@ Todos los errores responden con el formato `{"error": {"code": "...", "message":
 | Supera 5 MB | 413 | `file_too_large` |
 | No está en UTF-8 | 422 | `invalid_encoding` |
 | Faltan columnas; el mensaje dice cuáles | 422 | `missing_columns` |
+| CSV mal formado (por ejemplo, una comilla sin cerrar); el mensaje indica la línea | 422 | `malformed_csv` |
 | Solo tiene el encabezado | 422 | `no_records` |
 | Export sin análisis previo | 404 | `no_analysis` |
 | Proveedor inexistente | 404 | `supplier_not_found` |

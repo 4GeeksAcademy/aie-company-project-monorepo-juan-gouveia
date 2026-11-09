@@ -331,6 +331,7 @@ Every error responds with the format `{"error": {"code": "...", "message": "..."
 | It exceeds 5 MB | 413 | `file_too_large` |
 | It is not UTF-8 | 422 | `invalid_encoding` |
 | Missing columns; the message says which | 422 | `missing_columns` |
+| Malformed CSV (e.g. an unclosed quote); the message gives the line | 422 | `malformed_csv` |
 | It only has the header | 422 | `no_records` |
 | Export with no previous analysis | 404 | `no_analysis` |
 | Supplier does not exist | 404 | `supplier_not_found` |
