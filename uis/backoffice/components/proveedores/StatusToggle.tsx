@@ -4,6 +4,7 @@ import { useState } from "react";
 import Button from "@/components/Button";
 import { updateStatus } from "@/lib/proveedores/api";
 import type { Supplier } from "@/types/supplier";
+import { toUserMessage } from "@/lib/error-message";
 
 interface StatusToggleProps {
   supplier: Supplier;
@@ -22,7 +23,7 @@ export default function StatusToggle({ supplier, onUpdated }: StatusToggleProps)
     try {
       onUpdated(await updateStatus(supplier.id, isActive ? "suspended" : "active"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cambiar el estado");
+      setError(toUserMessage(err, "No se pudo cambiar el estado. Inténtalo de nuevo."));
     } finally {
       setSaving(false);
     }

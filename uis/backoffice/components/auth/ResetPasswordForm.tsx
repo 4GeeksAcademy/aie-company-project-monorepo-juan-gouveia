@@ -17,6 +17,7 @@ import {
   type FieldErrors,
   type NewPasswordValues,
 } from "@/lib/auth/validation";
+import { toUserMessage } from "@/lib/error-message";
 
 const MISSING_TOKEN = "El enlace de restablecimiento no es válido. Solicita uno nuevo.";
 
@@ -54,7 +55,7 @@ export default function ResetPasswordForm() {
         } else {
           // Sin conexión o API caída: no se sabe si el enlace sirve. Se deja intentar; al guardar,
           // la API lo comprobará de nuevo.
-          setError(err instanceof Error ? err.message : "No se pudo comprobar el enlace.");
+          setError(toUserMessage(err, "No se pudo comprobar el enlace. Puedes elegir la contraseña igualmente: se comprobará al guardarla."));
           setStatus("ready");
         }
       });

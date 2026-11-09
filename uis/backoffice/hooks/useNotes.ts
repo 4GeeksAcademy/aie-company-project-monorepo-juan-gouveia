@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createNote, deleteNote, getNotes } from "@/lib/talento/api";
 import type { Note } from "@/types/record";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchStatus = "loading" | "success" | "error";
 
@@ -20,7 +21,7 @@ export function useNotes(recordId: string) {
         setNotes(await getNotes(recordId));
         setStatus("success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error desconocido");
+        setError(toUserMessage(err, "No se pudieron cargar las notas."));
         setStatus("error");
       }
     }

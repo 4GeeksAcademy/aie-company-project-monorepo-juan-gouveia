@@ -12,6 +12,7 @@ import LoadingMessage from "@/components/LoadingMessage";
 import NotesSection from "@/components/talento/NotesSection";
 import StatusStageSelectors from "@/components/talento/StatusStageSelectors";
 import type { RecordCreateInput, RecordDetail } from "@/types/record";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchStatus = "loading" | "success" | "error";
 
@@ -30,7 +31,7 @@ export default function CandidateDetailPage() {
         setRecord(data);
         setStatus("success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error desconocido");
+        setError(toUserMessage(err, "No se pudo cargar el candidato. Vuelve a intentarlo en unos minutos."));
         setStatus("error");
       }
     }

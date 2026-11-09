@@ -11,6 +11,7 @@ import { CATEGORIES, COUNTRY_OPTIONS, CURRENCY_BY_COUNTRY, STATUS_OPTIONS } from
 import { validateSupplierForm, type SupplierFormValues } from "@/lib/proveedores/validation";
 import type { ApiFieldError } from "@/types/api";
 import type { Category, Supplier } from "@/types/supplier";
+import { toUserMessage } from "@/lib/error-message";
 
 interface SupplierFormModalProps {
   onClose: () => void;
@@ -79,7 +80,7 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
       onCreated(created);
     } catch (err) {
       setApiFailure({
-        message: err instanceof Error ? err.message : "No se pudo registrar el proveedor",
+        message: toUserMessage(err, "No se pudo registrar el proveedor. Inténtalo de nuevo."),
         details: err instanceof ApiError ? err.details : [],
       });
     } finally {

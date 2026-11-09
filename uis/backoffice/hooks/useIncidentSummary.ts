@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getIncidentSummary } from "@/lib/gestor-incidencias/api";
 import type { IncidentSummary } from "@/types/incident-manager";
+import { toUserMessage } from "@/lib/error-message";
 
 type SummaryState =
   | { status: "loading" }
@@ -22,7 +23,7 @@ export function useIncidentSummary() {
         if (!cancelled) setState({ status: "success", summary });
       } catch (err) {
         if (!cancelled) {
-          setState({ status: "error", message: err instanceof Error ? err.message : "No se pudo cargar el resumen." });
+          setState({ status: "error", message: toUserMessage(err, "No se pudo cargar el resumen.") });
         }
       }
     }

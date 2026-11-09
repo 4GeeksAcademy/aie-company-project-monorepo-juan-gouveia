@@ -10,6 +10,7 @@ import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import { createRecord, getRecords } from "@/lib/talento/api";
 import type { RecordCreateInput, RecordListItem, RecordStage, RecordStatus } from "@/types/record";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchStatus = "loading" | "success" | "error";
 
@@ -53,7 +54,7 @@ function CandidateList() {
         setRecords(data);
         setStatus("success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error desconocido");
+        setError(toUserMessage(err, "No se pudieron cargar los candidatos. Vuelve a intentarlo en unos minutos."));
         setStatus("error");
       }
     }

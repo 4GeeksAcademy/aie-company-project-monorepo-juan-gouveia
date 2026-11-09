@@ -7,6 +7,7 @@ import { updateRate } from "@/lib/proveedores/api";
 import { formatRate } from "@/lib/proveedores/labels";
 import { rateError } from "@/lib/proveedores/validation";
 import type { Supplier } from "@/types/supplier";
+import { toUserMessage } from "@/lib/error-message";
 
 interface RateEditorProps {
   supplier: Supplier;
@@ -38,7 +39,7 @@ export default function RateEditor({ supplier, onUpdated }: RateEditorProps) {
       onUpdated(await updateRate(supplier.id, Number(value)));
       setEditing(false);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : "No se pudo actualizar la tarifa");
+      setApiError(toUserMessage(err, "No se pudo actualizar la tarifa. Inténtalo de nuevo."));
     } finally {
       setSaving(false);
     }

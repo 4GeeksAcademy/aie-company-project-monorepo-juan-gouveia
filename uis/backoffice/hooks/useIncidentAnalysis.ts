@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { analyzeIncidents } from "@/lib/incidencias/api";
 import type { IncidentAnalysis } from "@/types/incident";
+import { toUserMessage } from "@/lib/error-message";
 
 export type AnalysisState =
   | { status: "idle" }
@@ -21,7 +22,7 @@ export function useIncidentAnalysis() {
       setState({
         status: "error",
         fileName: file.name,
-        message: err instanceof Error ? err.message : "Error desconocido",
+        message: toUserMessage(err, "No se pudo analizar el archivo. Inténtalo de nuevo."),
       });
     }
   }

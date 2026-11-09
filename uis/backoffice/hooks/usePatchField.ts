@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { patchRecord } from "@/lib/talento/api";
 import type { RecordDetail, RecordPatch } from "@/types/record";
+import { toUserMessage } from "@/lib/error-message";
 
 type PatchableField = keyof RecordPatch;
 
@@ -19,7 +20,7 @@ export function usePatchField<K extends PatchableField>(
       setError(null);
       onUpdated(await patchRecord(recordId, { [field]: value }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
+      setError(toUserMessage(err, "No se pudo guardar el cambio. Inténtalo de nuevo."));
     } finally {
       setUpdating(false);
     }

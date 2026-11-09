@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Button from "@/components/Button";
 import Modal from "@/components/Modal";
+import { toUserMessage } from "@/lib/error-message";
 
 interface NewNoteModalProps {
   onClose: () => void;
@@ -22,7 +23,7 @@ export default function NewNoteModal({ onClose, onSubmit }: NewNoteModalProps) {
       setError(null);
       await onSubmit(content.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
+      setError(toUserMessage(err, "No se pudo añadir la nota. Inténtalo de nuevo."));
       setSubmitting(false);
     }
   }
