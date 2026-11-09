@@ -181,7 +181,15 @@ def main(argv):
     summary = analyze(records)
     print(format_report(summary, source.name))
 
-    if wants_export():
+    try:
+        export = wants_export()
+    except KeyboardInterrupt:
+        # Ctrl+C en la pregunta: el reporte ya se mostró; solo se cancela la exportación.
+        # 130 es el código habitual de una interrupción con Ctrl+C (128 + SIGINT).
+        print("\nExport cancelled.", file=sys.stderr)
+        return 130
+
+    if export:
         try:
             path = export_csv(build_export_rows(summary))
         except OSError as error:

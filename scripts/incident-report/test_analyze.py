@@ -286,6 +286,18 @@ class ExportTest(unittest.TestCase):
         self.assertIn("is not valid UTF-8", message)
         self.assertNotIn("codec", message)
 
+    def test_main_ctrl_c_at_export_prompt_cancels_without_traceback(self):
+        stderr = io.StringIO()
+        with (
+            patch("builtins.input", side_effect=KeyboardInterrupt),
+            patch("analyze.export_csv") as export_csv,
+            patch("sys.stdout", io.TextIOWrapper(io.BytesIO())),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(analyze.main([str(SOURCE)]), 130)
+        export_csv.assert_not_called()
+        self.assertIn("Export cancelled.", stderr.getvalue())
+
     def test_wants_export_without_input(self):
         with patch("builtins.input", side_effect=EOFError), patch("builtins.print"):
             self.assertFalse(analyze.wants_export())
