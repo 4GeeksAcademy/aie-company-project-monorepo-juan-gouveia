@@ -33,7 +33,13 @@ function pickHeaders(source: Headers, names: string[]) {
 
 async function forward(request: Request, { params }: RouteContext) {
   if (!API_BASE_URL) {
-    return errorResponse(500, "api_not_configured", "Falta la variable API_BASE_URL en el backoffice.");
+    // El detalle de configuración queda en el log del servidor; el usuario recibe un mensaje genérico.
+    console.error("[BFF] Falta la variable de entorno API_BASE_URL; defínela en .env.local (ver README).");
+    return errorResponse(
+      500,
+      "api_not_configured",
+      "El servicio no está disponible en este momento. Inténtalo más tarde y, si continúa, avisa al equipo técnico.",
+    );
   }
 
   const { path } = await params;
