@@ -164,8 +164,16 @@ def main(argv):
     try:
         source = resolve_source(argv[0])
         records = load_records(source)
+    except UnicodeDecodeError:
+        # Hereda de ValueError, pero su mensaje es técnico ("'utf-8' codec can't decode byte...").
+        print(f"Error: {argv[0]} is not valid UTF-8. Export it again as \"CSV UTF-8\".", file=sys.stderr)
+        return 1
     except (FileNotFoundError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
+        return 1
+    except OSError as error:
+        # Por ejemplo, sin permiso de lectura o un archivo bloqueado por otro programa.
+        print(f"Error: could not read {argv[0]} ({error.strerror or error}).", file=sys.stderr)
         return 1
 
     # La consola de Windows usa cp1252 por defecto y no puede imprimir ├─ ni └─.

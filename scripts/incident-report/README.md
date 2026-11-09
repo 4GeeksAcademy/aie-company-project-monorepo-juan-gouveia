@@ -27,7 +27,7 @@ From the repository root:
 python scripts/incident-report/analyze.py data/raw/incidents-brasaland.csv
 ```
 
-The path is resolved from the current folder. If it does not exist there, the script looks for the same name in `data/raw/`. If the file cannot be found, or the CSV is missing columns or is malformed (for example, an unclosed quote), it prints an error and exits with code 1.
+The path is resolved from the current folder. If it does not exist there, the script looks for the same name in `data/raw/`. If the file cannot be found or read, is not UTF-8, or the CSV is missing columns or is malformed (for example, an unclosed quote), it prints an error and exits with code 1.
 
 ## What it does
 

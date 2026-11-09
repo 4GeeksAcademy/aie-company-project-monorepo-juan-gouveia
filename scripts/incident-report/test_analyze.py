@@ -269,6 +269,23 @@ class ExportTest(unittest.TestCase):
         self.assertIn("Permission denied", stderr.getvalue())
         self.assertIn("close it", stderr.getvalue())
 
+    def run_main_expecting_error(self, side_effect):
+        stderr = io.StringIO()
+        with patch("analyze.load_records", side_effect=side_effect), contextlib.redirect_stderr(stderr):
+            self.assertEqual(analyze.main([str(SOURCE)]), 1)
+        return stderr.getvalue()
+
+    def test_main_reports_read_error_without_traceback(self):
+        message = self.run_main_expecting_error(PermissionError(13, "Permission denied", str(SOURCE)))
+        self.assertIn("could not read", message)
+        self.assertIn("Permission denied", message)
+
+    def test_main_reports_non_utf8_file_clearly(self):
+        decode_error = UnicodeDecodeError("utf-8", b"\xf3", 0, 1, "invalid continuation byte")
+        message = self.run_main_expecting_error(decode_error)
+        self.assertIn("is not valid UTF-8", message)
+        self.assertNotIn("codec", message)
+
     def test_wants_export_without_input(self):
         with patch("builtins.input", side_effect=EOFError), patch("builtins.print"):
             self.assertFalse(analyze.wants_export())
