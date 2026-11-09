@@ -18,6 +18,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 INTERNAL_ERROR_MESSAGE = "Ha ocurrido un error inesperado. Inténtalo de nuevo más tarde."
 
+# Mensajes de los errores propios del framework, cuyo `detail` es la frase estándar en inglés
+# ("Not Found", "Method Not Allowed"). El código de la API no lanza HTTPException: usa ApiError.
+FRAMEWORK_ERROR_MESSAGES = {
+    404: "La ruta solicitada no existe. Revisa la URL.",
+    405: "Esta ruta no admite el método {method}.",
+}
+FRAMEWORK_ERROR_FALLBACK = "La petición no se pudo procesar (HTTP {status})."
+
 
 class ApiError(Exception):
     """Error de negocio o de entrada que la API devuelve con su código HTTP."""
@@ -104,11 +112,13 @@ async def handle_api_error(_request: Request, error: ApiError) -> JSONResponse:
     return error_response(error.status_code, error.code, error.message, headers=error.headers)
 
 
-async def handle_http_exception(_request: Request, error: StarletteHTTPException) -> JSONResponse:
-    # Errores propios de FastAPI (ruta inexistente, método no permitido) con el mismo formato.
+async def handle_http_exception(request: Request, error: StarletteHTTPException) -> JSONResponse:
+    # Errores propios de FastAPI (ruta inexistente, método no permitido) con el mismo formato y en español.
     code = "not_found" if error.status_code == 404 else f"http_{error.status_code}"
+    template = FRAMEWORK_ERROR_MESSAGES.get(error.status_code, FRAMEWORK_ERROR_FALLBACK)
+    message = template.format(method=request.method, status=error.status_code)
     # Se conservan sus cabeceras (por ejemplo, Allow en un 405).
-    return error_response(error.status_code, code, str(error.detail), headers=getattr(error, "headers", None))
+    return error_response(error.status_code, code, message, headers=getattr(error, "headers", None))
 
 
 def validation_error_response(error: RequestValidationError, status_code: int = 422) -> JSONResponse:

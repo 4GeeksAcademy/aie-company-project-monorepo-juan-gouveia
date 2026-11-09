@@ -38,4 +38,10 @@ def test_framework_errors_keep_their_headers():
     response = make_client().post("/sin-cabecera")
     assert response.status_code == 405
     assert response.headers["allow"] == "GET"
-    assert response.json()["error"]["code"] == "http_405"
+    assert response.json() == {"error": {"code": "http_405", "message": "Esta ruta no admite el método POST."}}
+
+
+def test_unknown_route_answers_in_spanish():
+    response = make_client().get("/no-existe")
+    assert response.status_code == 404
+    assert response.json() == {"error": {"code": "not_found", "message": "La ruta solicitada no existe. Revisa la URL."}}
