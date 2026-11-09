@@ -1,3 +1,4 @@
+import { ApiError, errorFromStatus, jsonBody, readJson } from "@/lib/api-client";
 import type {
   Note,
   NoteCreate,
@@ -13,10 +14,34 @@ import type {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
+const NOT_CONFIGURED_MESSAGE = "El servicio de candidatos no está disponible en este momento. Inténtalo más tarde.";
+const NETWORK_ERROR_MESSAGE =
+  "No se pudo conectar con el servicio de candidatos. Revisa tu conexión e inténtalo de nuevo.";
+
 export interface RecordFilters {
   status?: RecordStatus;
   stage?: RecordStage;
   search?: string;
+}
+
+// Petición a la API del tracker. Devuelve la respuesta solo si es correcta; si no, lanza un ApiError
+// con un mensaje legible. No se usa el mensaje de error del servicio: es de terceros y puede venir en
+// inglés o con detalles técnicos. `fallback` dice qué falló (ej.: "no se pudo crear la nota").
+async function talentFetch(path: string, fallback: string, init?: RequestInit): Promise<Response> {
+  if (!API_BASE_URL) {
+    // Sin la URL, fetch pediría "undefined/records" al propio backoffice.
+    throw new ApiError(NOT_CONFIGURED_MESSAGE, 0, "not_configured");
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, init);
+  } catch {
+    throw new ApiError(NETWORK_ERROR_MESSAGE, 0, "network_error");
+  }
+
+  if (!res.ok) throw errorFromStatus(res.status, fallback);
+  return res;
 }
 
 export async function getRecords(filters: RecordFilters = {}): Promise<RecordListItem[]> {
@@ -25,87 +50,39 @@ export async function getRecords(filters: RecordFilters = {}): Promise<RecordLis
   if (filters.stage) params.set("stage", filters.stage);
   if (filters.search) params.set("search", filters.search);
 
-  const res = await fetch(`${API_BASE_URL}/records?${params.toString()}`);
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudieron obtener los candidatos`);
-  }
-
-  const body: RecordListResponse = await res.json();
+  const res = await talentFetch(`/records?${params.toString()}`, "no se pudieron obtener los candidatos");
+  const body = await readJson<RecordListResponse>(res);
   return body.data;
 }
 
 export async function getRecordById(id: string): Promise<RecordDetail> {
-  const res = await fetch(`${API_BASE_URL}/records/${id}`);
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudo obtener el candidato`);
-  }
-
-  return res.json();
+  const res = await talentFetch(`/records/${id}`, "no se pudo obtener el candidato");
+  return readJson(res);
 }
 
 export async function patchRecord(id: string, patch: RecordPatch): Promise<RecordDetail> {
-  const res = await fetch(`${API_BASE_URL}/records/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudo actualizar el candidato`);
-  }
-
-  return res.json();
+  const res = await talentFetch(`/records/${id}`, "no se pudo actualizar el candidato", jsonBody("PATCH", patch));
+  return readJson(res);
 }
 
 export async function getNotes(recordId: string): Promise<Note[]> {
-  const res = await fetch(`${API_BASE_URL}/records/${recordId}/notes`);
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudieron obtener las notas`);
-  }
-
-  const body: NoteListResponse = await res.json();
+  const res = await talentFetch(`/records/${recordId}/notes`, "no se pudieron obtener las notas");
+  const body = await readJson<NoteListResponse>(res);
   return body.data;
 }
 
 export async function createNote(recordId: string, note: NoteCreate): Promise<Note> {
-  const res = await fetch(`${API_BASE_URL}/records/${recordId}/notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(note),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudo crear la nota`);
-  }
-
-  return res.json();
+  const res = await talentFetch(`/records/${recordId}/notes`, "no se pudo crear la nota", jsonBody("POST", note));
+  return readJson(res);
 }
 
 export async function deleteNote(recordId: string, noteId: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/records/${recordId}/notes/${noteId}`, {
-    method: "DELETE",
-  });
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudo eliminar la nota`);
-  }
+  await talentFetch(`/records/${recordId}/notes/${noteId}`, "no se pudo eliminar la nota", { method: "DELETE" });
 }
 
 export async function createRecord(input: RecordCreateInput): Promise<RecordDetail> {
-  const res = await fetch(`${API_BASE_URL}/records`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudo crear el candidato`);
-  }
-
-  const created: RecordDetail = await res.json();
+  const res = await talentFetch("/records", "no se pudo crear el candidato", jsonBody("POST", input));
+  const created = await readJson<RecordDetail>(res);
   if (created.status !== input.status || created.stage !== input.stage) {
     return patchRecord(created.id, { status: input.status, stage: input.stage });
   }
@@ -116,17 +93,8 @@ export async function createRecord(input: RecordCreateInput): Promise<RecordDeta
 // status y stage con un PATCH si el servidor los reinicia.
 export async function updateRecord(id: string, input: RecordCreateInput): Promise<RecordDetail> {
   const { status, stage, ...fields } = input;
-  const res = await fetch(`${API_BASE_URL}/records/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(fields),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Error ${res.status}: no se pudo actualizar el candidato`);
-  }
-
-  const updated: RecordDetail = await res.json();
+  const res = await talentFetch(`/records/${id}`, "no se pudo actualizar el candidato", jsonBody("PUT", fields));
+  const updated = await readJson<RecordDetail>(res);
   if (updated.status !== status || updated.stage !== stage) {
     return patchRecord(id, { status, stage });
   }

@@ -4,7 +4,8 @@ import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 
 // Cliente común para la API de Brasaland. Las rutas son las del intermediario
 // (app/api/[...path]/route.ts), que las reenvía a API_BASE_URL con la cabecera Authorization.
-// El tracker (lib/talento/api.ts) no lo usa: llama a una API de terceros que no debe recibir el token.
+// El tracker (lib/talento/api.ts) no usa apiFetch: llama a una API de terceros que no debe recibir el
+// token. Sí reutiliza errorFromStatus y readJson para que sus errores se muestren igual.
 const BFF_PREFIX = "/api";
 
 const SERVER_ERROR_MESSAGE = "El servidor tuvo un problema y no pudo completar la operación. Inténtalo de nuevo en unos minutos.";
@@ -43,11 +44,17 @@ async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   } catch {
     // El cuerpo no es JSON: se usa el mensaje genérico.
   }
-  if (res.status >= 500) {
-    // Error del servidor sin mensaje propio: nunca se muestra un texto técnico al usuario.
-    return new ApiError(SERVER_ERROR_MESSAGE, res.status, "server_error");
+  return errorFromStatus(res.status, fallback);
+}
+
+// Error legible a partir del código de estado, para respuestas sin mensaje propio. También lo usa el
+// tracker (lib/talento/api.ts), cuya API de terceros no envía mensajes pensados para el usuario.
+export function errorFromStatus(status: number, fallback: string): ApiError {
+  if (status >= 500) {
+    // Error del servidor: nunca se muestra un texto técnico al usuario.
+    return new ApiError(SERVER_ERROR_MESSAGE, status, "server_error");
   }
-  return new ApiError(clientErrorMessage(res.status, fallback), res.status, "unknown_error");
+  return new ApiError(clientErrorMessage(status, fallback), status, "unknown_error");
 }
 
 // Qué puede hacer el usuario según el tipo de error, cuando la API no envía su propio mensaje.
@@ -108,7 +115,11 @@ export async function apiFetch(path: string, options: ApiRequestOptions): Promis
 }
 
 export async function apiJson<T>(path: string, options: ApiRequestOptions): Promise<T> {
-  const res = await apiFetch(path, options);
+  return readJson(await apiFetch(path, options));
+}
+
+// Lee el cuerpo JSON de una respuesta correcta; si no se puede, lanza un ApiError legible.
+export async function readJson<T>(res: Response): Promise<T> {
   try {
     return await res.json();
   } catch {
