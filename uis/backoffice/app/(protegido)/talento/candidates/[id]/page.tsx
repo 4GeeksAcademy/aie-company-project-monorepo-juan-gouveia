@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { getRecordById, updateRecord } from "@/lib/talento/api";
+import { getRecordById, PartialSaveError, updateRecord } from "@/lib/talento/api";
 import BackLink from "@/components/BackLink";
 import CandidateDetails from "@/components/talento/CandidateDetails";
 import CandidateFormModal from "@/components/talento/CandidateFormModal";
@@ -40,8 +40,13 @@ export default function CandidateDetailPage() {
   }, [id]);
 
   async function handleEdit(input: RecordCreateInput) {
-    const updated = await updateRecord(id, input);
-    setRecord(updated);
+    try {
+      setRecord(await updateRecord(id, input));
+    } catch (err) {
+      // Guardado parcial: la ficha muestra los datos que sí se guardaron.
+      if (err instanceof PartialSaveError) setRecord(err.record);
+      throw err;
+    }
   }
 
   return (

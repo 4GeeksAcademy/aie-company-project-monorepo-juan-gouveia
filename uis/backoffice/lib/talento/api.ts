@@ -101,13 +101,34 @@ export async function deleteNote(recordId: string, noteId: string): Promise<void
   await talentFetch(`/records/${recordId}/notes/${noteId}`, "no se pudo eliminar la nota", { method: "DELETE" });
 }
 
+// Crear y editar un candidato son dos pasos: el POST o el PUT guardan los datos y un PATCH fija status
+// y stage. Si falla solo el segundo, los datos ya están guardados: este error lo distingue de un fallo
+// completo, para que el formulario no invite a repetir el envío (crearía un duplicado) y la pantalla
+// muestre el registro tal como quedó (`record`).
+export class PartialSaveError extends ApiError {
+  constructor(
+    message: string,
+    readonly record: RecordDetail
+  ) {
+    super(message, 0, "partial_save");
+    this.name = "PartialSaveError";
+  }
+}
+
+const CREATED_WITHOUT_STATUS_MESSAGE =
+  "El candidato se creó, pero no se pudieron guardar su status y su stage. No lo envíes de nuevo: cierra este formulario y cámbialos desde su ficha.";
+const UPDATED_WITHOUT_STATUS_MESSAGE =
+  "Los datos del candidato se guardaron, pero no se pudieron conservar su status y su stage. Revísalos en la ficha y cámbialos si hace falta.";
+
 export async function createRecord(input: RecordCreateInput): Promise<RecordDetail> {
   const res = await talentFetch("/records", "no se pudo crear el candidato", jsonBody("POST", input));
   const created = await readJson<RecordDetail>(res);
-  if (created.status !== input.status || created.stage !== input.stage) {
-    return patchRecord(created.id, { status: input.status, stage: input.stage });
+  if (created.status === input.status && created.stage === input.stage) return created;
+  try {
+    return await patchRecord(created.id, { status: input.status, stage: input.stage });
+  } catch {
+    throw new PartialSaveError(CREATED_WITHOUT_STATUS_MESSAGE, created);
   }
-  return created;
 }
 
 // PUT solo declara los campos de RecordCreate; como reemplaza el registro, se restauran
@@ -116,8 +137,10 @@ export async function updateRecord(id: string, input: RecordCreateInput): Promis
   const { status, stage, ...fields } = input;
   const res = await talentFetch(`/records/${id}`, "no se pudo actualizar el candidato", jsonBody("PUT", fields));
   const updated = await readJson<RecordDetail>(res);
-  if (updated.status !== status || updated.stage !== stage) {
-    return patchRecord(id, { status, stage });
+  if (updated.status === status && updated.stage === stage) return updated;
+  try {
+    return await patchRecord(id, { status, stage });
+  } catch {
+    throw new PartialSaveError(UPDATED_WITHOUT_STATUS_MESSAGE, updated);
   }
-  return updated;
 }

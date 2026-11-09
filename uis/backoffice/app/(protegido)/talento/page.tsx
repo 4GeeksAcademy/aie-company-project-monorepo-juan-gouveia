@@ -8,7 +8,7 @@ import CandidateFormModal from "@/components/talento/CandidateFormModal";
 import EmptyMessage from "@/components/EmptyMessage";
 import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
-import { createRecord, getRecords } from "@/lib/talento/api";
+import { createRecord, getRecords, PartialSaveError } from "@/lib/talento/api";
 import type { RecordCreateInput, RecordListItem, RecordStage, RecordStatus } from "@/types/record";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -63,7 +63,13 @@ function CandidateList() {
   }, [statusFilter, stageFilter, search, reloadKey]);
 
   async function handleCreate(input: RecordCreateInput) {
-    await createRecord(input);
+    try {
+      await createRecord(input);
+    } catch (err) {
+      // Guardado parcial: el candidato ya existe, así que la lista debe mostrarlo igualmente.
+      if (err instanceof PartialSaveError) setReloadKey((k) => k + 1);
+      throw err;
+    }
     setReloadKey((k) => k + 1);
   }
 
