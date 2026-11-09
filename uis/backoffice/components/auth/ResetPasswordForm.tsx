@@ -79,8 +79,12 @@ export default function ResetPasswordForm() {
     setSubmitting(true);
     setError(null);
     setApiFields({});
+    // Tras el éxito el formulario sigue bloqueado mientras navega: router.replace no se espera, y
+    // reactivarlo permitiría reenviar un token ya usado. En cualquier otro caso, finally lo libera.
+    let navigating = false;
     try {
       await resetPassword(token, values.newPassword);
+      navigating = true;
       router.replace("/login?reset=success");
     } catch (err) {
       if (err instanceof ApiError && err.status === 400) {
@@ -93,7 +97,8 @@ export default function ResetPasswordForm() {
         if (result.fields.new_password) setApiFields({ newPassword: result.fields.new_password });
         setError(result.fields.new_password ? null : result.message);
       }
-      setSubmitting(false);
+    } finally {
+      if (!navigating) setSubmitting(false);
     }
   }
 
