@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -227,6 +228,36 @@ class MainTest(unittest.TestCase):
         code, _, err = self.run_main([str(bad)])
         self.assertEqual(code, 1)
         self.assertIn("Missing columns", err)
+
+    def test_unreadable_csv_is_reported_without_traceback(self):
+        denied = PermissionError(13, "Permission denied")
+        with unittest.mock.patch.object(seed_script, "load_records", side_effect=denied):
+            code, _, err = self.run_main([])
+        self.assertEqual(code, 1)
+        self.assertIn("No se puede leer el archivo", err)
+        self.assertIn("Permission denied", err)
+
+    def test_database_that_cannot_be_opened_is_reported(self):
+        denied = PermissionError(13, "Permission denied")
+        with unittest.mock.patch.object(seed_script.IncidentRepository, "from_path", side_effect=denied):
+            code, _, err = self.run_main([])
+        self.assertEqual(code, 1)
+        self.assertIn("No se puede abrir la base de datos", err)
+
+    def test_corrupt_database_is_reported_and_left_untouched(self):
+        self.db_path.write_text("{corrupto", encoding="utf-8")
+        code, _, err = self.run_main([])
+        self.assertEqual(code, 1)
+        self.assertIn("no es un JSON válido", err)
+        self.assertEqual(self.db_path.read_text(encoding="utf-8"), "{corrupto")
+
+    def test_write_failure_is_reported_without_traceback(self):
+        full = OSError(28, "No space left on device")
+        with unittest.mock.patch.object(seed_script, "seed", side_effect=full):
+            code, _, err = self.run_main([])
+        self.assertEqual(code, 1)
+        self.assertIn("No se pudo escribir en la base de datos", err)
+        self.assertIn("no se duplica", err)
 
     def test_too_many_arguments(self):
         code, _, err = self.run_main(["a.csv", "b.csv"])

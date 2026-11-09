@@ -15,6 +15,7 @@ Qué hace con cada fila del CSV:
 3. La inserta solo si su `incident_id` no se cargó antes: ejecutarlo dos veces no duplica nada.
 """
 
+import json
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -179,11 +180,36 @@ def main(argv: list[str] | None = None) -> int:
     except UnicodeDecodeError:
         print("No se puede cargar el archivo: no está en UTF-8.", file=sys.stderr)
         return 1
+    except OSError as error:
+        print(f"No se puede leer el archivo {source}: {error.strerror or error}.", file=sys.stderr)
+        return 1
 
     db_path = get_brasaland_db_path()
-    repository = IncidentRepository.from_path(db_path)
+    try:
+        repository = IncidentRepository.from_path(db_path)
+    except OSError as error:
+        # Por ejemplo, sin permiso para crear la carpeta o el archivo.
+        print(f"No se puede abrir la base de datos {db_path}: {error.strerror or error}.", file=sys.stderr)
+        return 1
     try:
         result = seed(records, repository)
+    except json.JSONDecodeError:
+        # TinyDB lee el archivo en la primera operación, antes de escribir nada.
+        print(
+            f"La base de datos {db_path} no es un JSON válido y no se ha modificado. "
+            "Revisa el archivo o restáuralo (si se borra, la API lo crea vacío al arrancar).",
+            file=sys.stderr,
+        )
+        return 1
+    except OSError as error:
+        # Por ejemplo, disco lleno. Cada fila se inserta por separado, así que puede quedar una carga
+        # parcial; incident_seed_log evita duplicados al repetir.
+        print(
+            f"No se pudo escribir en la base de datos {db_path}: {error.strerror or error}. "
+            "Puede que se haya cargado una parte; al ejecutarlo de nuevo no se duplica nada.",
+            file=sys.stderr,
+        )
+        return 1
     finally:
         repository.close()
     print(format_report(result, source, db_path))
