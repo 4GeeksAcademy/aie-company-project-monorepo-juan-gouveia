@@ -51,7 +51,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Commits:** `e87121c` (fases 0-3) y `2906225` (fases 4 y 5), hechos por el desarrollador.
 - **PR:** #10, abierto, contra `feature/auth-frontend` mientras el #9 no se fusione.
 
-**Gestor de incidencias centralizado completado en la rama `feature/incident-manager`**, creada desde `feature/password-reset` (`2906225`) porque los PR de AUTH siguen abiertos; su PR irá contra esa rama. Decisiones G-1 a G-13 aprobadas y las 5 fases hechas (2026-11-08); el formulario y el panel, revisados por el desarrollador en el navegador:
+**Gestor de incidencias centralizado completado en la rama `feature/incident-manager`**, creada desde `feature/password-reset` (`2906225`) porque los PR de AUTH siguen abiertos. Commit `ccd09cc`; PR #11 abierto contra esa rama. Decisiones G-1 a G-13 aprobadas y las 5 fases hechas (2026-11-08); el formulario y el panel, revisados por el desarrollador en el navegador:
 
 - **API:** `POST`, `GET` (filtros `status`, `origin`, `branch` y `category`), `GET /summary`, `GET /{id}` y `PATCH /{id}/status` bajo `/api/v1/incidents`, junto al analizador del CSV, que no cambia. Valores exactos del briefing, ciclo de vida `open → in_progress | discarded → …`, errores de validación con 400 en estas rutas (el resto de la API sigue con 422) y un 500 genérico para cualquier excepción no controlada en toda la API.
 - **Datos:** tabla `incidents` en `storage/brasaland-db.json`, con un bloqueo por archivo compartido con proveedores, y `incident_seed_log` para que el seed no duplique registros.
@@ -62,20 +62,21 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Verificación:** 539 pruebas pytest (106 nuevas), 32 del analizador y 16 del seed; `tsc`, `lint` y `build` del backoffice; alta, 400, 502, 504, filtros y transiciones probados en vivo por el intermediario.
 - **Revisión en el navegador:** fases 3 y 4 probadas por el desarrollador (2026-11-08), incluida la reversión del estado con la API apagada. En tablet, la cabecera se comporta ahora como en móvil (enlaces a herramientas solo desde `xl`).
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestor de incidencias centralizado" (rutas `/api/v1`, `incident_seed_log`, 400 solo en el gestor, `status` fijo, menú en móvil y tablet, decisiones y la tabla de los 21 criterios), y la divergencia 3 del analizador marcada como resuelta. `ARCHITECTURE_PROPOSAL.md` (cuarto bloque en 2.7 y `packages/shared` en 6.2) y los README.
-- **Pendiente:** commit, PR (contra `feature/password-reset` mientras el #10 no se fusione) y entrega; los hace el desarrollador.
+- **Pendiente:** fusionar el PR #11 (tras el #10) y la entrega; los hace el desarrollador.
 
-**Pull requests (2026-11-08).** Forman una cadena: cada PR parte de la rama del anterior.
+**Pull requests (2026-11-09).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
 |---|---|---|
 | #6 Analizador de incidentes | `features/csv-reader` → `main` | ✅ Fusionado |
 | #7 Directorio de proveedores | `directorio-prov` → `main` | ✅ Fusionado |
-| #8 AUTH-01 | `feature/auth-api` → `directorio-prov` | ⏳ Abierto; cambiar el destino a `main` |
+| #8 AUTH-01 | `feature/auth-api` → `main` | ⏳ Abierto; listo para fusionar (destino cambiado a `main` el 2026-11-09) |
 | #9 AUTH-02 | `feature/auth-frontend` → `feature/auth-api` | ⏳ Abierto |
 | #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
+| #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
 
-- **Orden de merge:** #8, #9 y #10, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno, el siguiente debe pasar a apuntar a `main`.
-- **Limpieza pendiente:** las ramas `features/csv-reader` y `directorio-prov` siguen existiendo en local y en GitHub. El desarrollador decidió no borrarlas por ahora. El `main` local va por detrás de `origin/main`.
+- **Orden de merge:** #8, #9, #10 y #11, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
 
@@ -209,13 +210,13 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado y documentado. Falta el commit y el PR, que apunta a `feature/password-reset` mientras el #10 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
+0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado, documentado y con commit (`ccd09cc`). PR #11 abierto, contra `feature/password-reset` mientras el #10 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
 
 0. **Entregar AUTH-03 (rama `feature/password-reset`)** — Implementado, verificado y documentado. Commits `e87121c` y `2906225`; PR #10 abierto, contra `feature/auth-frontend` mientras el #9 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Recuperación y cambio de contraseña", con la verificación de los 12 criterios).
 
 0. **Entregar AUTH-02 (rama `feature/auth-frontend`)** — Implementado, verificado, documentado y con commit (`fb35b8d`). PR #9 abierto, contra `feature/auth-api` mientras el #8 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend").
 
-0. **Entregar AUTH-01 (rama `feature/auth-api`)** — Implementado, verificado y documentado. PR #8 abierto; su destino sigue siendo `directorio-prov`, ya fusionada en `main`, así que hay que cambiarlo a `main`. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas").
+0. **Entregar AUTH-01 (rama `feature/auth-api`)** — Implementado, verificado y documentado. PR #8 abierto contra `main` y listo para fusionar; es el primero de la cadena. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas").
 
 0. ✅ **Directorio de proveedores (milestone 09)** — PR #7 aprobado y fusionado en `main` (2026-11-08). Sus justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Directorio de proveedores").
 
@@ -276,4 +277,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-11-08_
+_Actualizado: 2026-11-09_
