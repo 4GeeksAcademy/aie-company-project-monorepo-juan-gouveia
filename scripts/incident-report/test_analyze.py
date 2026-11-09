@@ -4,7 +4,9 @@ Uso (desde esta carpeta):
     python -m unittest -v
 """
 
+import contextlib
 import csv
+import io
 import tempfile
 import unittest
 from decimal import Decimal
@@ -251,6 +253,21 @@ class ExportTest(unittest.TestCase):
         for answer, expected in [("s", True), ("Sí", True), (" yes ", True), ("n", False), ("", False)]:
             with self.subTest(answer=answer), patch("builtins.input", return_value=answer):
                 self.assertIs(analyze.wants_export(), expected)
+
+    def test_main_reports_export_write_error_without_traceback(self):
+        # results.csv abierto en Excel: Windows impide escribirlo y open() lanza PermissionError.
+        locked = PermissionError(13, "Permission denied", str(analyze.EXPORT_PATH))
+        stderr = io.StringIO()
+        with (
+            patch("analyze.export_csv", side_effect=locked),
+            patch("builtins.input", return_value="y"),
+            patch("sys.stdout", io.TextIOWrapper(io.BytesIO())),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(analyze.main([str(SOURCE)]), 1)
+        self.assertIn("could not write", stderr.getvalue())
+        self.assertIn("Permission denied", stderr.getvalue())
+        self.assertIn("close it", stderr.getvalue())
 
     def test_wants_export_without_input(self):
         with patch("builtins.input", side_effect=EOFError), patch("builtins.print"):

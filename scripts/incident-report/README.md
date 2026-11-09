@@ -27,7 +27,7 @@ From the repository root:
 python scripts/incident-report/analyze.py data/raw/incidents-brasaland.csv
 ```
 
-The path is resolved from the current folder. If it does not exist there, the script looks for the same name in `data/raw/`. If the file cannot be found, or the CSV is missing columns, it prints an error and exits with code 1.
+The path is resolved from the current folder. If it does not exist there, the script looks for the same name in `data/raw/`. If the file cannot be found, or the CSV is missing columns or is malformed (for example, an unclosed quote), it prints an error and exits with code 1.
 
 ## What it does
 
@@ -53,7 +53,7 @@ Percentages and the average round half up, for example 2.25 → 2.3.
 
 ## Export
 
-The results are saved to `data/process/results.csv`, wherever the command is run from, and overwrite the previous export. The file is ignored by Git.
+The results are saved to `data/process/results.csv`, wherever the command is run from, and overwrite the previous export. The file is ignored by Git. If it cannot be written, for example because it is open in Excel, the script prints an error and exits with code 1; close the file and run it again.
 
 There is one row per metric, with the columns `metric`, `value` and `percentage`. The last one is empty when it does not apply.
 

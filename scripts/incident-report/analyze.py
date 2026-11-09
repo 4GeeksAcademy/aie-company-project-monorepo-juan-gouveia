@@ -174,7 +174,16 @@ def main(argv):
     print(format_report(summary, source.name))
 
     if wants_export():
-        path = export_csv(build_export_rows(summary))
+        try:
+            path = export_csv(build_export_rows(summary))
+        except OSError as error:
+            # Caso habitual en Windows: results.csv está abierto en Excel, que lo bloquea.
+            print(
+                f"Error: could not write {EXPORT_PATH} ({error.strerror or error}). "
+                "If it is open in another program (e.g. Excel), close it and run the script again.",
+                file=sys.stderr,
+            )
+            return 1
         print(f"Results exported to {path}")
     else:
         print("Export skipped.")
