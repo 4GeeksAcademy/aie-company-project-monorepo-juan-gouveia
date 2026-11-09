@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getRecordById, PartialSaveError, updateRecord } from "@/lib/talento/api";
 import BackLink from "@/components/BackLink";
+import Button from "@/components/Button";
 import CandidateDetails from "@/components/talento/CandidateDetails";
 import CandidateFormModal from "@/components/talento/CandidateFormModal";
 import CandidateHeader from "@/components/talento/CandidateHeader";
@@ -22,6 +23,8 @@ export default function CandidateDetailPage() {
   const [record, setRecord] = useState<RecordDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  // "Reintentar" tras un error de carga: vuelve a pedir el candidato.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function loadRecord() {
@@ -37,7 +40,7 @@ export default function CandidateDetailPage() {
     }
 
     loadRecord();
-  }, [id]);
+  }, [id, reloadKey]);
 
   async function handleEdit(input: RecordCreateInput) {
     try {
@@ -55,7 +58,14 @@ export default function CandidateDetailPage() {
 
       {status === "loading" && <LoadingMessage>Cargando candidato...</LoadingMessage>}
 
-      {status === "error" && <ErrorMessage>{error}</ErrorMessage>}
+      {status === "error" && (
+        <div role="alert" className="flex flex-col items-start gap-3">
+          <ErrorMessage>{error}</ErrorMessage>
+          <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       {status === "success" && record && (
         <article className="rounded-lg bg-white p-4 shadow-md md:p-6">

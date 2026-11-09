@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Button from "@/components/Button";
 import CandidateCard from "@/components/talento/CandidateCard";
 import FilterBar from "@/components/talento/FilterBar";
 import CandidateFormModal from "@/components/talento/CandidateFormModal";
@@ -96,7 +97,14 @@ function CandidateList() {
 
         {status === "loading" && <LoadingMessage>Cargando candidatos...</LoadingMessage>}
 
-        {status === "error" && <ErrorMessage>{error}</ErrorMessage>}
+        {status === "error" && (
+          <div role="alert" className="flex flex-col items-start gap-3">
+            <ErrorMessage>{error}</ErrorMessage>
+            <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
+              Reintentar
+            </Button>
+          </div>
+        )}
 
         {status === "success" && records.length === 0 && (
           <EmptyMessage>

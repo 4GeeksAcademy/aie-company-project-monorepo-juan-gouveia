@@ -24,6 +24,7 @@ export default function NotesSection({ recordId }: NotesSectionProps) {
     create,
     toggleSelected,
     deleteSelected,
+    reload,
   } = useNotes(recordId);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -49,7 +50,14 @@ export default function NotesSection({ recordId }: NotesSectionProps) {
       {deleteError && <p className="mb-2 text-xs text-red-700">{deleteError}</p>}
 
       {status === "loading" && <LoadingMessage compact>Cargando notas...</LoadingMessage>}
-      {status === "error" && <ErrorMessage compact>{error}</ErrorMessage>}
+      {status === "error" && (
+        <div role="alert" className="flex flex-col items-start gap-2">
+          <ErrorMessage compact>{error}</ErrorMessage>
+          <Button variant="secondary" onClick={reload}>
+            Reintentar
+          </Button>
+        </div>
+      )}
       {status === "success" && notes.length === 0 && (
         <EmptyMessage compact>Este candidato aún no tiene notas.</EmptyMessage>
       )}
