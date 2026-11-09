@@ -9,6 +9,9 @@ const BFF_PREFIX = "/api";
 
 const SERVER_ERROR_MESSAGE = "El servidor tuvo un problema y no pudo completar la operación. Inténtalo de nuevo en unos minutos.";
 
+const INVALID_RESPONSE_MESSAGE =
+  "No se pudo leer la respuesta del servidor. Inténtalo de nuevo; si el problema continúa, recarga la página.";
+
 // Error de la API con su mensaje en español y, en los 422, el detalle por campo.
 export class ApiError extends Error {
   constructor(
@@ -85,7 +88,13 @@ export async function apiFetch(path: string, options: ApiRequestOptions): Promis
 
 export async function apiJson<T>(path: string, options: ApiRequestOptions): Promise<T> {
   const res = await apiFetch(path, options);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    // Respuesta correcta, pero el cuerpo no es JSON (por ejemplo, una página HTML de un proxy) o la
+    // conexión se cortó mientras llegaba: nunca se muestra el SyntaxError ni el TypeError al usuario.
+    throw new ApiError(INVALID_RESPONSE_MESSAGE, res.status, "invalid_response");
+  }
 }
 
 // Opciones de una petición con cuerpo JSON.
