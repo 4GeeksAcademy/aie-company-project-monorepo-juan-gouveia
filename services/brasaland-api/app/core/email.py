@@ -45,6 +45,12 @@ class DisabledEmailSender:
         )
 
 
+# Tiempo máximo de cada envío a Resend. El SDK ya usa 30 s por defecto (RequestsClient); se fija
+# aquí para no depender de ese valor. El envío va en segundo plano y Resend suele responder en
+# menos de un segundo, así que 10 s liberan antes el hilo si Resend no responde.
+RESEND_TIMEOUT_SECONDS = 10
+
+
 class ResendEmailSender:
     """Envía con Resend (SDK oficial `resend`).
 
@@ -57,8 +63,9 @@ class ResendEmailSender:
         self._sender = sender
 
     def send(self, message: EmailMessage) -> None:
-        # El SDK lee la clave de una variable de módulo; se fija en cada envío por si cambia la config.
+        # El SDK lee la clave y el cliente HTTP de variables de módulo; se fijan en cada envío.
         resend.api_key = self._api_key
+        resend.default_http_client = resend.RequestsClient(timeout=RESEND_TIMEOUT_SECONDS)
         params: resend.Emails.SendParams = {
             "from": self._sender,
             "to": [message.to],

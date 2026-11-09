@@ -10,6 +10,7 @@ from app.core.email import (
     DisabledEmailSender,
     EmailMessage,
     EmailSendError,
+    RESEND_TIMEOUT_SECONDS,
     ResendEmailSender,
     get_email_sender,
     send_safely,
@@ -82,6 +83,20 @@ def test_resend_api_errors_keep_status_and_type_but_not_message(monkeypatch, cap
         send_safely(sender, MESSAGE)
     assert "HTTP 403, validation_error" in caplog.text
     assert MESSAGE.to not in caplog.text
+
+
+def test_resend_requests_use_explicit_timeout(monkeypatch):
+    seen = {}
+
+    def fake_request(**kwargs):
+        seen["timeout"] = kwargs["timeout"]
+        raise AssertionError("no debe llegar a la red")
+
+    # Se intercepta requests: así se comprueba el timeout que el SDK pasa de verdad, sin red.
+    monkeypatch.setattr("requests.request", fake_request)
+    with pytest.raises(EmailSendError):
+        ResendEmailSender("re_clave_de_prueba", "Brasaland <onboarding@resend.dev>").send(MESSAGE)
+    assert seen["timeout"] == RESEND_TIMEOUT_SECONDS == 10
 
 
 def test_send_safely_swallows_and_logs_failures(caplog):
