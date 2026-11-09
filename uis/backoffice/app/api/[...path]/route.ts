@@ -22,6 +22,15 @@ function errorResponse(status: number, code: string, message: string) {
   return Response.json({ error: { code, message } }, { status });
 }
 
+// Describe un fallo de red para el log: Node solo dice "fetch failed" y el motivo real (ECONNREFUSED,
+// ENOTFOUND…) está en `cause`.
+function describeFetchError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause as { code?: string; message?: string } | undefined;
+  const reason = cause?.code ?? cause?.message;
+  return reason ? `${error.name}: ${error.message} (${reason})` : `${error.name}: ${error.message}`;
+}
+
 function pickHeaders(source: Headers, names: string[]) {
   const headers = new Headers();
   for (const name of names) {
@@ -58,9 +67,14 @@ async function forward(request: Request, { params }: RouteContext) {
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
   } catch (error) {
+    // Se registran el método, la ruta (sin query) y el tipo de error; nunca cabeceras ni cuerpo,
+    // que pueden llevar el token o datos personales.
+    const route = `${request.method} /${path.join("/")}`;
     if (error instanceof DOMException && error.name === "TimeoutError") {
+      console.error(`[BFF] ${route}: la API no respondió en ${API_TIMEOUT_MS / 1000} s.`);
       return errorResponse(504, "api_timeout", "La API tarda demasiado en responder. Inténtalo de nuevo en unos minutos.");
     }
+    console.error(`[BFF] ${route}: no se pudo conectar con la API. ${describeFetchError(error)}`);
     return errorResponse(502, "api_unavailable", "La API de Brasaland no está disponible. Inténtalo más tarde.");
   }
 
