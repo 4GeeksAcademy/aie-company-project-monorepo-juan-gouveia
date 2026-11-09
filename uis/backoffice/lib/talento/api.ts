@@ -18,6 +18,14 @@ const NOT_CONFIGURED_MESSAGE = "El servicio de candidatos no está disponible en
 const NETWORK_ERROR_MESSAGE =
   "No se pudo conectar con el servicio de candidatos. Revisa tu conexión e inténtalo de nuevo.";
 
+// Si el servicio no responde en este tiempo, se corta la petición: la pantalla no se queda cargando
+// indefinidamente. Es el mismo límite que usa el intermediario con la API de Brasaland.
+const REQUEST_TIMEOUT_MS = 15_000;
+const TIMEOUT_MESSAGE = "El servicio de candidatos tarda demasiado en responder. Inténtalo de nuevo en unos minutos.";
+// En una escritura, el servicio pudo guardar el cambio aunque la respuesta no llegara a tiempo.
+const WRITE_TIMEOUT_MESSAGE =
+  "El servicio de candidatos tarda demasiado en responder. Recarga la página para comprobar si el cambio se guardó antes de repetirlo.";
+
 export interface RecordFilters {
   status?: RecordStatus;
   stage?: RecordStage;
@@ -35,8 +43,12 @@ async function talentFetch(path: string, fallback: string, init?: RequestInit): 
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, init);
-  } catch {
+    res = await fetch(`${API_BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      const isRead = !init?.method || init.method === "GET";
+      throw new ApiError(isRead ? TIMEOUT_MESSAGE : WRITE_TIMEOUT_MESSAGE, 0, "timeout");
+    }
     throw new ApiError(NETWORK_ERROR_MESSAGE, 0, "network_error");
   }
 
