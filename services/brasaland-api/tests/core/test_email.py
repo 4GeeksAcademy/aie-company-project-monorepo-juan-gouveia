@@ -63,6 +63,27 @@ def test_resend_errors_become_email_send_error_without_details(monkeypatch):
     assert "ana@brasaland.com" not in str(error.value)
 
 
+def test_resend_api_errors_keep_status_and_type_but_not_message(monkeypatch, caplog):
+    def fail(params, options=None):
+        raise resend.exceptions.ValidationError(
+            message="You can only send testing emails to your own email address (ana@brasaland.com)",
+            error_type="validation_error",
+            code=403,
+        )
+
+    monkeypatch.setattr(resend.Emails, "send", fail)
+    sender = ResendEmailSender("re_clave_de_prueba", "Brasaland <onboarding@resend.dev>")
+    with pytest.raises(EmailSendError) as error:
+        sender.send(MESSAGE)
+    assert str(error.value) == "Resend rechazó el envío (ValidationError, HTTP 403, validation_error)."
+
+    # En el log de send_safely queda el motivo, pero no el destinatario (ni en el traceback).
+    with caplog.at_level(logging.ERROR):
+        send_safely(sender, MESSAGE)
+    assert "HTTP 403, validation_error" in caplog.text
+    assert MESSAGE.to not in caplog.text
+
+
 def test_send_safely_swallows_and_logs_failures(caplog):
     class Failing:
         def send(self, message):

@@ -69,8 +69,20 @@ class ResendEmailSender:
         try:
             resend.Emails.send(params)
         except Exception as error:  # noqa: BLE001 - errores de la API de Resend o de red
-            # Solo el tipo de error: el mensaje de Resend puede incluir el destinatario.
-            raise EmailSendError(f"Resend rechazó el envío ({type(error).__name__}).") from None
+            raise EmailSendError(f"Resend rechazó el envío ({describe_resend_error(error)}).") from None
+
+
+def describe_resend_error(error: Exception) -> str:
+    """Lo que se puede registrar de un fallo de Resend: el tipo, el estado HTTP y su tipo de error.
+
+    Nunca el mensaje: el de Resend puede incluir el destinatario (por ejemplo, en el 403 de
+    «solo puedes enviar a tu propio email»). Por eso EmailSendError se lanza `from None`: con la causa
+    encadenada, logger.exception imprimiría ese mensaje en el traceback.
+    """
+    parts = [type(error).__name__]
+    if isinstance(error, resend.exceptions.ResendError):
+        parts += [f"HTTP {error.code}", str(error.error_type)]
+    return ", ".join(parts)
 
 
 def get_email_sender() -> EmailSender:
