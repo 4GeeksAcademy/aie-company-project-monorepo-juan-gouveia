@@ -57,19 +57,39 @@ VALIDATION_MESSAGES = {
     "missing": "Campo obligatorio.",
     "extra_forbidden": "Este campo no está permitido; lo genera el sistema o no existe.",
     "greater_than": "Debe ser mayor que {gt}.",
+    "greater_than_equal": "Debe ser mayor o igual que {ge}.",
+    "less_than": "Debe ser menor que {lt}.",
+    "less_than_equal": "Debe ser menor o igual que {le}.",
     "float_type": "Debe ser un número.",
+    "float_parsing": "Debe ser un número.",
     "finite_number": "Debe ser un número finito.",
+    "int_type": "Debe ser un número entero.",
     "int_parsing": "Debe ser un número entero.",
+    "int_from_float": "Debe ser un número entero, sin decimales.",
+    "bool_type": "Debe ser verdadero o falso.",
+    "bool_parsing": "Debe ser verdadero o falso.",
+    "date_type": "Debe ser una fecha con el formato AAAA-MM-DD.",
+    "date_parsing": "Debe ser una fecha con el formato AAAA-MM-DD.",
+    "date_from_datetime_parsing": "Debe ser una fecha con el formato AAAA-MM-DD.",
+    "datetime_type": "Debe ser una fecha y hora con el formato AAAA-MM-DDTHH:MM:SS.",
+    "datetime_parsing": "Debe ser una fecha y hora con el formato AAAA-MM-DDTHH:MM:SS.",
+    "datetime_from_date_parsing": "Debe ser una fecha y hora con el formato AAAA-MM-DDTHH:MM:SS.",
+    "literal_error": "Debe ser uno de estos valores: {expected}.",
+    "string_pattern_mismatch": "No tiene el formato esperado.",
     "string_type": "Debe ser un texto.",
     "string_too_short": "No puede estar vacío.",
     "string_too_long": "No puede superar {max_length} caracteres.",
     "list_type": "Debe ser una lista.",
     "too_short": "Debe tener al menos {min_length} elemento(s).",
+    "too_long": "No puede tener más de {max_length} elemento(s).",
     "enum": "Debe ser uno de estos valores: {expected}.",
     "json_invalid": "El cuerpo de la petición no es JSON válido.",
     "model_attributes_type": "El cuerpo de la petición debe ser un objeto JSON.",
     "dict_type": "El cuerpo de la petición debe ser un objeto JSON.",
 }
+
+# Para los tipos de error de Pydantic que no están en la tabla anterior.
+GENERIC_VALIDATION_MESSAGE = "El valor no es válido."
 
 # Prefijos de FastAPI que indican dónde estaba el dato; no forman parte del nombre del campo.
 LOCATION_PREFIXES = {"body", "query", "path", "header", "cookie"}
@@ -96,14 +116,24 @@ def describe_validation_errors(errors: list[dict]) -> list[dict]:
             if "expected" in ctx:
                 # Pydantic une las opciones con "or" ('a', 'b' or 'c'); se pasa a español.
                 ctx["expected"] = str(ctx["expected"]).replace(" or ", " o ")
-            if isinstance(ctx.get("gt"), float) and ctx["gt"].is_integer():
-                # "mayor que 0" en vez de "mayor que 0.0".
-                ctx["gt"] = int(ctx["gt"])
-            message = VALIDATION_MESSAGES[kind].format(**ctx)
+            for bound in ("gt", "ge", "lt", "le"):
+                if isinstance(ctx.get(bound), float) and ctx[bound].is_integer():
+                    # "mayor que 0" en vez de "mayor que 0.0".
+                    ctx[bound] = int(ctx[bound])
+            if kind == "string_too_short" and ctx.get("min_length", 1) > 1:
+                # "No puede estar vacío" solo es exacto con min_length=1, el único que se usa hoy.
+                message = "Debe tener al menos {min_length} caracteres.".format(**ctx)
+            else:
+                try:
+                    message = VALIDATION_MESSAGES[kind].format(**ctx)
+                except KeyError:
+                    # Falta en ctx un dato que el mensaje necesita: mejor genérico que roto.
+                    message = GENERIC_VALIDATION_MESSAGE
         elif kind.startswith("value_error"):
             message = "El valor no tiene un formato válido."
         else:
-            message = str(item["msg"])
+            # Tipo de Pydantic sin traducción: su `msg` está en inglés y es técnico, así que no se muestra.
+            message = GENERIC_VALIDATION_MESSAGE
         details.append({"field": field, "message": message})
     return details
 
