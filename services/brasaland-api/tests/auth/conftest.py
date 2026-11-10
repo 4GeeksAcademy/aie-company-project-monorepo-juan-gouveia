@@ -11,12 +11,18 @@ De `tests/conftest.py` llegan, en todas las pruebas: `auth_settings` (`SECRET_KE
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+import jose.jwt
 import pytest
 
 from app.domains.users import service as user_service
 from app.domains.users.models import Role, User, UserCreate, UserUpdate
+from tests.auth.helpers import PASSWORD
 
-PASSWORD = "parrilla-segura"
+
+@pytest.fixture
+def anyio_backend():
+    """Las funciones de ruta async se ejecutan con `@pytest.mark.anyio` sobre asyncio (plugin de anyio)."""
+    return "asyncio"
 
 
 @pytest.fixture
@@ -68,8 +74,8 @@ class Clock:
     """Reloj controlado para las funciones que aceptan `now`.
 
     Empieza en el instante real, en segundos enteros (como `iat`), y solo avanza con `advance`.
-    python-jose comprueba `exp` con el reloj real, así que un token emitido con `clock.now` es
-    válido de verdad; para probar la caducidad se emite con un `now` anterior (`clock.ago(...)`).
+    El fixture `clock` hace además que python-jose compruebe `exp` con este reloj, así que las
+    fronteras de caducidad se prueban al segundo exacto y sin esperas.
     """
 
     now: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(microsecond=0))
@@ -85,5 +91,20 @@ class Clock:
 
 
 @pytest.fixture
-def clock() -> Clock:
-    return Clock()
+def clock(monkeypatch) -> Clock:
+    """Reloj controlado, compartido con python-jose.
+
+    jose calcula el instante actual con `datetime.now(UTC)` dentro de `jose.jwt`; se sustituye ese
+    `datetime` por uno cuyo `now` devuelve `clock.now`. El resto de la API sigue con el reloj real:
+    a las funciones de la lógica se les pasa `now=clock.now`.
+    """
+    current = Clock()
+
+    class ClockDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return current.now if tz is None else current.now.astimezone(tz)
+
+    assert jose.jwt.datetime is datetime, "python-jose cambió cómo lee la hora: revisar el fixture clock"
+    monkeypatch.setattr(jose.jwt, "datetime", ClockDatetime)
+    return current
