@@ -50,6 +50,9 @@ include = ["app*"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "integration: pruebas HTTP con TestClient de tests/integration/ (contrato con el backoffice)",
+]
 
 [tool.coverage.run]
 # `uv run pytest --cov` mide todo el código de la API, nunca las pruebas.
