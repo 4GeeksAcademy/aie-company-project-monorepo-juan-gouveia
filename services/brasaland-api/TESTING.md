@@ -1,6 +1,6 @@
 # Brasaland API tests
 
-> **Status (2026-11-10): complete suite (ticket AUTH-088).** The case plan was written and reviewed before writing any test; then it was implemented in full. All 806 pytest tests and 55 Jest tests pass. With `tests/auth/` alone, coverage of the authentication modules is **88%** (target: 70%). The suite found two bugs, both fixed (see "Bugs found"). The API-042 extra (suppliers and incident manager) is complete: **84%** with its own modules alone (target: 60%).
+> **Status (2026-11-10): complete suite (ticket AUTH-088).** The case plan was written and reviewed before writing any test; then it was implemented in full. All 806 pytest tests and 90 Jest tests pass. With `tests/auth/` alone, coverage of the authentication modules is **88%** (target: 70%). The suite found two bugs, both fixed (see "Bugs found"). Both extras are complete: API-042 (suppliers and incident manager), at **84%** with its own modules alone (target: 60%), and FE-019 (frontend utilities), with the three utilities tested at 100%.
 
 > _Spanish version: [TESTING.es.md](./TESTING.es.md)._
 
@@ -13,6 +13,7 @@
 | **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed: 99 for authentication (214 cases with parametrization), plus the supplier, incident manager and CSV analyzer ones (60 tests and 90 cases, moved in API-042). 304 cases in all. They carry the `integration` marker, applied to the whole folder by `tests/integration/conftest.py`. |
 | **Rest of the API** | `tests/core/` and `tests/domains/` | Configuration, security, email, errors, `create-admin`, and each domain's models, repositories and seeds. |
 | **Backoffice Jest** (AUTH-088) | `uis/backoffice/__tests__/auth/` | The backoffice's TypeScript authentication logic: form validation, post-login destination, the token in `localStorage`, and how API errors are split across fields. 55 tests. See "Backoffice tests (Jest)". |
+| **Utility Jest** (FE-019) | `uis/backoffice/__tests__/utils/` | Date and metric formatters, the user-facing error message, and reading JSON responses. 35 tests. See "FE-019: frontend utilities". |
 
 ## How to run them
 
@@ -51,7 +52,9 @@ From `uis/backoffice/`, independently of the API:
 
 ```bash
 npm install
-npm test                                 # the 55 tests in __tests__/
+npm test                                 # the 90 tests in __tests__/
+npm test -- __tests__/auth               # authentication only (AUTH-088, 55)
+npm test -- __tests__/utils              # utilities only (FE-019, 35)
 npm run test:coverage                    # the same with coverage (equivalent to jest --coverage; report in coverage/)
 ```
 
@@ -395,6 +398,21 @@ They cover the TypeScript authentication logic of `uis/backoffice`. The frontend
 | `token.test.ts` | `getToken`, `setToken`, `clearToken`, `subscribeToToken` | Blocked `localStorage`: no session on read, `TokenStorageError` on save and no error on clear; change notices in this tab and in others |
 | `api-errors.test.ts` | `formErrorsFromApi`, `errorFromStatus` | 422 details per field; duplicate-email 409 next to the email; a technical error is never shown; a 5xx never shows details |
 
+## FE-019: frontend utilities
+
+> **Status (2026-11-10): complete.** Extra ticket FE-019: at least three frontend utilities tested with Jest, with one happy-path case and one failure case per function, runnable independently.
+
+The tests live in `uis/backoffice/__tests__/utils/` and run on their own with `npm test -- __tests__/utils` from `uis/backoffice/`. They're the three utilities the plan proposed, which display data or errors across several tools:
+
+| File | Functions | Notable cases |
+|---|---|---|
+| `format.test.ts` | `formatDate`, `formatDateTime`, `formatDateTimeUtc`, `formatPercentage`, `formatDecimal` (`lib/format.ts`) | A missing, empty or corrupt date (`2026-13-45`): "—", never "Invalid Date" or 1970; the incident manager's UTC time doesn't change day with an offset; percentage with a decimal point and "—" without a total; `formatDecimal(NaN)` returns "NaN" (current behaviour documented: callers must pass a number) |
+| `error-message.test.ts` | `toUserMessage` (`lib/error-message.ts`) | Shows the API message and the blocked-storage one; a `TypeError`, a `SyntaxError`, a generic `Error`, a string or `undefined` are always replaced by the fallback message |
+| `read-json.test.ts` | `readJson` (`lib/api-client.ts`) | Returns the JSON; a proxy's HTML page, truncated JSON, an empty body or an already-read body give a readable `invalid_response` `ApiError`, never the `SyntaxError` |
+
+- **Fixed time zone:** `lib/format.ts` formats in local time, so `jest.config.js` sets `TZ=UTC` to keep the expected dates the same on any machine.
+- **No network:** `readJson` is tested with Node's `Response`, built by hand.
+
 ## Coverage
 
 Measured on 2026-11-10. "Authentication modules" means `core/security.py`, `domains/auth/`, `domains/users/` and `domains/profiles/` (762 statements).
@@ -445,6 +463,8 @@ With the whole suite, `uv run pytest --cov` reports **98%** of all of `app/` (1,
 | `lib/auth/navigation.ts` | 94% | 100% |
 | `lib/auth/token.ts` | 90% | 97% |
 | **`lib/auth/` overall** | **96%** | **99%** |
-| `lib/api-client.ts` | 40% | 45% |
+| `lib/format.ts` (FE-019) | 100% | 100% |
+| `lib/error-message.ts` (FE-019) | 100% | 100% |
+| `lib/api-client.ts` | 45% | 51% |
 
-Only `errorFromStatus` from `api-client.ts` is in AUTH-088's scope: `apiFetch` would need to mock `fetch` and the browser redirect, and `readJson` is left for the FE-019 extra.
+From `api-client.ts`, `errorFromStatus` (AUTH-088) and `readJson` (FE-019) are in scope, both fully covered. What's left is `apiFetch`, which would need to mock `fetch` and the browser redirect; its errors are converted by `errorFromStatus`, which is tested.

@@ -723,3 +723,14 @@ Ticket extra de la misma consigna, en la misma rama. Coinciden con el ticket: do
 | Medida del 60 % | "En los módulos que pruebes" | Solo `tests/suppliers/` y `tests/incidents/`, sobre los dos dominios completos: 84 % | Con las pruebas que ya existían la cifra era del 98 %; incluye el analizador del CSV, que no se probó y aun así se mide |
 
 Verificación (10 de noviembre de 2026): `uv run pytest tests/suppliers tests/incidents` da 101 pruebas que pasan; con `--cov=app.domains.suppliers --cov=app.domains.incidents`, 84 %. La batería completa (`uv run pytest`) da 806 pruebas que pasan.
+
+### 10. Extra FE-019: utilidades del frontend
+
+Ticket extra de la misma consigna, en la misma rama. Coinciden con el ticket: tres utilidades del frontend Next.js (`lib/format.ts`, `toUserMessage` y `readJson`), con un caso feliz y uno de fallo por función, en un directorio `__tests__/` del proyecto frontend (`uis/backoffice/__tests__/utils/`).
+
+| Qué | Ticket | Implementación | Motivo |
+| --- | --- | --- | --- |
+| Instrucciones de ejecución independiente | En `TESTING.md` | En `services/brasaland-api/TESTING.md` (sección "FE-019") y en el README del backoffice: `npm test -- __tests__/utils` | El `TESTING.md` de AUTH-088 está en el servicio (apartado 1); el README del frontend enlaza a él |
+| Zona horaria de las pruebas | No dice nada | `jest.config.js` fija `TZ=UTC` | `lib/format.ts` formatea en la hora local: sin esto, las fechas esperadas dependerían del equipo |
+
+Verificación (10 de noviembre de 2026): `npm test -- __tests__/utils` da 35 pruebas que pasan; `npm run test:coverage` da 90 que pasan, con `lib/format.ts` y `lib/error-message.ts` al 100 % y `readJson` cubierta por completo. `tsc --noEmit` y `npm run lint` pasan.

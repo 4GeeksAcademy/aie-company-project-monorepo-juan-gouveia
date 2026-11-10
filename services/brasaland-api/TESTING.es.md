@@ -1,6 +1,6 @@
 # Pruebas de la API de Brasaland
 
-> **Estado (2026-11-10): batería completa (ticket AUTH-088).** El plan de casos se escribió y revisó antes de escribir ninguna prueba; después se implementó entero. Pasan las 806 pruebas de pytest y las 55 de Jest. Con solo `tests/auth/`, la cobertura de los módulos de autenticación es del **88 %** (objetivo: 70 %). La batería encontró dos bugs, ya corregidos (ver "Bugs encontrados"). El extra API-042 (proveedores y gestor de incidencias) está completo: **84 %** con solo sus módulos (objetivo: 60 %).
+> **Estado (2026-11-10): batería completa (ticket AUTH-088).** El plan de casos se escribió y revisó antes de escribir ninguna prueba; después se implementó entero. Pasan las 806 pruebas de pytest y las 90 de Jest. Con solo `tests/auth/`, la cobertura de los módulos de autenticación es del **88 %** (objetivo: 70 %). La batería encontró dos bugs, ya corregidos (ver "Bugs encontrados"). Los dos extras están completos: API-042 (proveedores y gestor de incidencias), con un **84 %** solo con sus módulos (objetivo: 60 %), y FE-019 (utilidades del frontend), con las tres utilidades probadas al 100 %.
 
 > _Versión en inglés: [TESTING.md](./TESTING.md)._
 
@@ -13,6 +13,7 @@
 | **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 de autenticación (214 casos con la parametrización), más las de proveedores, el gestor y el analizador de incidencias (60 pruebas y 90 casos, movidas en API-042). En total, 304 casos. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
 | **Resto de la API** | `tests/core/` y `tests/domains/` | Configuración, seguridad, correo, errores, `create-admin`, y los modelos, repositorios y seeds de cada dominio. |
 | **Jest del backoffice** (AUTH-088) | `uis/backoffice/__tests__/auth/` | La lógica TypeScript de autenticación del backoffice: validación de formularios, destino tras el login, token en `localStorage` y reparto de los errores de la API. 55 pruebas. Ver "Pruebas del backoffice (Jest)". |
+| **Jest de utilidades** (FE-019) | `uis/backoffice/__tests__/utils/` | Formateadores de fechas y métricas, el mensaje de error para el usuario y la lectura de respuestas JSON. 35 pruebas. Ver "FE-019: utilidades del frontend". |
 
 ## Cómo ejecutarlas
 
@@ -51,7 +52,9 @@ Desde `uis/backoffice/`, de forma independiente de la API:
 
 ```bash
 npm install
-npm test                                 # las 55 pruebas de __tests__/
+npm test                                 # las 90 pruebas de __tests__/
+npm test -- __tests__/auth               # solo las de autenticación (AUTH-088, 55)
+npm test -- __tests__/utils              # solo las utilidades (FE-019, 35)
 npm run test:coverage                    # lo mismo con cobertura (equivale a jest --coverage; informe en coverage/)
 ```
 
@@ -395,6 +398,21 @@ Cubren la lógica TypeScript de autenticación de `uis/backoffice`. El frontend 
 | `token.test.ts` | `getToken`, `setToken`, `clearToken`, `subscribeToToken` | `localStorage` bloqueado: sin sesión al leer, `TokenStorageError` al guardar y sin error al borrar; avisos de cambio en esta pestaña y en otras |
 | `api-errors.test.ts` | `formErrorsFromApi`, `errorFromStatus` | Detalles de un 422 por campo; 409 de email duplicado junto al email; un error técnico nunca se muestra; un 5xx nunca muestra detalles |
 
+## FE-019: utilidades del frontend
+
+> **Estado (2026-11-10): completado.** Ticket extra FE-019: al menos tres utilidades del frontend con Jest, con un caso feliz y uno de fallo por función, ejecutables de forma independiente.
+
+Las pruebas están en `uis/backoffice/__tests__/utils/` y se ejecutan solas con `npm test -- __tests__/utils` desde `uis/backoffice/`. Son las tres utilidades que propuso el plan, que muestran datos o errores en varias herramientas:
+
+| Archivo | Funciones | Casos destacados |
+|---|---|---|
+| `format.test.ts` | `formatDate`, `formatDateTime`, `formatDateTimeUtc`, `formatPercentage`, `formatDecimal` (`lib/format.ts`) | Fecha ausente, vacía o corrupta (`2026-13-45`): "—", nunca "Invalid Date" ni 1970; la hora UTC del gestor no cambia de día con un desfase; porcentaje con punto decimal y "—" sin total; `formatDecimal(NaN)` devuelve "NaN" (comportamiento actual documentado: quien llama debe pasar un número) |
+| `error-message.test.ts` | `toUserMessage` (`lib/error-message.ts`) | Muestra el mensaje de la API y el del almacenamiento bloqueado; un `TypeError`, un `SyntaxError`, un `Error` genérico, un texto o `undefined` se sustituyen siempre por el mensaje de respaldo |
+| `read-json.test.ts` | `readJson` (`lib/api-client.ts`) | Devuelve el JSON; una página HTML de un proxy, un JSON cortado, un cuerpo vacío o un cuerpo ya leído dan un `ApiError` `invalid_response` legible, nunca el `SyntaxError` |
+
+- **Zona horaria fija:** `lib/format.ts` formatea en la hora local, así que `jest.config.js` fija `TZ=UTC` para que las fechas esperadas sean las mismas en cualquier equipo.
+- **Sin red:** `readJson` se prueba con el `Response` de Node, construido a mano.
+
 ## Cobertura
 
 Medida el 2026-11-10. "Módulos de autenticación" son `core/security.py`, `domains/auth/`, `domains/users/` y `domains/profiles/` (762 sentencias).
@@ -445,6 +463,8 @@ Con toda la batería, `uv run pytest --cov` da un **98 %** de toda `app/` (1596 
 | `lib/auth/navigation.ts` | 94 % | 100 % |
 | `lib/auth/token.ts` | 90 % | 97 % |
 | **`lib/auth/` en total** | **96 %** | **99 %** |
-| `lib/api-client.ts` | 40 % | 45 % |
+| `lib/format.ts` (FE-019) | 100 % | 100 % |
+| `lib/error-message.ts` (FE-019) | 100 % | 100 % |
+| `lib/api-client.ts` | 45 % | 51 % |
 
-De `api-client.ts` solo entra en AUTH-088 `errorFromStatus`: `apiFetch` necesitaría simular `fetch` y la redirección del navegador, y `readJson` queda para el extra FE-019.
+De `api-client.ts` entran `errorFromStatus` (AUTH-088) y `readJson` (FE-019), las dos cubiertas por completo. Lo que falta es `apiFetch`, que necesitaría simular `fetch` y la redirección del navegador; sus errores se convierten con `errorFromStatus`, que sí está probada.
