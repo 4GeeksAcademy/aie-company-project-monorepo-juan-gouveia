@@ -64,7 +64,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestor de incidencias centralizado" (rutas `/api/v1`, `incident_seed_log`, 400 solo en el gestor, `status` fijo, menú en móvil y tablet, decisiones y la tabla de los 21 criterios), y la divergencia 3 del analizador marcada como resuelta. `ARCHITECTURE_PROPOSAL.md` (cuarto bloque en 2.7 y `packages/shared` en 6.2) y los README.
 - **Pendiente:** fusionar el PR #11 (tras el #10) y la entrega; los hace el desarrollador.
 
-**Auditoría de gestión de errores completada en la rama `feature/error-handling-audit`**, creada desde `feature/incident-manager` (2026-11-09). Es local: todavía no se ha subido a GitHub ni tiene PR. Se auditó todo el repositorio y se corrigieron los 29 hallazgos (1 crítico, 6 altos, 11 medios y 11 bajos), uno por commit, sin funcionalidades nuevas:
+**Auditoría de gestión de errores completada en la rama `feature/error-handling-audit`**, creada desde `feature/incident-manager` (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto contra `feature/incident-manager`. Se auditó todo el repositorio y se corrigieron los 29 hallazgos (1 crítico, 6 altos, 11 medios y 11 bajos), uno por commit, sin funcionalidades nuevas:
 
 - **Frontend (backoffice y web):** pantallas de error de Next.js (`error.tsx`, `global-error.tsx` y `not-found.tsx`) con "Reintentar" y "Volver al inicio". Mensajes legibles para cualquier estado HTTP o respuesta no JSON, y `toUserMessage` para no mostrar nunca un error técnico. Cliente del tracker de talento con timeout, captura de red y listas comprobadas. Guardado parcial distinguido, "Reintentar" en todas las cargas, indicación de qué hacer tras un error del análisis, `finally` en los formularios, fechas no válidas como "—", y `localStorage` bloqueado sin romper la sesión.
 - **Intermediario (BFF):** mensaje genérico si falta `API_BASE_URL`, y log `[BFF]` de los 502 y 504 sin cabeceras ni cuerpo.
@@ -72,9 +72,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Scripts:** `analyze.py` gestiona los errores de lectura, de codificación y de escritura de `results.csv`, y la cancelación con Ctrl+C. `seed_incidents.py` gestiona la lectura del CSV y la apertura, corrupción y escritura de la base.
 - **Verificación:** 559 pruebas pytest (20 nuevas), 36 del analizador y 20 del seed; `tsc`, `lint` y `build` del backoffice y la web. Cada corrección se probó por separado (simulaciones en Node, servidores reales para el BFF y ejecuciones reales de los scripts).
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Auditoría de gestión de errores", con tres divergencias: el detalle técnico en `/funciones`, la ruta absoluta de la base en los comandos de consola y el ámbito de las capturas de `create-admin`. También los README de la API, del backoffice, de `scripts/` y del analizador, y `techContext.md` (código `malformed_csv`).
-- **Pendiente:** la prueba manual en el navegador de los estados de error (opcional), subir la rama, abrir el PR y la entrega; lo hace el desarrollador.
+- **Pendiente:** la prueba manual en el navegador de los estados de error (opcional), fusionar el PR #12 (tras el #11) y la entrega; lo hace el desarrollador.
 
-**Pull requests (2026-11-09).** Forman una cadena: cada PR parte de la rama del anterior.
+**Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
 |---|---|---|
@@ -84,8 +84,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #9 AUTH-02 | `feature/auth-frontend` → `feature/auth-api` | ⏳ Abierto |
 | #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
 | #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
+| #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
 
-- **Orden de merge:** #8, #9, #10 y #11, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11 y #12, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -220,7 +221,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Falta subir la rama y abrir el PR, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
+0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
 0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado, documentado y con commit (`ccd09cc`). PR #11 abierto, contra `feature/password-reset` mientras el #10 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
 
@@ -289,4 +290,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-11-09_
+_Actualizado: 2026-11-10_
