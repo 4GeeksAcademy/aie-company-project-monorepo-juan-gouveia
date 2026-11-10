@@ -18,6 +18,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 5. [Recuperación y cambio de contraseña](#recuperación-y-cambio-de-contraseña) (ticket AUTH-03)
 6. [Gestor de incidencias centralizado](#gestor-de-incidencias-centralizado) (briefing "Gestor de Incidencias Centralizado")
 7. [Auditoría de gestión de errores](#auditoría-de-gestión-de-errores) (briefing "Auditoría de gestión de errores", rama `feature/error-handling-audit`)
+8. [Batería de pruebas de autenticación](#batería-de-pruebas-de-autenticación) (ticket AUTH-088, rama `feature/auth-tests`)
 
 ---
 
@@ -256,7 +257,7 @@ Todo lo de esta tabla se ejecutó el 4 de noviembre de 2026.
 | 401 | curl a las rutas protegidas sin token, con un token alterado y con uno caducado | 401 con `WWW-Authenticate: Bearer` (`not_authenticated`, `invalid_token`, `token_expired`) |
 | 403 | Un usuario lee, cambia o borra la cuenta de otro, lee o cambia el perfil de otro (`/profiles/{user_id}`), o intenta cambiarse el rol | 403 `forbidden`; `GET /users` responde 403 a quien no es admin; un admin lee cualquier perfil pero recibe 403 al modificar uno ajeno |
 | Rutas existentes | curl a 6 rutas de `suppliers` e `incidents` con y sin token | Sin token, 401; con token, las respuestas de siempre (200, o 404 en el export sin análisis previo) |
-| Ninguna ruta abierta por olvido | `tests/test_protected_routes.py` sobre `/openapi.json` | Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`. Al quitar la protección de `suppliers`, la prueba falla |
+| Ninguna ruta abierta por olvido | `tests/integration/test_protected_routes.py` sobre `/openapi.json` | Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`. Al quitar la protección de `suppliers`, la prueba falla |
 | Primer admin | `uv run create-admin` con datos inválidos | Mensaje en español y no escribe nada; los casos válidos están cubiertos por pruebas |
 
 ---
@@ -542,7 +543,7 @@ Ejecutado el 8 de noviembre de 2026. Las pruebas en vivo usaron la API y el back
 | Los inválidos no se insertan y se reportan en consola | El mismo comando | 4 inválidos (`BRS-000044`, `BRS-000049`, `BRS-000079`, `BRS-000086`) con su fila y motivo; ninguno en la base |
 | El seed es idempotente | Segunda ejecución | 0 insertadas y 96 omitidas; el total sigue en 96 |
 | Tras el seed, `/api/incidents/summary` da los totales esperados | `GET /api/incidents/summary` por el intermediario del backoffice | `open` 32, `resolved` 50, `discarded` 14; `customer_complaint` 48, `equipment_failure` 17, `supply_issue` 22, `staff_issue` 9 |
-| Códigos HTTP correctos en éxito y error | `tests/domains/incidents/test_manager_router.py`; rutas protegidas | 201, 200, 400, 404 y 401 sin token |
+| Códigos HTTP correctos en éxito y error | `tests/integration/test_manager_router.py` (antes en `tests/domains/incidents/`); rutas protegidas | 201, 200, 400, 404 y 401 sin token |
 | Los errores de validación identifican el campo | Las mismas pruebas; en vivo, alta sin sede y con categoría inválida | 400 con `details` de `category` y `branch` |
 | Ningún endpoint expone un stack trace | `test_unexpected_error_is_500_with_a_generic_message` | 500 `internal_error` con mensaje genérico, sin el detalle interno |
 | Las transiciones inválidas se rechazan con 400 | Pruebas de transiciones; en vivo, `open → resolved` | 400 `invalid_transition`: "Desde open solo se puede pasar a in_progress o discarded." |
@@ -607,3 +608,129 @@ Se hace así porque esos errores no pertenecen a una sola operación. Ctrl+C o e
 
 Como todas las preguntas se hacen antes de escribir, cancelar nunca deja cambios a medias. Los errores de validación del email y la contraseña sí se capturan en su operación, como antes.
 
+---
+
+## Batería de pruebas de autenticación
+
+Pruebas unitarias de la API de autenticación (ticket AUTH-088), en la rama `feature/auth-tests`. Coinciden con el ticket y el checklist:
+
+- pytest para la API y Jest para la lógica TypeScript;
+- un módulo de pruebas por endpoint, con camino feliz, caso límite y modo de fallo en cada uno;
+- el plan de casos escrito en `TESTING.md` antes de la primera prueba;
+- `uv run pytest` y `jest --coverage` pasan;
+- al menos un 70 % de cobertura del módulo de autenticación (88 %);
+- la revisión asistida por IA y los bugs que encontró, documentados en `TESTING.md`.
+
+Las diferencias son de ubicación, de alcance y de herramientas. Además, la batería obligó a tocar código de producción en tres puntos.
+
+> **Estado:** batería completa (2026-11-10). pytest: 705 pruebas pasan (146 de ellas son la batería unitaria nueva). Jest: 55 pasan. Cobertura de autenticación con solo `tests/auth/`: 88 %. Encontró dos bugs, ya corregidos (H-1 y H-2).
+
+| Qué | Consigna o briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Ubicación de `TESTING.md` | En la raíz del proyecto | `services/brasaland-api/TESTING.md`, más `TESTING.es.md` | El repositorio es un monorepo: la raíz del proyecto FastAPI es el servicio. Va en dos idiomas, como sus README |
+| Instalación de `pytest-cov` | `uv add --dev pytest pytest-cov httpx` | `uv add --optional dev pytest-cov` (extra `dev`); pytest y httpx ya estaban | Convención del servicio: sus dependencias de desarrollo están en el extra `dev`, que se instala con `uv sync --extra dev` |
+| Pruebas HTTP existentes | Probar la lógica, no la serialización HTTP | Las 99 pruebas de router de auth se conservan en `tests/integration/`, con el marker `integration`; la batería unitaria nueva está en `tests/auth/` | Protegen el contrato con el backoffice; `-m "not integration"` las excluye |
+| Qué es "la API de autenticación" | Ejemplos: registro, login y token | Los 15 endpoints de `auth`, `users` y `profiles` (AUTH-01 y AUTH-03): 16 módulos en `tests/auth/` | Es toda la API de autenticación construida en el hito anterior |
+| Medida del 70 % | `uv run pytest --cov` | El 70 % se mide con solo `tests/auth/` sobre los cuatro módulos de autenticación (88 %); `uv run pytest --cov` da un 98 % de toda `app/` | Con las pruebas HTTP la cifra ya era del 98 %: no demostraría nada sobre la batería nueva |
+| Código de producción | Escribir pruebas; corregir los bugs que revelen | Decisión del login extraída a `issue_login_token`; bugs H-1 y H-2 corregidos | Lo primero, para probar sin HTTP; lo segundo, porque el checklist pide corregir los bugs encontrados |
+| Funciones de Jest | Generación de tokens, validación y hash de contraseñas | Validación de formularios, `safeNext`, token en `localStorage` y errores de la API (`lib/auth/`) | El backoffice no genera tokens ni calcula hashes: eso vive en la API y lo cubre pytest |
+| Entorno de Jest | `npm install --save-dev jest @types/jest ts-jest` | Lo mismo, más `jest-environment-jsdom` | `token.ts` y `navigation.ts` usan `localStorage` y `window` |
+
+### 1. `TESTING.md` en el servicio y en dos idiomas
+
+El checklist pide `TESTING.md` "en la raíz de tu proyecto", y el ticket, "junto al código de la API existente". En este monorepo, el proyecto FastAPI es `services/brasaland-api/`: ahí están `pyproject.toml` y `tests/`, y desde ahí se ejecuta `uv run pytest`. En la raíz del repositorio conviven otros proyectos (backoffice, web, scripts) que no tienen nada que ver con esta batería.
+
+El mismo documento recoge también las pruebas de Jest del backoffice, en su propia sección, para que el plan de AUTH-088 esté en un solo sitio. El README del backoffice enlaza a esa sección. Como los README del servicio, se publica en inglés (`TESTING.md`) y en español (`TESTING.es.md`), con el mismo contenido.
+
+### 2. `pytest-cov` en el extra `dev`
+
+La consigna instala las herramientas con `uv add --dev`, que las pondría en un grupo de dependencias de uv. El servicio ya declaraba pytest y httpx en `[project.optional-dependencies] dev`, y sus README indican `uv sync --extra dev`. Si `pytest-cov` fuera a otro sitio, habría dos listas de herramientas de desarrollo y una instalación no traería la otra. Por eso se añadió con `uv add --optional dev pytest-cov`, y la configuración de cobertura (`[tool.coverage]`) está en `pyproject.toml`.
+
+### 3. Las pruebas HTTP se conservan como integración
+
+Antes de AUTH-088 había unas 99 pruebas de router de autenticación con `TestClient` (214 casos con la parametrización). Comprueban cosas que la consigna excluye de la batería unitaria: códigos de estado, el formato `{"error": {...}}`, cabeceras como `WWW-Authenticate` y el montaje de las rutas protegidas.
+
+No se borraron ni se convirtieron, porque son el contrato con el backoffice: una prueba unitaria no detecta, por ejemplo, que una ruta nueva quedó sin protección. Se movieron a `tests/integration/` con el marker `integration`:
+
+- `uv run pytest` las ejecuta junto con todo lo demás;
+- `uv run pytest -m "not integration"` las excluye;
+- la batería que pide el ticket es `tests/auth/`, y las mide aparte (punto 5).
+
+### 4. La API de autenticación son 15 endpoints
+
+La consigna pone como ejemplos `test_register.py`, `test_login.py` y `test_token.py`. La API de autenticación del hito anterior (AUTH-01, ampliada en AUTH-03) tiene 15 endpoints en tres dominios:
+
+- `auth`: login, `me`, `forgot-password`, `reset-password/validate`, `reset-password` y `change-password`;
+- `users`: registro, listar, leer, editar y borrar;
+- `profiles`: leer y editar el propio perfil y el de otra cuenta.
+
+Todos deciden algo sobre credenciales o permisos, así que entran en la batería: un módulo por endpoint más `test_token.py`, 16 en total. Los nombres de la consigna se respetan donde coinciden (`test_register.py`, `test_login.py` y `test_token.py`).
+
+### 5. Cómo se mide el 70 %
+
+Con la batería completa, la cobertura de autenticación ya era del 98 % antes de AUTH-088, gracias a las pruebas HTTP. Dar esa cifra no diría nada de la batería nueva. Por eso el objetivo del 70 % se mide con solo `tests/auth/` sobre `core/security.py` y los dominios `auth`, `users` y `profiles`:
+
+```bash
+uv run pytest tests/auth --cov=app.core.security --cov=app.domains.auth \
+  --cov=app.domains.users --cov=app.domains.profiles
+```
+
+El resultado es un 88 %. `uv run pytest --cov` sigue funcionando sin argumentos, como pide la consigna, y da un 98 % de toda `app/`. `TESTING.md` explica qué queda sin cubrir y por qué: sobre todo el comando de consola `create-admin` y la lectura HTTP del cuerpo del login.
+
+### 6. Cambios en el código de producción
+
+El ticket es de pruebas, pero se cambió código de producción en tres puntos, cada uno en su propio commit:
+
+- **Decisión del login (`issue_login_token`).** La ruta `POST /auth/login` recibe la petición cruda para aceptar JSON y formulario, así que no se podía llamar sin construir un `Request`. Su decisión (401 `invalid_credentials`, 403 `inactive_user` o token) pasó a una función propia que la ruta llama. El comportamiento no cambia.
+- **Bug H-1.** Cambiar la contraseña por `PUT /users/{id}` no cerraba las sesiones anteriores ni anulaba los enlaces de restablecimiento. Ahora lo hace, como `change-password`. **Cambia el comportamiento:** quien cambie su propia contraseña por esa ruta tiene que volver a iniciar sesión, porque la respuesta no trae un token nuevo. El backoffice no usa esa ruta para la contraseña.
+- **Bug H-2.** `change-password` respondía 400 «La contraseña actual no es correcta» si la cuenta se borraba durante el cambio. Ahora responde 401 `invalid_token`, como cualquier petición con el token de una cuenta borrada.
+
+Los dos bugs salieron de la revisión asistida por IA y se confirmaron con pruebas. El checklist pide corregirlos y documentarlos: están en "Bugs encontrados" de `TESTING.md`, con su prueba de regresión.
+
+### 7. Jest prueba las utilidades de autenticación que tiene el backoffice
+
+El checklist sugiere probar la generación de tokens, la validación y los helpers de hash. El backoffice no genera tokens ni calcula hashes: los recibe de la API, que es donde los prueba pytest (`test_token.py` y `test_register.py`). Sus utilidades de autenticación, que son las que se prueban, son:
+
+- la validación de los formularios (`lib/auth/validation.ts`), con los mismos límites que la API;
+- `safeNext` y `loginUrl` (`lib/auth/navigation.ts`), que impiden las redirecciones abiertas tras el login;
+- el token en `localStorage` (`lib/auth/token.ts`), incluido el almacenamiento bloqueado;
+- el reparto de los errores de la API por campo (`lib/auth/api-errors.ts`) y `errorFromStatus`.
+
+La configuración es `jest.config.js` (la consigna admite `.ts` o `.js`; `.ts` exigiría `ts-node`). Se añadió `jest-environment-jsdom` porque `token.ts` y `navigation.ts` necesitan `window` y `localStorage`; las demás pruebas se ejecutan en `node`. `jest --coverage` se ejecuta con `npm run test:coverage` (o `npx jest --coverage`) desde `uis/backoffice/`.
+
+### 8. Cómo verificarlo
+
+Ejecutado el 10 de noviembre de 2026. Hay una fila por cada criterio de evaluación de la consigna.
+
+| Criterio | Comando o acción | Resultado |
+| --- | --- | --- |
+| `TESTING.md` documenta el plan, cómo ejecutar y la cobertura | `services/brasaland-api/TESTING.md` (y `.es.md`) | Plan por endpoint escrito antes de las pruebas (commit `e5ef1f5`), comandos de cada suite, cobertura y bugs encontrados |
+| `uv run pytest` pasa sin errores | `uv run pytest` en `services/brasaland-api/` | 705 pasan, 0 fallan (unos 2 min) |
+| Camino feliz, caso límite y modo de fallo en cada endpoint | `tests/auth/`, un módulo por endpoint | Los 15 endpoints y los tokens tienen casos F, L y X; los IDs de las pruebas coinciden con las tablas de `TESTING.md` |
+| Cobertura de autenticación ≥ 70 % | `uv run pytest tests/auth --cov=...` (punto 5) | 88 % (con toda la batería, 98 %) |
+| Lógica de negocio, no serialización HTTP | Revisión de `tests/auth/` | Ninguna usa `TestClient`: llaman a las funciones de ruta y a los servicios, y afirman el `ApiError` o lo guardado |
+| Jest presente y pasando | `npm run test:coverage` en `uis/backoffice/` | 55 pasan; `lib/auth/` al 96 %. `tsc`, `lint` y `build` pasan |
+| Flujo asistido por IA evidente | "Revisión asistida por IA" y "Bugs encontrados" de `TESTING.md` | 7 casos marcados (IA) y dos bugs confirmados y corregidos (H-1 y H-2) |
+| Código limpio y nombres claros | Revisión | Nombres con el ID del caso (`test_tok_l1_…`), estructura F/L/X en cada módulo, fixtures y helpers comunes, comentarios en las afirmaciones no evidentes |
+
+### 9. Extra API-042: proveedores y gestor de incidencias
+
+Ticket extra de la misma consigna, en la misma rama. Coinciden con el ticket: dos grupos de endpoints del backoffice distintos de la autenticación (el directorio de proveedores y el gestor de incidencias), los tres niveles en cada endpoint, módulos nuevos en `tests/` y `TESTING.md` con los resultados de cobertura. Las decisiones E-1 a E-5 están en la sección "API-042" de `TESTING.md`.
+
+| Qué | Ticket | Implementación | Motivo |
+| --- | --- | --- | --- |
+| Pruebas de router existentes | No dice nada | `test_supplier_router.py`, `test_manager_router.py` y `test_router.py` (renombrado a `test_incident_analyzer_router.py`) pasan a `tests/integration/` | Mismo criterio que en AUTH-088: las pruebas HTTP son integración y `-m "not integration"` las excluye todas |
+| Medida del 60 % | "En los módulos que pruebes" | Solo `tests/suppliers/` y `tests/incidents/`, sobre los dos dominios completos: 84 % | Con las pruebas que ya existían la cifra era del 98 %; incluye el analizador del CSV, que no se probó y aun así se mide |
+
+Verificación (10 de noviembre de 2026): `uv run pytest tests/suppliers tests/incidents` da 101 pruebas que pasan; con `--cov=app.domains.suppliers --cov=app.domains.incidents`, 84 %. La batería completa (`uv run pytest`) da 806 pruebas que pasan.
+
+### 10. Extra FE-019: utilidades del frontend
+
+Ticket extra de la misma consigna, en la misma rama. Coinciden con el ticket: tres utilidades del frontend Next.js (`lib/format.ts`, `toUserMessage` y `readJson`), con un caso feliz y uno de fallo por función, en un directorio `__tests__/` del proyecto frontend (`uis/backoffice/__tests__/utils/`).
+
+| Qué | Ticket | Implementación | Motivo |
+| --- | --- | --- | --- |
+| Instrucciones de ejecución independiente | En `TESTING.md` | En `services/brasaland-api/TESTING.md` (sección "FE-019") y en el README del backoffice: `npm test -- __tests__/utils` | El `TESTING.md` de AUTH-088 está en el servicio (apartado 1); el README del frontend enlaza a él |
+| Zona horaria de las pruebas | No dice nada | `jest.config.js` fija `TZ=UTC` | `lib/format.ts` formatea en la hora local: sin esto, las fechas esperadas dependerían del equipo |
+
+Verificación (10 de noviembre de 2026): `npm test -- __tests__/utils` da 35 pruebas que pasan; `npm run test:coverage` da 90 que pasan, con `lib/format.ts` y `lib/error-message.ts` al 100 % y `readJson` cubierta por completo. `tsc --noEmit` y `npm run lint` pasan.

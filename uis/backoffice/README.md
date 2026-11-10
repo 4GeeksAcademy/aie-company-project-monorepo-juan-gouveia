@@ -28,9 +28,13 @@ npm install
 npm run dev     # http://localhost:3001
 npm run lint
 npm run build
+npm test                # Jest unit tests (__tests__/)
+npm run test:coverage   # the same, with coverage (report in coverage/)
 ```
 
 `npm install` links `@repo/brasa-core` from `packages/brasa-core`, so run it again after a fresh clone.
+
+The Jest tests cover the authentication logic in `lib/auth/` (`__tests__/auth/`, ticket AUTH-088) and the `lib/format.ts`, `toUserMessage` and `readJson` utilities (`__tests__/utils/`, ticket FE-019). Each folder runs on its own with `npm test -- __tests__/auth` or `npm test -- __tests__/utils`. What each file tests and its coverage are in [`services/brasaland-api/TESTING.md`](../../services/brasaland-api/TESTING.md#backoffice-tests-jest) and in its FE-019 section.
 
 ## Session
 

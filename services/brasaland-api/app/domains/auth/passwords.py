@@ -53,6 +53,10 @@ class WrongCurrentPasswordError(Exception):
     """La contraseña actual no coincide."""
 
 
+class AccountGoneError(Exception):
+    """La cuenta se borró entre la autenticación y el cambio de contraseña."""
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -157,7 +161,12 @@ def reset_password(store: AuthStore, token: str, new_password: str, now: datetim
 def change_password(
     store: AuthStore, user: User, current_password: str, new_password: str, now: datetime | None = None
 ) -> User:
-    """Cambia la contraseña de un usuario autenticado. Lanza WrongCurrentPasswordError si no coincide."""
+    """Cambia la contraseña de un usuario autenticado.
+
+    Lanza WrongCurrentPasswordError si la actual no coincide, y AccountGoneError si la cuenta se
+    borró después de autenticar la petición (antes se respondía, falsamente, que la contraseña
+    actual era incorrecta: hallazgo H-2 de AUTH-088).
+    """
     now = _whole_seconds(now or _now())
     if not verify_password(current_password, user.hashed_password):
         raise WrongCurrentPasswordError()
@@ -166,9 +175,8 @@ def change_password(
         updated = store.users.update(
             user.id, {"hashed_password": hashed, "password_changed_at": now.isoformat()}
         )
+        if updated is None:
+            raise AccountGoneError()
         # Un enlace de restablecimiento pedido antes ya no debe servir.
         store.password_resets.mark_all_used(user.id, now)
-    if updated is None:
-        # El usuario se borró entre la autenticación y el cambio.
-        raise WrongCurrentPasswordError()
     return updated

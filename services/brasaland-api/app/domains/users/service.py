@@ -5,6 +5,7 @@ Reglas que aplica:
 - Crear un usuario crea su perfil en la misma operación, y borrarlo borra también su perfil y sus
   enlaces de restablecimiento de contraseña.
 - El email es único (409 en el router).
+- Cambiar la contraseña, por cualquier vía, cierra las sesiones anteriores (`password_changed_at`).
 
 Los permisos (quién puede cambiar qué) los comprueba el router: estas funciones solo aplican cambios.
 """
@@ -60,17 +61,29 @@ def list_users(store: AuthStore) -> list[User]:
     return store.users.list()
 
 
-def update_user(store: AuthStore, user_id: str, data: UserUpdate) -> User | None:
-    """Aplica los campos enviados. Si llega `password`, se guarda solo su hash. None si no existe."""
+def update_user(store: AuthStore, user_id: str, data: UserUpdate, now: datetime | None = None) -> User | None:
+    """Aplica los campos enviados. None si no existe.
+
+    Si llega `password`, se guarda solo su hash y, como en el cambio y el restablecimiento de
+    AUTH-03, se guarda `password_changed_at` (los tokens emitidos antes dejan de valer) y se anulan
+    los enlaces de restablecimiento pendientes. Antes no se hacía (bug H-1 de AUTH-088).
+    """
     changes = data.model_dump(mode="json", exclude_unset=True)
-    if "password" in changes:
+    password_changed = "password" in changes
+    if password_changed:
         changes["hashed_password"] = hash_password(changes.pop("password"))
+        # En segundos enteros, como `iat`: un token emitido justo después del cambio sigue valiendo.
+        now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
+        changes["password_changed_at"] = now.isoformat()
     with store.lock:
         if "email" in changes:
             owner = store.users.get_by_email(changes["email"])
             if owner is not None and owner.id != user_id:
                 raise DuplicateEmailError(changes["email"])
-        return store.users.update(user_id, changes)
+        updated = store.users.update(user_id, changes)
+        if updated is not None and password_changed:
+            store.password_resets.mark_all_used(user_id, now)
+    return updated
 
 
 def delete_user(store: AuthStore, user_id: str) -> User | None:

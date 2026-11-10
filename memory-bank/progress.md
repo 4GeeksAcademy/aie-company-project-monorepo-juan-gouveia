@@ -64,7 +64,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestor de incidencias centralizado" (rutas `/api/v1`, `incident_seed_log`, 400 solo en el gestor, `status` fijo, menú en móvil y tablet, decisiones y la tabla de los 21 criterios), y la divergencia 3 del analizador marcada como resuelta. `ARCHITECTURE_PROPOSAL.md` (cuarto bloque en 2.7 y `packages/shared` en 6.2) y los README.
 - **Pendiente:** fusionar el PR #11 (tras el #10) y la entrega; los hace el desarrollador.
 
-**Auditoría de gestión de errores completada en la rama `feature/error-handling-audit`**, creada desde `feature/incident-manager` (2026-11-09). Es local: todavía no se ha subido a GitHub ni tiene PR. Se auditó todo el repositorio y se corrigieron los 29 hallazgos (1 crítico, 6 altos, 11 medios y 11 bajos), uno por commit, sin funcionalidades nuevas:
+**Auditoría de gestión de errores completada en la rama `feature/error-handling-audit`**, creada desde `feature/incident-manager` (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto contra `feature/incident-manager`. Se auditó todo el repositorio y se corrigieron los 29 hallazgos (1 crítico, 6 altos, 11 medios y 11 bajos), uno por commit, sin funcionalidades nuevas:
 
 - **Frontend (backoffice y web):** pantallas de error de Next.js (`error.tsx`, `global-error.tsx` y `not-found.tsx`) con "Reintentar" y "Volver al inicio". Mensajes legibles para cualquier estado HTTP o respuesta no JSON, y `toUserMessage` para no mostrar nunca un error técnico. Cliente del tracker de talento con timeout, captura de red y listas comprobadas. Guardado parcial distinguido, "Reintentar" en todas las cargas, indicación de qué hacer tras un error del análisis, `finally` en los formularios, fechas no válidas como "—", y `localStorage` bloqueado sin romper la sesión.
 - **Intermediario (BFF):** mensaje genérico si falta `API_BASE_URL`, y log `[BFF]` de los 502 y 504 sin cabeceras ni cuerpo.
@@ -72,9 +72,24 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Scripts:** `analyze.py` gestiona los errores de lectura, de codificación y de escritura de `results.csv`, y la cancelación con Ctrl+C. `seed_incidents.py` gestiona la lectura del CSV y la apertura, corrupción y escritura de la base.
 - **Verificación:** 559 pruebas pytest (20 nuevas), 36 del analizador y 20 del seed; `tsc`, `lint` y `build` del backoffice y la web. Cada corrección se probó por separado (simulaciones en Node, servidores reales para el BFF y ejecuciones reales de los scripts).
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Auditoría de gestión de errores", con tres divergencias: el detalle técnico en `/funciones`, la ruta absoluta de la base en los comandos de consola y el ámbito de las capturas de `create-admin`. También los README de la API, del backoffice, de `scripts/` y del analizador, y `techContext.md` (código `malformed_csv`).
-- **Pendiente:** la prueba manual en el navegador de los estados de error (opcional), subir la rama, abrir el PR y la entrega; lo hace el desarrollador.
+- **Pendiente:** la prueba manual en el navegador de los estados de error (opcional), fusionar el PR #12 (tras el #11) y la entrega; lo hace el desarrollador.
 
-**Pull requests (2026-11-09).** Forman una cadena: cada PR parte de la rama del anterior.
+**Pruebas de la API de autenticación (ticket AUTH-088) completadas en la rama `feature/auth-tests`**, creada desde `feature/error-handling-audit` (`d8f39c2`) el 2026-11-10; local, sin subir. Decisiones T-1 a T-9 aprobadas y fases 0 a 6 del núcleo hechas, con un commit por fase hecho por el desarrollador:
+
+- **API (pytest):** 16 módulos en `tests/auth/` (`test_token.py` y uno por cada uno de los 15 endpoints de `auth`, `users` y `profiles`), 146 casos con camino feliz, caso límite y modo de fallo. Llaman a las funciones de ruta y a los servicios, sin HTTP. Con ellos solos, la cobertura de autenticación es del **88 %** (objetivo: 70 %).
+- **Integración HTTP:** las 99 pruebas de router de auth que ya existían (214 casos) pasaron a `tests/integration/`, con el marker `integration`.
+- **Backoffice (Jest):** Jest con ts-jest en `uis/backoffice` (`npm test`, `npm run test:coverage`) y 55 pruebas en `__tests__/auth/`: validación de formularios, destino tras el login, token en `localStorage` y reparto de los errores de la API. `lib/auth/` queda al 96 %.
+- **Bugs encontrados y corregidos** (los dos salieron de la revisión asistida por IA y tienen prueba de regresión):
+  - H-1 (`bcc45b7`): cambiar la contraseña por `PUT /users/{id}` no cerraba las sesiones anteriores;
+  - H-2 (`c6fc80d`): `change-password` respondía «contraseña actual incorrecta» si la cuenta se borraba durante el cambio.
+- **Cambio de producción para las pruebas:** la decisión del login pasó a `issue_login_token` (`auth/router.py`), sin cambiar el comportamiento.
+- **Verificación:** `uv run pytest` 705 pasan; `npm test` 55 pasan; `tsc`, `lint` y `build` del backoffice pasan.
+- **Documentación:** `services/brasaland-api/TESTING.md` y `TESTING.es.md` (plan, cómo ejecutar, cómo están construidas, revisión con IA, bugs, Jest y cobertura); README de la API y del backoffice; `docs/BRIEFING_DIVERGENCES.md`, sección "Batería de pruebas de autenticación" (7 divergencias y la tabla de los 8 criterios).
+- **Extra API-042 completado:** 11 módulos y 101 casos en `tests/suppliers/` y `tests/incidents/` (los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP); con ellos solos, la cobertura de los dos dominios es del 84 % (objetivo: 60 %). Las pruebas de router de los dos dominios pasaron a `tests/integration/`. `uv run pytest`: 806 pasan.
+- **Extra FE-019 completado:** 35 pruebas de Jest en `uis/backoffice/__tests__/utils/` para `lib/format.ts`, `toUserMessage` y `readJson`, todas al 100 %; `jest.config.js` fija `TZ=UTC`. El backoffice tiene 90 pruebas de Jest.
+- **Pendiente:** subir la rama y abrir el PR #13 contra `feature/error-handling-audit` (lo hace el desarrollador).
+
+**Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
 |---|---|---|
@@ -84,8 +99,10 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #9 AUTH-02 | `feature/auth-frontend` → `feature/auth-api` | ⏳ Abierto |
 | #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
 | #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
+| #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
+| #13 AUTH-088 (pendiente de abrir) | `feature/auth-tests` → `feature/error-handling-audit` | 🚧 Completo (núcleo y extras); falta subir la rama y abrir el PR |
 
-- **Orden de merge:** #8, #9, #10 y #11, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11 y #12, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -162,7 +179,7 @@ Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negoci
 | `services/brasaland-api/` — API FastAPI por dominios (propuesta de arquitectura) | ✅ Iniciada |
 | Dominio `incidents` — `POST /api/v1/incidents/analyze`, `GET /api/v1/incidents/results/export`, `GET /health`; 24 pruebas pytest | ✅ Implementado; último análisis en memoria |
 | Dominio `suppliers` — CRUD del directorio de proveedores, filtros `country`/`category`, `PATCH` de tarifa (registra `updated_at`) y de estado, 409 por nombre duplicado; seeder `uv run seed`; 108 pruebas pytest | ✅ Implementado; TinyDB en `storage/brasaland-db.json` |
-| Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me` y `/profiles/{user_id}`, `get_current_user`, `uv run create-admin`; 135 pruebas pytest (más 35 de `core` y 59 de rutas protegidas) | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
+| Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me` y `/profiles/{user_id}`, `get_current_user`, `uv run create-admin`; 146 pruebas unitarias en `tests/auth/` (AUTH-088, 88 % de cobertura), más las de integración HTTP en `tests/integration/` | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
 | Resto de dominios (`locations`, `recruitment`…) | ❌ No iniciado |
 | Base de datos | ⏳ TinyDB provisional para `suppliers` (directiva del CTO); el motor definitivo (Postgres con ORM) está sin decidir. Usuarios y perfiles se quedan en TinyDB también después (directiva del briefing AUTH-01) |
 | Autenticación / Autorización | ✅ JWT stateless (sin sesiones ni cookies). Todas las rutas exigen token salvo login, registro, `/health` y las de restablecimiento de contraseña (AUTH-03). Cambiar o restablecer la contraseña cierra las sesiones anteriores. El backoffice envía el token a través del BFF (`feature/auth-frontend`). ⏳ Permisos por rol solo en la gestión de usuarios (admin) |
@@ -220,7 +237,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Falta subir la rama y abrir el PR, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. Falta abrir el PR #13 contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
+
+0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
 0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado, documentado y con commit (`ccd09cc`). PR #11 abierto, contra `feature/password-reset` mientras el #10 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
 
@@ -285,8 +304,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
   - el token vive en `localStorage`, como exige el ticket, así que un script inyectado podría leerlo (la propuesta 5.2 preveía una cookie `httpOnly`);
   - el registro es abierto, así que cualquiera puede crearse una cuenta `user`, y no hay permisos por herramienta;
   - la comprobación de sesión es del navegador; la protección de los datos está en la API.
+- **Next.js vulnerable en las dos aplicaciones** (`npm audit`, 2026-11-10): `uis/backoffice` y `uis/website` usan `next` 16.3.5, con avisos críticos de ejecución remota de código (optimización de imágenes con SVG, `use cache`, `next/og`) y otros altos (SSRF, DoS, envenenamiento de caché). El arreglo es `next` y `eslint-config-next` 16.4.6, sin cambio de versión mayor, más `npm audit fix` sin `--force` para `sharp`, `zod` y `source-map-js` (dependencias indirectas). **Decisión:** hacerlo en una rama propia desde `main` cuando no quede ningún PR de la cadena pendiente de fusionar, y verificar `lint`, `build`, pruebas y las vistas principales de las dos aplicaciones. Hasta entonces, no desplegar ninguna de las dos. Los avisos bajos y moderados que añadió Jest (AUTH-088) son solo de desarrollo.
 - **Dependencia temporal del backoffice**: mientras exista `packages/brasa-core`, se construye desde la raíz del repositorio, y los cambios en el paquete también deben comprobar `uis/backoffice`.
 
 ---
 
-_Actualizado: 2026-11-09_
+_Actualizado: 2026-11-10_
