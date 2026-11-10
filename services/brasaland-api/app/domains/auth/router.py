@@ -88,6 +88,23 @@ async def read_credentials(request: Request) -> LoginRequest:
         ) from None
 
 
+def issue_login_token(store: AuthStore, credentials: LoginRequest) -> Token:
+    """La decisión del login: token si las credenciales son correctas y la cuenta está activa.
+
+    - Email inexistente o contraseña incorrecta → 401 `invalid_credentials` (misma respuesta en
+      ambos casos, para no revelar qué emails están registrados).
+    - Credenciales correctas de una cuenta desactivada → 403 `inactive_user`.
+
+    Está separada de la ruta (que lee el cuerpo de la petición) para poder probarla sin HTTP.
+    """
+    user = service.authenticate_user(store, credentials.email, credentials.password)
+    if user is None:
+        raise ApiError(401, "invalid_credentials", "Email o contraseña incorrectos.", headers=BEARER_CHALLENGE)
+    if not user.is_active:
+        raise ApiError(403, "inactive_user", "Esta cuenta está desactivada. Contacta con un administrador.")
+    return Token(access_token=create_access_token(user.id))
+
+
 @router.post(
     "/login",
     response_model=Token,
@@ -103,12 +120,7 @@ async def login(request: Request, store: AuthStore = Depends(get_auth_store)) ->
     """Valida email y contraseña y devuelve un token JWT de acceso firmado."""
     credentials = await read_credentials(request)
     # bcrypt es lento a propósito: se ejecuta fuera del bucle de eventos.
-    user = await run_in_threadpool(service.authenticate_user, store, credentials.email, credentials.password)
-    if user is None:
-        raise ApiError(401, "invalid_credentials", "Email o contraseña incorrectos.", headers=BEARER_CHALLENGE)
-    if not user.is_active:
-        raise ApiError(403, "inactive_user", "Esta cuenta está desactivada. Contacta con un administrador.")
-    return Token(access_token=create_access_token(user.id))
+    return await run_in_threadpool(issue_login_token, store, credentials)
 
 
 @router.get(

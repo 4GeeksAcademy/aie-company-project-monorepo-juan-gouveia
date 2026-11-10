@@ -8,8 +8,8 @@
 
 | Suite | Folder | What it checks |
 |---|---|---|
-| **Authentication unit tests** (AUTH-088) | `tests/auth/` | The logic of each authentication endpoint: what it decides, not how it responds. They call each route's functions and their services directly, without an HTTP client. *To be created.* |
-| **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed. They carry the `integration` marker. *To be moved in Phase 2.* |
+| **Authentication unit tests** (AUTH-088) | `tests/auth/` | The logic of each authentication endpoint: what it decides, not how it responds. They call each route's functions and their services directly, without an HTTP client. Shared fixtures in `tests/auth/conftest.py`: active, inactive and admin users, and a controlled clock. *Tests to be written in phases 3 and 4.* |
+| **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed. They carry the `integration` marker, applied to the whole folder by `tests/integration/conftest.py`: 99 tests (214 cases with parametrization). |
 | **Other** | `tests/core/` and `tests/domains/` | Configuration, security, email, errors, repositories, and the `incidents` and `suppliers` domains. |
 
 ## How to run them
@@ -20,6 +20,7 @@
 uv sync --extra dev                      # installs pytest, pytest-cov and httpx
 uv run pytest                            # the whole suite
 uv run pytest tests/auth                 # authentication unit tests only
+uv run pytest -m integration             # HTTP integration tests only
 uv run pytest -m "not integration"       # everything except the HTTP tests
 uv run pytest --cov                      # the whole suite with coverage
 ```

@@ -8,8 +8,8 @@
 
 | Suite | Carpeta | Qué comprueba |
 |---|---|---|
-| **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. *Por crear.* |
-| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían. Llevan el marker `integration`. *Se moverán en la Fase 2.* |
+| **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. Fixtures comunes en `tests/auth/conftest.py`: usuarios activo, inactivo y admin, y un reloj controlado. *Las pruebas se escriben en las fases 3 y 4.* |
+| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta: 99 pruebas (214 casos con la parametrización). |
 | **Resto** | `tests/core/` y `tests/domains/` | Configuración, seguridad, correo, errores, repositorios y los dominios `incidents` y `suppliers`. |
 
 ## Cómo ejecutarlas
@@ -20,6 +20,7 @@
 uv sync --extra dev                      # instala pytest, pytest-cov y httpx
 uv run pytest                            # toda la batería
 uv run pytest tests/auth                 # solo las unitarias de autenticación
+uv run pytest -m integration             # solo las pruebas de integración HTTP
 uv run pytest -m "not integration"       # todo menos las pruebas HTTP
 uv run pytest --cov                      # toda la batería con cobertura
 ```

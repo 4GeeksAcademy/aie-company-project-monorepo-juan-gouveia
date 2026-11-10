@@ -74,6 +74,14 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Auditoría de gestión de errores", con tres divergencias: el detalle técnico en `/funciones`, la ruta absoluta de la base en los comandos de consola y el ámbito de las capturas de `create-admin`. También los README de la API, del backoffice, de `scripts/` y del analizador, y `techContext.md` (código `malformed_csv`).
 - **Pendiente:** la prueba manual en el navegador de los estados de error (opcional), fusionar el PR #12 (tras el #11) y la entrega; lo hace el desarrollador.
 
+**Pruebas de la API de autenticación (ticket AUTH-088) en curso en la rama `feature/auth-tests`**, creada desde `feature/error-handling-audit` (`d8f39c2`) el 2026-11-10; local, sin subir. Batería unitaria con pytest de los 15 endpoints de `auth`, `users` y `profiles` (≥ 70 % de cobertura solo con `tests/auth/`), Jest para la lógica de autenticación del backoffice y `TESTING.md`. Decisiones T-1 a T-9 aprobadas:
+
+- **Hecho:** Fase 0 (`ccefab9`: `pytest-cov` en el extra `dev` y configuración de cobertura; cobertura de partida de auth: 98 % con toda la batería y 75 % sin las pruebas HTTP) y Fase 1 (`e5ef1f5`: plan de casos en `services/brasaland-api/TESTING.md` y `TESTING.es.md`, 16 módulos previstos en `tests/auth/`).
+- **Fase 2 (infraestructura) hecha, pendiente de revisión y commit:** las 99 pruebas HTTP de autenticación (214 casos) están en `tests/integration/` con el marker `integration`; `tests/auth/conftest.py` tiene usuarios activo, inactivo y admin y un reloj controlado; la decisión 401/403 del login está en `issue_login_token` (`auth/router.py`). Pasan las 559 pruebas.
+- **Después:** fases 3-4 (pruebas de la API), 5 (Jest), 6 (cierre de la documentación) y los extras API-042 y FE-019, que se confirman antes de empezar.
+- **Hipótesis de fallo por confirmar con pruebas:** H-1 (`PUT /users/{id}` con `password` no cierra las sesiones anteriores) y H-2 (carrera improbable en `change_password`). Si una prueba confirma un fallo, se consulta antes de corregirlo.
+- **PR:** será el #13, contra `feature/error-handling-audit`.
+
 **Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
@@ -85,6 +93,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
 | #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
 | #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
+| #13 AUTH-088 (pendiente de abrir) | `feature/auth-tests` → `feature/error-handling-audit` | 🚧 En curso; rama local |
 
 - **Orden de merge:** #8, #9, #10, #11 y #12, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
@@ -220,6 +229,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 ## Propuesta de Próximos Pasos
 
 ### Inmediatos (Sprint Actual)
+
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Fases 0 y 1 hechas (`ccefab9`, `e5ef1f5`); Fase 2 (infraestructura de pruebas) hecha, pendiente de revisión y commit. Después, la Fase 3 (pruebas de tokens y `/auth`). El plan de casos está en `services/brasaland-api/TESTING.md`.
 
 0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 

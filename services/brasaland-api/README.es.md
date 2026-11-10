@@ -149,7 +149,7 @@ app/
         ├── exceptions.py   # DuplicateSupplierError
         └── dependencies.py # Inyección del repositorio
 storage/                    # brasaland-db.json y auth-db.json (TinyDB); ignorado en Git
-tests/                      # Replica la estructura de app/
+tests/                      # Replica la estructura de app/, más auth/ (unitarias de auth) e integration/ (HTTP; ver TESTING.es.md)
 ```
 
 Las reglas del CSV de incidentes están en el paquete compartido [`packages/shared`](../../packages/shared/README.es.md) (`brasaland_shared.incidents`), que también usan `scripts/incident-report/analyze.py` y `scripts/seed_incidents.py`. La API lo instala como dependencia local (`[tool.uv.sources]` en `pyproject.toml`), así que `uv sync` basta; `incidents/service.py` solo reexporta lo que usa el analizador.
