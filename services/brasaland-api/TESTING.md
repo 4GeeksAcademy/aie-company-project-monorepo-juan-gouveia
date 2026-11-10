@@ -112,6 +112,7 @@ Covers `core/security.py` (create and decode) and `get_current_user`, the depend
 | CHG-L1 | New password equal to the current one | Accepted, and sessions are revoked | Documents the current decision: no rule forbids it |
 | CHG-L2 | Empty current password; new password of 7 characters | Rejected by the `ChangePasswordRequest` rules | |
 | CHG-X1 | Wrong current password | 400 `invalid_current_password`; the password, sessions and links stay unchanged | |
+| CHG-X2 | The account is deleted between authentication and the change | 401 `invalid_token`, as `get_current_user` answers for a deleted user | Regression test for bug H-2 (see "Bugs found") |
 
 ### `test_register.py` — `POST /users`
 
@@ -206,14 +207,21 @@ With the draft cases done, a dedicated pass was made with the AI agent (Claude C
 - UPD-X3 (password change through `PUT /users/{id}`);
 - GPR-L1 (`manager` versus admin).
 
-**Possible bugs it pointed out.** They're unconfirmed. If a test confirms one, it will be discussed before fixing it and recorded under "Bugs found".
+**Possible bugs it pointed out.** If a test confirms one, it will be discussed before fixing it and recorded under "Bugs found".
 
 - **H-1. `PUT /users/{id}` with `password` doesn't end earlier sessions.** `users/service.py` (`update_user`) stores the new hash, but doesn't set `password_changed_at` and doesn't void pending password reset links. `change-password` and `reset-password` do both. If confirmed, someone changing their password through this route to lock out an intruder wouldn't succeed.
-- **H-2. Misleading error in `change-password` if the account is deleted during the change.** `passwords.change_password` answers "the current password is incorrect" (400) and voids the links before checking that the user still exists. It needs a race between requests: unlikely, but the message would be false.
+- **H-2. Misleading error in `change-password` if the account is deleted during the change.** `passwords.change_password` answers "the current password is incorrect" (400) and voids the links before checking that the user still exists. It needs a race between requests: unlikely, but the message would be false. **Confirmed and fixed** (see "Bugs found").
 
 ## Bugs found
 
-*None so far.*
+### H-2. `change-password` claimed a wrong current password when the account no longer existed
+
+- **Status:** fixed on 2026-11-10, with the developer's approval.
+- **How it was found:** hypothesis from the AI-assisted review, confirmed with a manual probe on a temporary database: with the correct current password, deleting the account between authentication (`get_current_user`) and the change made the API answer 400 `invalid_current_password`.
+- **Cause:** `passwords.change_password` read a failed update (`None`, because the user no longer exists) as a wrong password. It also voided the reset links before checking it.
+- **Fix:** a new `AccountGoneError` exception, raised inside the lock before touching the links. The route maps it to 401 `invalid_token`, which is what `get_current_user` answers for a deleted user's token; the backoffice closes the session on a 401. A wrong current password is still 400 `invalid_current_password`.
+- **Regression test:** CHG-X2 (`tests/auth/test_change_password.py`). It fails without the fix and passes with it.
+- **Impact:** low. It needs two requests to coincide (deleting the account and changing its password), but the message was false and could lead someone to retry a password that was correct.
 
 ## Coverage
 

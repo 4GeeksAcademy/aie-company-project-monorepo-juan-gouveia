@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from app.core.security import create_access_token, decode_access_token
 from app.domains.auth import passwords
-from app.domains.auth.dependencies import get_current_user
+from app.domains.auth.dependencies import BEARER_CHALLENGE, get_current_user
 from app.domains.auth.router import change_password
 from app.domains.auth.schemas import ChangePasswordRequest
 from app.domains.users import service as user_service
@@ -82,3 +82,19 @@ async def test_chg_x1_wrong_current_password_changes_nothing(auth_store, auth_se
     assert get_current_user(token=session, store=auth_store).id == active_user.id
     assert auth_store.password_resets.get(link.id).used_at is None
     passwords.check_reset_token(auth_store, link_token, now=clock.now)
+
+
+async def test_chg_x2_account_deleted_during_change_is_invalid_token_not_wrong_password(auth_store, active_user):
+    """Bug H-2 (AUTH-088): la cuenta se borra entre get_current_user y el cambio.
+
+    Antes respondía 400 `invalid_current_password` aunque la contraseña actual fuera correcta.
+    Ahora responde lo mismo que get_current_user al token de un usuario borrado.
+    """
+    authenticated = active_user  # lo que entregó get_current_user
+    user_service.delete_user(auth_store, active_user.id)
+
+    with raises_api_error(401, "invalid_token") as info:
+        await change(auth_store, authenticated, PASSWORD)
+
+    assert info.value.headers == BEARER_CHALLENGE
+    assert auth_store.users.get(active_user.id) is None  # no se recrea la cuenta

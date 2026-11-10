@@ -112,6 +112,7 @@ Cubre `core/security.py` (crear y decodificar) y `get_current_user`, la dependen
 | CHG-L1 | Contraseña nueva igual a la actual | Se acepta y se revocan las sesiones | Documenta la decisión actual: no hay regla en contra |
 | CHG-L2 | Contraseña actual vacía; nueva de 7 caracteres | Las rechazan las reglas de `ChangePasswordRequest` | |
 | CHG-X1 | Contraseña actual incorrecta | 400 `invalid_current_password`; la contraseña, las sesiones y los enlaces no cambian | |
+| CHG-X2 | La cuenta se borra entre la autenticación y el cambio | 401 `invalid_token`, lo mismo que responde `get_current_user` a un usuario borrado | Prueba de regresión del bug H-2 (ver "Bugs encontrados") |
 
 ### `test_register.py` — `POST /users`
 
@@ -206,14 +207,21 @@ Con el borrador de casos hecho, se hizo una pasada específica con el agente de 
 - UPD-X3 (cambio de contraseña por `PUT /users/{id}`);
 - GPR-L1 (`manager` frente a admin).
 
-**Posibles fallos que señaló.** Están sin confirmar. Si una prueba los confirma, se consultan antes de corregirlos y se documentan en "Bugs encontrados".
+**Posibles fallos que señaló.** Si una prueba los confirma, se consultan antes de corregirlos y se documentan en "Bugs encontrados".
 
 - **H-1. `PUT /users/{id}` con `password` no cierra las sesiones anteriores.** `users/service.py` (`update_user`) guarda el hash nuevo, pero no `password_changed_at`, y no anula los enlaces de restablecimiento pendientes. `change-password` y `reset-password` sí hacen las dos cosas. Si se confirma, quien cambie su contraseña por esta ruta para echar a un intruso no lo conseguiría.
-- **H-2. Error engañoso en `change-password` si la cuenta se borra durante el cambio.** `passwords.change_password` responde "la contraseña actual no es correcta" (400) y anula los enlaces antes de comprobar que el usuario sigue existiendo. Requiere una carrera entre peticiones: es poco probable, pero el mensaje sería falso.
+- **H-2. Error engañoso en `change-password` si la cuenta se borra durante el cambio.** `passwords.change_password` responde "la contraseña actual no es correcta" (400) y anula los enlaces antes de comprobar que el usuario sigue existiendo. Requiere una carrera entre peticiones: es poco probable, pero el mensaje sería falso. **Confirmado y corregido** (ver "Bugs encontrados").
 
 ## Bugs encontrados
 
-*Ninguno por ahora.*
+### H-2. `change-password` decía que la contraseña actual era incorrecta cuando la cuenta ya no existía
+
+- **Estado:** corregido el 2026-11-10, con la aprobación del desarrollador.
+- **Cómo se encontró:** hipótesis de la revisión asistida por IA, confirmada con una prueba manual sobre una base temporal: con la contraseña actual correcta, si la cuenta se borraba entre la autenticación (`get_current_user`) y el cambio, la API respondía 400 `invalid_current_password`.
+- **Causa:** `passwords.change_password` interpretaba una actualización fallida (`None`, porque el usuario ya no existe) como una contraseña incorrecta. Además, anulaba los enlaces de restablecimiento antes de comprobarlo.
+- **Corrección:** una excepción nueva, `AccountGoneError`, que se lanza dentro del bloqueo y antes de tocar los enlaces. La ruta la traduce a 401 `invalid_token`, que es lo que responde `get_current_user` al token de un usuario borrado; el backoffice cierra la sesión ante un 401. Una contraseña actual incorrecta sigue siendo 400 `invalid_current_password`.
+- **Prueba de regresión:** CHG-X2 (`tests/auth/test_change_password.py`). Falla sin la corrección y pasa con ella.
+- **Impacto:** bajo. Requiere que coincidan dos peticiones (borrar la cuenta y cambiar su contraseña), pero el mensaje era falso y podía llevar a reintentar una contraseña que era correcta.
 
 ## Cobertura
 

@@ -16,7 +16,7 @@ from app.core.email import EmailSender, get_email_sender, send_safely
 from app.core.errors import ApiError
 from app.core.security import create_access_token
 from app.domains.auth import passwords
-from app.domains.auth.dependencies import BEARER_CHALLENGE, get_current_user
+from app.domains.auth.dependencies import BEARER_CHALLENGE, get_current_user, unauthorized
 from app.domains.auth.schemas import (
     FORGOT_PASSWORD_MESSAGE,
     ChangePasswordRequest,
@@ -232,4 +232,7 @@ async def change_password(
         )
     except passwords.WrongCurrentPasswordError:
         raise ApiError(400, "invalid_current_password", "La contraseña actual no es correcta.") from None
+    except passwords.AccountGoneError:
+        # Lo mismo que responde get_current_user al token de un usuario borrado.
+        raise unauthorized("invalid_token", "El token de acceso no es válido.") from None
     return PasswordChanged(access_token=create_access_token(updated.id))
