@@ -151,7 +151,7 @@ Cubre `core/security.py` (crear y decodificar) y `get_current_user`, la dependen
 | UPD-L2 | Cuerpo vacío o campos a `null` | Los rechaza `UserUpdate` | |
 | UPD-X1 | Un `user` o un `manager` intenta cambiar `role` o `is_active`, aunque sea en su cuenta | 403 y nada cambia | Escalada de privilegios |
 | UPD-X2 | Un usuario edita otra cuenta; un admin edita un ID inexistente | 403 y 404 | |
-| UPD-X3 **(IA)** | Un usuario cambia su contraseña por esta ruta | **A comprobar:** ¿se cierran las sesiones anteriores, como en AUTH-03? | Ver la hipótesis H-1 |
+| UPD-X3 **(IA)** | Un usuario cambia su contraseña por esta ruta | Se cierran las sesiones anteriores y se anulan los enlaces pendientes, como en AUTH-03. **Hoy falla** (bug H-1): marcada como `xfail` estricta | Ver "Bugs encontrados" |
 
 ### `test_delete_user.py` — `DELETE /users/{id}`
 
@@ -209,10 +209,18 @@ Con el borrador de casos hecho, se hizo una pasada específica con el agente de 
 
 **Posibles fallos que señaló.** Si una prueba los confirma, se consultan antes de corregirlos y se documentan en "Bugs encontrados".
 
-- **H-1. `PUT /users/{id}` con `password` no cierra las sesiones anteriores.** `users/service.py` (`update_user`) guarda el hash nuevo, pero no `password_changed_at`, y no anula los enlaces de restablecimiento pendientes. `change-password` y `reset-password` sí hacen las dos cosas. Si se confirma, quien cambie su contraseña por esta ruta para echar a un intruso no lo conseguiría.
+- **H-1. `PUT /users/{id}` con `password` no cierra las sesiones anteriores.** `users/service.py` (`update_user`) guarda el hash nuevo, pero no `password_changed_at`, y no anula los enlaces de restablecimiento pendientes. `change-password` y `reset-password` sí hacen las dos cosas. Si se confirma, quien cambie su contraseña por esta ruta para echar a un intruso no lo conseguiría. **Confirmado**, pendiente de decisión (ver "Bugs encontrados").
 - **H-2. Error engañoso en `change-password` si la cuenta se borra durante el cambio.** `passwords.change_password` responde "la contraseña actual no es correcta" (400) y anula los enlaces antes de comprobar que el usuario sigue existiendo. Requiere una carrera entre peticiones: es poco probable, pero el mensaje sería falso. **Confirmado y corregido** (ver "Bugs encontrados").
 
 ## Bugs encontrados
+
+### H-1. Cambiar la contraseña por `PUT /users/{id}` no cierra las sesiones anteriores
+
+- **Estado:** confirmado el 2026-11-10; **sin corregir todavía**, pendiente de la decisión del desarrollador.
+- **Cómo se encontró:** hipótesis de la revisión asistida por IA, confirmada por la prueba UPD-X3 (`tests/auth/test_update_user.py`): después del cambio, un token emitido antes sigue abriendo sesión.
+- **Causa:** `users/service.update_user` guarda el hash nuevo, pero no `password_changed_at`, y no anula los enlaces de restablecimiento pendientes. `change-password` y `reset-password` sí hacen las dos cosas.
+- **Impacto:** medio. Quien cambie su contraseña por esta ruta para echar a un intruso no lo consigue; un enlace de restablecimiento pedido antes también sigue sirviendo. El backoffice usa `change-password`, así que solo afecta a las llamadas directas a la API.
+- **Prueba:** UPD-X3 está marcada como `xfail` estricta. La batería sigue en verde mientras el bug exista, y la prueba falla (XPASS) en cuanto se corrija, para que se quite la marca.
 
 ### H-2. `change-password` decía que la contraseña actual era incorrecta cuando la cuenta ya no existía
 
