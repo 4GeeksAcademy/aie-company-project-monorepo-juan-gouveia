@@ -28,6 +28,8 @@ npm install
 npm run dev     # http://localhost:3001
 npm run lint
 npm run build
+npm test                # pruebas unitarias con Jest (__tests__/)
+npm run test:coverage   # lo mismo, con cobertura (informe en coverage/)
 ```
 
 `npm install` enlaza `@repo/brasa-core` desde `packages/brasa-core`, así que hay que ejecutarlo después de clonar el repositorio.

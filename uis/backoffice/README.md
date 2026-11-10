@@ -28,6 +28,8 @@ npm install
 npm run dev     # http://localhost:3001
 npm run lint
 npm run build
+npm test                # Jest unit tests (__tests__/)
+npm run test:coverage   # the same, with coverage (report in coverage/)
 ```
 
 `npm install` links `@repo/brasa-core` from `packages/brasa-core`, so run it again after a fresh clone.
