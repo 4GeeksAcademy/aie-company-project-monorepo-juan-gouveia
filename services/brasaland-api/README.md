@@ -72,28 +72,19 @@ The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is m
 ## Tests
 
 ```bash
-uv run pytest -v
+uv sync --extra dev    # pytest, pytest-cov and httpx
+uv run pytest          # all 705 tests
+uv run pytest --cov    # with coverage of app/ (98%)
 ```
 
-The 539 tests cover:
+The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 705 tests break down as follows:
 
-- **`core` (62):** configuration from the environment (missing or invalid variables, the API not starting without a key), password hashing and tokens (expired, signed with another key, tampered with, unsigned or missing claims; access and reset tokens), email sending, and error headers.
-- **Incident manager (71):** the exact briefing values and the lifecycle; every required field and every value that is not allowed, with 400 and its field; the filters; valid and rejected transitions; `/summary` with data and with an empty database; the 404; the generic 500 without internal details; seed loading without duplicates; and that suppliers and incidents share the file and its lock.
-- **`incidents`, analyzer (24):** file reading, the briefing values, the analysis JSON, the exported CSV, and every input error. The rules are also covered by the 32 tests of the console script (`scripts/incident-report/`), which uses the same service.
-- **`suppliers` (108):**
-  - the model, with the exact briefing fields and values, and every 422 rejection;
-  - the seeder: that it does not duplicate and that it reports the count on the console;
-  - the repository, including persistence and writes from two processes;
-  - every endpoint with its HTTP codes.
-- **`users` (79), `profiles` (30) and `auth` (71):**
-  - the briefing roles, the normalized email and the password limits;
-  - that plain text never reaches the file and that `name`, `phone` and `address` only live in the profile;
-  - the profile created with the user and deleted with it;
-  - `uv run create-admin`;
-  - sign-in with JSON and with a form, `get_current_user` (401 without a token, or with a malformed or expired one, or one for a deleted user; 403 if deactivated);
-  - every endpoint, including the 403 when a user tries to read, change or delete someone else's account or profile (an admin can read any profile, but not change it);
-  - password reset and change (AUTH-03).
-- **Protected routes (94):** the 13 `incidents` (analyzer and manager) and `suppliers` routes respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token, and work as before with a valid token. `/health` stays public, and no route is open other than the declared public ones. The existing `incidents` and `suppliers` tests send the token of a test user.
+- **Authentication unit tests (146, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
+- **HTTP integration (214, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication endpoint over HTTP (sign-in with JSON and with a form, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
+- **`core` (72):** configuration from the environment (the API doesn't start without a key), password hashing and tokens, email sending, and error headers.
+- **`incidents` (96):** the CSV analyzer (the briefing values, the JSON, the exported CSV and every input error) and the incident manager (exact values, lifecycle, filters, `/summary`, the 404 and the generic 500, and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
+- **`suppliers` (112):** the model with the briefing values, the seeder, the repository (including writes from two processes) and every endpoint.
+- **`users`, `profiles` and `auth` (65, `tests/domains/`):** models, repositories (including writes from another process), the user service and `uv run create-admin`.
 
 Each test uses temporary TinyDB databases and its own configuration, so it never touches `storage/` or depends on `.env`.
 

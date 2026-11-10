@@ -1,6 +1,6 @@
 # Pruebas de la API de Brasaland
 
-> **Estado (2026-11-10): plan de pruebas.** Este documento lista los casos que se van a cubrir antes de escribir ninguna prueba (ticket AUTH-088). Las secciones de ejecución, cobertura y resultados se completan al terminar la batería.
+> **Estado (2026-11-10): batería completa (ticket AUTH-088).** El plan de casos se escribió y revisó antes de escribir ninguna prueba; después se implementó entero. Pasan las 705 pruebas de pytest y las 55 de Jest. Con solo `tests/auth/`, la cobertura de los módulos de autenticación es del **88 %** (objetivo: 70 %). La batería encontró dos bugs, ya corregidos (ver "Bugs encontrados").
 
 > _Versión en inglés: [TESTING.md](./TESTING.md)._
 
@@ -8,27 +8,49 @@
 
 | Suite | Carpeta | Qué comprueba |
 |---|---|---|
-| **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. Fixtures comunes en `tests/auth/conftest.py`: usuarios activo, inactivo y admin, y un reloj controlado. *Las pruebas se escriben en las fases 3 y 4.* |
-| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta: 99 pruebas (214 casos con la parametrización). |
-| **Resto** | `tests/core/` y `tests/domains/` | Configuración, seguridad, correo, errores, repositorios y los dominios `incidents` y `suppliers`. |
+| **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. **16 módulos y 146 casos**: `test_token.py` y uno por cada uno de los 15 endpoints. |
+| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 pruebas (214 casos con la parametrización). Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
+| **Resto de la API** | `tests/core/` y `tests/domains/` | Configuración, seguridad, correo, errores, repositorios, `create-admin` y los dominios `incidents` y `suppliers`. |
+| **Jest del backoffice** (AUTH-088) | `uis/backoffice/__tests__/auth/` | La lógica TypeScript de autenticación del backoffice: validación de formularios, destino tras el login, token en `localStorage` y reparto de los errores de la API. 55 pruebas. Ver "Pruebas del backoffice (Jest)". |
 
 ## Cómo ejecutarlas
 
-*Preliminar; se confirma al terminar.* Desde `services/brasaland-api/`:
+### API (pytest)
+
+Desde `services/brasaland-api/`:
 
 ```bash
 uv sync --extra dev                      # instala pytest, pytest-cov y httpx
-uv run pytest                            # toda la batería
-uv run pytest tests/auth                 # solo las unitarias de autenticación
+uv run pytest                            # toda la batería (705 pruebas, unos 2 min por bcrypt)
+uv run pytest tests/auth                 # solo las unitarias de autenticación (146, unos 45 s)
 uv run pytest -m integration             # solo las pruebas de integración HTTP
 uv run pytest -m "not integration"       # todo menos las pruebas HTTP
-uv run pytest --cov                      # toda la batería con cobertura
+uv run pytest --cov                      # toda la batería con la cobertura de app/
+```
+
+Cobertura de los módulos de autenticación con solo la batería unitaria (la cifra del objetivo del 70 %):
+
+```bash
+uv run pytest tests/auth --cov=app.core.security --cov=app.domains.auth \
+  --cov=app.domains.users --cov=app.domains.profiles
+```
+
+No hace falta `.env`: `tests/conftest.py` fija una `SECRET_KEY` de pruebas, usa bases TinyDB temporales y un emisor de correo falso. Ninguna prueba toca `storage/` ni envía correos.
+
+### Backoffice (Jest)
+
+Desde `uis/backoffice/`, de forma independiente de la API:
+
+```bash
+npm install
+npm test                                 # las 55 pruebas de __tests__/
+npm run test:coverage                    # lo mismo con cobertura (equivale a jest --coverage; informe en coverage/)
 ```
 
 ## Criterios del plan
 
 - **Lógica, no HTTP.** Cada prueba afirma una decisión de la aplicación: qué token se emite, qué `ApiError` se lanza y con qué código, qué queda guardado en la base. No se comprueba el JSON, los códigos que pone FastAPI ni la validación del cuerpo por el framework. Las reglas de nuestros modelos (longitud de contraseña, campos prohibidos) sí se prueban, porque son reglas de negocio.
-- **Sin HTTP ni red.** Las pruebas usan una base TinyDB temporal y el emisor de correo falso (`tests/conftest.py`). El tiempo se controla con los parámetros `now` y `expires_delta` de la lógica, nunca con esperas.
+- **Sin HTTP ni red.** Las pruebas usan una base TinyDB temporal y el emisor de correo falso (`tests/conftest.py`). El tiempo se controla con los parámetros `now` y `expires_delta` de la lógica y con un reloj controlado, nunca con esperas (ver "Cómo están construidas").
 - **Prioridades**, en este orden:
   1. **la caducidad de los tokens**, porque es la regresión que motivó el ticket;
   2. **las decisiones de seguridad**: no revelar qué emails existen, no escalar privilegios y cerrar las sesiones al cambiar la contraseña;
@@ -194,9 +216,18 @@ Cubre `core/security.py` (crear y decodificar) y `get_current_user`, la dependen
 | UPR-L1 | Un admin intenta actualizar otro perfil | 403 | Regla de AUTH-01: solo el dueño modifica su perfil, también frente a un admin |
 | UPR-X1 | Un usuario intenta actualizar otro perfil; el dueño no tiene perfil | 403 sin cambios; 404 | |
 
+## Cómo están construidas
+
+- **Llamada directa a la lógica.** Cada prueba llama a la función de la ruta (por ejemplo, `register_user(data, store=...)`) o a su servicio, con los argumentos que inyectaría FastAPI. Afirma el `ApiError` lanzado (estado y código, con `raises_api_error`) o lo guardado en la base, nunca el JSON de la respuesta.
+- **Decisión del login separada.** La ruta `POST /auth/login` recibe la petición cruda para aceptar JSON y formulario, así que su decisión (401, 403 o token) se movió a `issue_login_token` para probarla sin HTTP. Es el único cambio de código de producción hecho para las pruebas; no cambia el comportamiento.
+- **Reloj controlado (`clock`).** Empieza en el instante real, en segundos enteros como `iat`, y solo avanza con `clock.advance(...)`. python-jose comprueba la caducidad con su propio `datetime.now`, así que el fixture se lo sustituye por `clock.now`: la frontera de caducidad se prueba al segundo exacto (TOK-L1), sin esperas ni pruebas inestables. Si una versión de jose cambia cómo lee la hora, un `assert` del fixture lo avisa.
+- **Rutas async** (`forgot-password`, `reset-password`, `change-password`…) con `@pytest.mark.anyio`, del plugin de anyio que ya instala FastAPI.
+- **Fixtures** (`tests/auth/conftest.py`): `user_factory`, `active_user`, `inactive_user`, `admin_user` y `clock`. Utilidades en `tests/auth/helpers.py`: `raises_api_error`, `request_reset` y `token_from_email` (el token se saca del enlace del correo, como lo haría quien lo abre).
+- **Nombres:** cada prueba lleva el ID de su caso (`test_tok_l1_…`, `test_upd_x3_…`), así se localiza desde las tablas de este documento.
+
 ## Revisión asistida por IA
 
-Con el borrador de casos hecho, se hizo una pasada específica con el agente de IA (Claude Code): revisar la lógica de `core/security.py`, `auth/passwords.py`, `auth/dependencies.py`, `users/service.py` y los routers, y proponer casos que faltaran. El desarrollador revisó cada propuesta antes de incluirla.
+Con el borrador de casos hecho, se hizo una pasada específica con el agente de IA (Claude Code): revisar la lógica de `core/security.py`, `auth/passwords.py`, `auth/dependencies.py`, `users/service.py` y los routers, y proponer casos que faltaran. El desarrollador revisó cada propuesta antes de incluirla. La IA también generó el código de las pruebas a partir de estas tablas; el desarrollador revisó cada fase antes de su commit.
 
 **Casos que propuso y se añadieron (marcados con IA):**
 - TOK-L3 (revocación en el mismo segundo);
@@ -232,13 +263,51 @@ Con el borrador de casos hecho, se hizo una pasada específica con el agente de 
 - **Prueba de regresión:** CHG-X2 (`tests/auth/test_change_password.py`). Falla sin la corrección y pasa con ella.
 - **Impacto:** bajo. Requiere que coincidan dos peticiones (borrar la cuenta y cambiar su contraseña), pero el mensaje era falso y podía llevar a reintentar una contraseña que era correcta.
 
+## Pruebas del backoffice (Jest)
+
+Cubren la lógica TypeScript de autenticación de `uis/backoffice`. El frontend no genera tokens ni calcula hashes (eso vive en la API), así que lo probado son sus utilidades de autenticación. Cada función tiene al menos un caso feliz y uno de fallo.
+
+- **Configuración:** `jest.config.js` (en `.js` para no necesitar `ts-node`), con ts-jest y el alias `@/`. El entorno es `node`; `token.test.ts` y `navigation.test.ts` piden `jsdom` en su cabecera porque usan `localStorage` y `window`.
+
+| Archivo | Funciones | Casos destacados |
+|---|---|---|
+| `validation.test.ts` | `validateLogin`, `emailError`, `passwordError`, `validateRegister`, `validateNewPassword`, `validateChangePassword`, `mergeFieldErrors` | Mismos límites que la API (8 caracteres y 72 bytes, con acentos); confirmación distinta; un error de la API borrado no tapa el local (regresión de AUTH-03) |
+| `navigation.test.ts` | `safeNext`, `loginUrl`, `currentPath` | Redirecciones abiertas rechazadas: `https://…`, `//…`, `/\…`, `javascript:` y rutas relativas |
+| `token.test.ts` | `getToken`, `setToken`, `clearToken`, `subscribeToToken` | `localStorage` bloqueado: sin sesión al leer, `TokenStorageError` al guardar y sin error al borrar; avisos de cambio en esta pestaña y en otras |
+| `api-errors.test.ts` | `formErrorsFromApi`, `errorFromStatus` | Detalles de un 422 por campo; 409 de email duplicado junto al email; un error técnico nunca se muestra; un 5xx nunca muestra detalles |
+
 ## Cobertura
 
-*Pendiente.* Cobertura de partida de los módulos de autenticación (`core/security.py`, `domains/auth`, `domains/users` y `domains/profiles`), medida el 2026-11-10:
+Medida el 2026-11-10. "Módulos de autenticación" son `core/security.py`, `domains/auth/`, `domains/users/` y `domains/profiles/` (762 sentencias).
 
-| Batería | Cobertura |
-|---|---|
-| Completa (`uv run pytest --cov`) | 98 % |
-| Sin pruebas HTTP | 75 % |
+| Batería | Pruebas | Cobertura de auth |
+|---|---|---|
+| **Solo `tests/auth/`** (objetivo del 70 %) | 146 | **88 %** (94 sentencias sin cubrir) |
+| Completa (`uv run pytest`) | 705 | 98 % |
+| Punto de partida, sin pruebas HTTP (antes de AUTH-088) | 255 | 75 % |
 
-El objetivo de AUTH-088 es un 70 % o más **solo con `tests/auth/`**.
+Con toda la batería, `uv run pytest --cov` da un **98 %** de toda `app/` (1596 sentencias).
+
+**Detalle con solo `tests/auth/`:**
+
+| Módulo | Cobertura | Qué queda sin cubrir y por qué |
+|---|---|---|
+| `users/router.py`, `users/service.py`, `profiles/router.py`, `auth/dependencies.py`, modelos y repositorios | 100 % | — |
+| `auth/passwords.py` | 99 % | Una comprobación defensiva de `reset_password`: el usuario ya se comprueba dentro del mismo bloqueo |
+| `core/security.py` | 97 % | Dos comprobaciones de claims que solo fallarían con un token firmado con la clave de la API pero mal construido (`iat` no entero; enlace con `jti` y sin `purpose`) |
+| `auth/router.py` | 80 % | `read_credentials`: lee el cuerpo JSON o de formulario del login. Es HTTP; lo cubren las pruebas de integración |
+| `users/database.py` y `users/dependencies.py` | 93 % y 56 % | La apertura de la base real y su inyección: las pruebas usan una base temporal |
+| `users/create_admin.py` | 0 % | Es el comando de consola `uv run create-admin`, no un endpoint. Lo cubre `tests/domains/users/test_create_admin.py` |
+
+**Jest** (`npm run test:coverage`):
+
+| Archivo | Sentencias | Líneas |
+|---|---|---|
+| `lib/auth/validation.ts` | 100 % | 100 % |
+| `lib/auth/api-errors.ts` | 100 % | 100 % |
+| `lib/auth/navigation.ts` | 94 % | 100 % |
+| `lib/auth/token.ts` | 90 % | 97 % |
+| **`lib/auth/` en total** | **96 %** | **99 %** |
+| `lib/api-client.ts` | 40 % | 45 % |
+
+De `api-client.ts` solo entra en AUTH-088 `errorFromStatus`: `apiFetch` necesitaría simular `fetch` y la redirección del navegador, y `readJson` queda para el extra FE-019.

@@ -34,6 +34,8 @@ npm run test:coverage   # lo mismo, con cobertura (informe en coverage/)
 
 `npm install` enlaza `@repo/brasa-core` desde `packages/brasa-core`, así que hay que ejecutarlo después de clonar el repositorio.
 
+Las pruebas de Jest cubren la lógica de autenticación de `lib/auth/` (ticket AUTH-088). Qué prueba cada archivo y su cobertura están en [`services/brasaland-api/TESTING.es.md`](../../services/brasaland-api/TESTING.es.md#pruebas-del-backoffice-jest).
+
 ## Sesión
 
 Todas las vistas exigen sesión salvo `/login`, `/register` (ticket AUTH-02), `/forgot-password` y `/reset-password` (ticket AUTH-03). El website público (`uis/website`) no se ve afectado.

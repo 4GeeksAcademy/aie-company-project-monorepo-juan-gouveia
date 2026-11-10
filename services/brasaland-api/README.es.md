@@ -72,28 +72,19 @@ La API **no arranca** si falta `SECRET_KEY` o `ACCESS_TOKEN_EXPIRE_MINUTES`, o s
 ## Pruebas
 
 ```bash
-uv run pytest -v
+uv sync --extra dev    # pytest, pytest-cov y httpx
+uv run pytest          # las 705 pruebas
+uv run pytest --cov    # con cobertura de app/ (98 %)
 ```
 
-Las 539 pruebas cubren:
+El plan de pruebas, las suites, los comandos por suite, la cobertura y los bugs encontrados están en [TESTING.es.md](./TESTING.es.md). Las 705 pruebas se reparten así:
 
-- **`core` (62):** la configuración desde el entorno (variables ausentes o inválidas, la API no arranca sin clave), el hash de contraseñas y los tokens (caducados, firmados con otra clave, alterados, sin firma o sin claims; de acceso y de restablecimiento), el envío de correo y las cabeceras de los errores.
-- **Gestor de incidencias (71):** los valores exactos del briefing y el ciclo de vida; cada campo obligatorio y cada valor no permitido con 400 y su campo; los filtros; las transiciones válidas y las rechazadas; `/summary` con datos y con la base vacía; el 404; el 500 genérico sin detalles internos; la carga del seed sin duplicados; y que proveedores e incidencias comparten archivo y bloqueo.
-- **`incidents`, analizador (24):** la lectura del archivo, los valores del briefing, el JSON del análisis, el CSV exportado y cada error de entrada. Las reglas también las prueban las 32 pruebas del script de consola (`scripts/incident-report/`), que usa el mismo servicio.
-- **`suppliers` (108):**
-  - el modelo, con los campos y valores exactos del briefing, y cada rechazo con 422;
-  - el seeder: que no duplica y que confirma el recuento en consola;
-  - el repositorio, incluidas la persistencia y la escritura desde dos procesos;
-  - cada endpoint con sus códigos HTTP.
-- **`users` (79), `profiles` (30) y `auth` (71):**
-  - los roles del briefing, el email normalizado y los límites de la contraseña;
-  - que el texto plano nunca llega al archivo y que `name`, `phone` y `address` solo están en el perfil;
-  - el perfil creado con el usuario y borrado con él;
-  - `uv run create-admin`;
-  - el login en JSON y en formulario, `get_current_user` (401 sin token, mal formado, caducado o de un usuario borrado; 403 si está desactivado);
-  - cada endpoint, incluidos los 403 cuando un usuario intenta leer, cambiar o borrar la cuenta o el perfil de otro (un admin puede leer cualquier perfil, pero no modificarlo);
-  - el restablecimiento y el cambio de contraseña (AUTH-03).
-- **Rutas protegidas (94):** las 13 de `incidents` (analizador y gestor) y `suppliers` responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave, y funcionan como antes con un token válido. `/health` sigue pública, y ninguna ruta queda abierta salvo las públicas declaradas. Las pruebas existentes de `incidents` y `suppliers` envían el token de un usuario de prueba.
+- **Unitarias de autenticación (146, `tests/auth/`, ticket AUTH-088):** la lógica de los 15 endpoints de `auth`, `users` y `profiles` y de los tokens, sin HTTP: camino feliz, caso límite y modo de fallo de cada uno. Con ellas solas, la cobertura de autenticación es del 88 %.
+- **Integración HTTP (214, `tests/integration/`, marker `integration`):** el contrato con el backoffice. Cada endpoint de autenticación a través de HTTP (login en JSON y en formulario, códigos de estado, formato de error y cabeceras), y las 13 rutas de `incidents` y `suppliers`, que responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave. Ninguna ruta queda abierta salvo las públicas declaradas.
+- **`core` (72):** la configuración desde el entorno (la API no arranca sin clave), el hash de contraseñas y los tokens, el envío de correo y las cabeceras de los errores.
+- **`incidents` (96):** el analizador del CSV (los valores del briefing, el JSON, el CSV exportado y cada error de entrada) y el gestor de incidencias (valores exactos, ciclo de vida, filtros, `/summary`, 404 y 500 genérico, y el seed sin duplicados). Las reglas del CSV también las prueba el script de consola (`scripts/incident-report/`).
+- **`suppliers` (112):** el modelo con los valores del briefing, el seeder, el repositorio (incluida la escritura desde dos procesos) y cada endpoint.
+- **`users`, `profiles` y `auth` (65, `tests/domains/`):** modelos, repositorios (incluida la escritura desde otro proceso), el servicio de usuarios y `uv run create-admin`.
 
 Cada prueba usa bases TinyDB temporales y su propia configuración, así que no toca `storage/` ni depende del `.env`.
 

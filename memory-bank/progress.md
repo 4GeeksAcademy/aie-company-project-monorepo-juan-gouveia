@@ -74,18 +74,18 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Auditoría de gestión de errores", con tres divergencias: el detalle técnico en `/funciones`, la ruta absoluta de la base en los comandos de consola y el ámbito de las capturas de `create-admin`. También los README de la API, del backoffice, de `scripts/` y del analizador, y `techContext.md` (código `malformed_csv`).
 - **Pendiente:** la prueba manual en el navegador de los estados de error (opcional), fusionar el PR #12 (tras el #11) y la entrega; lo hace el desarrollador.
 
-**Pruebas de la API de autenticación (ticket AUTH-088) en curso en la rama `feature/auth-tests`**, creada desde `feature/error-handling-audit` (`d8f39c2`) el 2026-11-10; local, sin subir. Batería unitaria con pytest de los 15 endpoints de `auth`, `users` y `profiles` (≥ 70 % de cobertura solo con `tests/auth/`), Jest para la lógica de autenticación del backoffice y `TESTING.md`. Decisiones T-1 a T-9 aprobadas:
+**Pruebas de la API de autenticación (ticket AUTH-088) completadas en la rama `feature/auth-tests`**, creada desde `feature/error-handling-audit` (`d8f39c2`) el 2026-11-10; local, sin subir. Decisiones T-1 a T-9 aprobadas y fases 0 a 6 del núcleo hechas, con un commit por fase hecho por el desarrollador:
 
-- **Hecho:** Fase 0 (`ccefab9`: `pytest-cov` en el extra `dev` y configuración de cobertura; cobertura de partida de auth: 98 % con toda la batería y 75 % sin las pruebas HTTP) y Fase 1 (`e5ef1f5`: plan de casos en `services/brasaland-api/TESTING.md` y `TESTING.es.md`, 16 módulos previstos en `tests/auth/`).
-- **Fase 2 (infraestructura) hecha** (`3f913a0`, `b8572f0`): las 99 pruebas HTTP de autenticación (214 casos) están en `tests/integration/` con el marker `integration`; `tests/auth/conftest.py` tiene usuarios activo, inactivo y admin y un reloj controlado; la decisión 401/403 del login está en `issue_login_token` (`auth/router.py`).
-- **Fase 3 (tokens y `/auth`) hecha** (`978f9b2`): 74 pruebas unitarias en 7 módulos de `tests/auth/`; con ellas solas, la cobertura de auth es del 77 %.
-- **Bug H-2 corregido:** `change-password` respondía 400 `invalid_current_password` si la cuenta se borraba durante el cambio; ahora responde 401 `invalid_token`. Tiene prueba de regresión (CHG-X2) y está documentado en "Bugs encontrados" de `TESTING.md` (`c6fc80d`).
-- **Fase 4 (`users` y `profiles`) hecha** (`a04cb7b`): 9 módulos más; en total, 16 módulos y 144 casos en `tests/auth/`. Con ellos solos, la cobertura de auth es del **88 %** (objetivo: 70 %).
-- **Bug H-1 corregido:** cambiar la contraseña por `PUT /users/{id}` no cerraba las sesiones anteriores ni anulaba los enlaces pendientes; ahora lo hace, como `change-password`. Pruebas de regresión UPD-X3; documentado en "Bugs encontrados" de `TESTING.md` (`bcc45b7`).
-- **Fase 5 (Jest en el backoffice) hecha, pendiente de revisión y commit:** Jest con ts-jest en `uis/backoffice` (`npm test`, `npm run test:coverage`) y 55 pruebas en `__tests__/auth/` de la validación de formularios, la navegación tras el login, el token en `localStorage` y el reparto de errores de la API; `lib/auth/` queda al 96 %.
-- **Después:** fases 3-4 (pruebas de la API), 5 (Jest), 6 (cierre de la documentación) y los extras API-042 y FE-019, que se confirman antes de empezar.
-- **Hipótesis de fallo por confirmar con pruebas:** H-1 (`PUT /users/{id}` con `password` no cierra las sesiones anteriores) y H-2 (carrera improbable en `change_password`). Si una prueba confirma un fallo, se consulta antes de corregirlo.
-- **PR:** será el #13, contra `feature/error-handling-audit`.
+- **API (pytest):** 16 módulos en `tests/auth/` (`test_token.py` y uno por cada uno de los 15 endpoints de `auth`, `users` y `profiles`), 146 casos con camino feliz, caso límite y modo de fallo. Llaman a las funciones de ruta y a los servicios, sin HTTP. Con ellos solos, la cobertura de autenticación es del **88 %** (objetivo: 70 %).
+- **Integración HTTP:** las 99 pruebas de router de auth que ya existían (214 casos) pasaron a `tests/integration/`, con el marker `integration`.
+- **Backoffice (Jest):** Jest con ts-jest en `uis/backoffice` (`npm test`, `npm run test:coverage`) y 55 pruebas en `__tests__/auth/`: validación de formularios, destino tras el login, token en `localStorage` y reparto de los errores de la API. `lib/auth/` queda al 96 %.
+- **Bugs encontrados y corregidos** (los dos salieron de la revisión asistida por IA y tienen prueba de regresión):
+  - H-1 (`bcc45b7`): cambiar la contraseña por `PUT /users/{id}` no cerraba las sesiones anteriores;
+  - H-2 (`c6fc80d`): `change-password` respondía «contraseña actual incorrecta» si la cuenta se borraba durante el cambio.
+- **Cambio de producción para las pruebas:** la decisión del login pasó a `issue_login_token` (`auth/router.py`), sin cambiar el comportamiento.
+- **Verificación:** `uv run pytest` 705 pasan; `npm test` 55 pasan; `tsc`, `lint` y `build` del backoffice pasan.
+- **Documentación:** `services/brasaland-api/TESTING.md` y `TESTING.es.md` (plan, cómo ejecutar, cómo están construidas, revisión con IA, bugs, Jest y cobertura); README de la API y del backoffice; `docs/BRIEFING_DIVERGENCES.md`, sección "Batería de pruebas de autenticación" (7 divergencias y la tabla de los 8 criterios).
+- **Pendiente:** los extras API-042 (pytest de `suppliers` y el gestor de incidencias, 60 %) y FE-019 (Jest de tres utilidades del frontend), que se confirman antes de empezar; después, subir la rama y abrir el PR #13 contra `feature/error-handling-audit` (lo hace el desarrollador).
 
 **Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -98,7 +98,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
 | #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
 | #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
-| #13 AUTH-088 (pendiente de abrir) | `feature/auth-tests` → `feature/error-handling-audit` | 🚧 En curso; rama local |
+| #13 AUTH-088 (pendiente de abrir) | `feature/auth-tests` → `feature/error-handling-audit` | 🚧 Núcleo completado; faltan los extras; rama local |
 
 - **Orden de merge:** #8, #9, #10, #11 y #12, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
@@ -177,7 +177,7 @@ Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negoci
 | `services/brasaland-api/` — API FastAPI por dominios (propuesta de arquitectura) | ✅ Iniciada |
 | Dominio `incidents` — `POST /api/v1/incidents/analyze`, `GET /api/v1/incidents/results/export`, `GET /health`; 24 pruebas pytest | ✅ Implementado; último análisis en memoria |
 | Dominio `suppliers` — CRUD del directorio de proveedores, filtros `country`/`category`, `PATCH` de tarifa (registra `updated_at`) y de estado, 409 por nombre duplicado; seeder `uv run seed`; 108 pruebas pytest | ✅ Implementado; TinyDB en `storage/brasaland-db.json` |
-| Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me` y `/profiles/{user_id}`, `get_current_user`, `uv run create-admin`; 135 pruebas pytest (más 35 de `core` y 59 de rutas protegidas) | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
+| Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me` y `/profiles/{user_id}`, `get_current_user`, `uv run create-admin`; 146 pruebas unitarias en `tests/auth/` (AUTH-088, 88 % de cobertura), más las de integración HTTP en `tests/integration/` | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
 | Resto de dominios (`locations`, `recruitment`…) | ❌ No iniciado |
 | Base de datos | ⏳ TinyDB provisional para `suppliers` (directiva del CTO); el motor definitivo (Postgres con ORM) está sin decidir. Usuarios y perfiles se quedan en TinyDB también después (directiva del briefing AUTH-01) |
 | Autenticación / Autorización | ✅ JWT stateless (sin sesiones ni cookies). Todas las rutas exigen token salvo login, registro, `/health` y las de restablecimiento de contraseña (AUTH-03). Cambiar o restablecer la contraseña cierra las sesiones anteriores. El backoffice envía el token a través del BFF (`feature/auth-frontend`). ⏳ Permisos por rol solo en la gestión de usuarios (admin) |
@@ -235,7 +235,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Fases 0 y 1 hechas (`ccefab9`, `e5ef1f5`); Fase 2 hecha (`3f913a0`, `b8572f0`); Fase 3 (pruebas de tokens y `/auth`) hecha (`978f9b2`); bug H-2 corregido (`c6fc80d`); Fase 4 (`users` y `profiles`) hecha (`a04cb7b`); bug H-1 corregido (`bcc45b7`); Fase 5 (Jest en el backoffice) hecha, pendiente de revisión y commit. Siguiente: la Fase 6 (cierre de la documentación). El plan de casos está en `services/brasaland-api/TESTING.md`.
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Siguen los extras API-042 y FE-019, que se confirman antes de empezar, y después el PR #13 contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
 
 0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
