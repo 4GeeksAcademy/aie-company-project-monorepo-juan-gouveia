@@ -93,13 +93,8 @@ def test_upd_x2_admin_editing_unknown_id_is_not_found(auth_store, admin_user):
         update(auth_store, "no-existe", admin_user, email="nadie@brasaland.com")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Bug H-1 confirmado (AUTH-088): update_user no guarda password_changed_at ni anula los "
-    "enlaces; pendiente de la decisión del desarrollador. Ver 'Bugs encontrados' en TESTING.md.",
-)
 def test_upd_x3_password_change_through_this_route_ends_earlier_sessions(auth_store, auth_settings, active_user, clock):
-    """Hipótesis H-1: cambiar la contraseña por `PUT /users/{id}` debería cerrar las sesiones
+    """Bug H-1 (AUTH-088): cambiar la contraseña por `PUT /users/{id}` debe cerrar las sesiones
     anteriores y anular los enlaces pendientes, como `change-password` y `reset-password`."""
     old_session = create_access_token(active_user.id, now=clock.ago(seconds=5))
     link, _ = request_reset(auth_store, active_user, auth_settings, clock.now)
@@ -109,3 +104,25 @@ def test_upd_x3_password_change_through_this_route_ends_earlier_sessions(auth_st
     with raises_api_error(401, "session_revoked"):
         get_current_user(token=old_session, store=auth_store)
     assert auth_store.password_resets.get(link.id).used_at is not None
+
+
+def test_upd_x3_admin_changing_another_password_ends_that_accounts_sessions(auth_store, admin_user, active_user, clock):
+    target_session = create_access_token(active_user.id, now=clock.ago(seconds=5))
+    admin_session = create_access_token(admin_user.id, now=clock.ago(seconds=5))
+
+    update(auth_store, active_user.id, admin_user, password=NEW_PASSWORD)
+
+    with raises_api_error(401, "session_revoked"):
+        get_current_user(token=target_session, store=auth_store)
+    assert get_current_user(token=admin_session, store=auth_store).id == admin_user.id
+
+
+def test_upd_x3_changes_without_password_keep_sessions_and_links(auth_store, auth_settings, active_user, clock):
+    session = create_access_token(active_user.id, now=clock.ago(seconds=5))
+    link, _ = request_reset(auth_store, active_user, auth_settings, clock.now)
+
+    update(auth_store, active_user.id, active_user, email="ana.nueva@brasaland.com")
+
+    assert auth_store.users.get(active_user.id).password_changed_at is None
+    assert get_current_user(token=session, store=auth_store).id == active_user.id
+    assert auth_store.password_resets.get(link.id).used_at is None

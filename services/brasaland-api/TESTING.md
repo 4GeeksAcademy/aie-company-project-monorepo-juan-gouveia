@@ -151,7 +151,7 @@ Covers `core/security.py` (create and decode) and `get_current_user`, the depend
 | UPD-L2 | Empty body or fields set to `null` | Rejected by `UserUpdate` | |
 | UPD-X1 | A `user` or a `manager` tries to change `role` or `is_active`, even on their own account | 403 and nothing changes | Privilege escalation |
 | UPD-X2 | A user edits another account; an admin edits an ID that doesn't exist | 403 and 404 | |
-| UPD-X3 **(AI)** | A user changes their password through this route | Earlier sessions end and pending links are voided, as in AUTH-03. **Fails today** (bug H-1): marked as a strict `xfail` | See "Bugs found" |
+| UPD-X3 **(AI)** | A user changes their password through this route | Earlier sessions end and pending links are voided, as in AUTH-03; also when an admin changes another account's password. Changing only the email ends nothing | Regression test for bug H-1 (see "Bugs found") |
 
 ### `test_delete_user.py` — `DELETE /users/{id}`
 
@@ -209,18 +209,19 @@ With the draft cases done, a dedicated pass was made with the AI agent (Claude C
 
 **Possible bugs it pointed out.** If a test confirms one, it will be discussed before fixing it and recorded under "Bugs found".
 
-- **H-1. `PUT /users/{id}` with `password` doesn't end earlier sessions.** `users/service.py` (`update_user`) stores the new hash, but doesn't set `password_changed_at` and doesn't void pending password reset links. `change-password` and `reset-password` do both. If confirmed, someone changing their password through this route to lock out an intruder wouldn't succeed. **Confirmed**, pending a decision (see "Bugs found").
+- **H-1. `PUT /users/{id}` with `password` doesn't end earlier sessions.** `users/service.py` (`update_user`) stores the new hash, but doesn't set `password_changed_at` and doesn't void pending password reset links. `change-password` and `reset-password` do both. If confirmed, someone changing their password through this route to lock out an intruder wouldn't succeed. **Confirmed and fixed** (see "Bugs found").
 - **H-2. Misleading error in `change-password` if the account is deleted during the change.** `passwords.change_password` answers "the current password is incorrect" (400) and voids the links before checking that the user still exists. It needs a race between requests: unlikely, but the message would be false. **Confirmed and fixed** (see "Bugs found").
 
 ## Bugs found
 
 ### H-1. Changing the password through `PUT /users/{id}` doesn't end earlier sessions
 
-- **Status:** confirmed on 2026-11-10; **not fixed yet**, pending the developer's decision.
+- **Status:** fixed on 2026-11-10, with the developer's approval.
 - **How it was found:** hypothesis from the AI-assisted review, confirmed by test UPD-X3 (`tests/auth/test_update_user.py`): after the change, a token issued earlier still opens a session.
 - **Cause:** `users/service.update_user` stores the new hash, but not `password_changed_at`, and doesn't void pending reset links. `change-password` and `reset-password` do both.
 - **Impact:** medium. Someone who changes their password through this route to lock out an intruder doesn't manage to; a reset link requested earlier also keeps working. The backoffice uses `change-password`, so it only affects direct calls to the API.
-- **Test:** UPD-X3 is marked as a strict `xfail`. The suite stays green while the bug exists, and the test fails (XPASS) as soon as it's fixed, so the mark gets removed.
+- **Fix:** when `password` arrives, `update_user` also stores `password_changed_at` (whole seconds, like `iat`) and voids the pending links inside the same lock, as `change-password` does. The response doesn't carry a new token: whoever changes their own password through this route has to log in again (unless their token was issued in the same second). An update without `password` doesn't touch sessions or links.
+- **Regression tests:** the three UPD-X3 cases (`tests/auth/test_update_user.py`): own change, an admin's change of another account, and a change without a password. The first two fail without the fix and pass with it. While the decision was pending, UPD-X3 was a strict `xfail`.
 
 ### H-2. `change-password` claimed a wrong current password when the account no longer existed
 

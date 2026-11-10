@@ -80,8 +80,8 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Fase 2 (infraestructura) hecha** (`3f913a0`, `b8572f0`): las 99 pruebas HTTP de autenticación (214 casos) están en `tests/integration/` con el marker `integration`; `tests/auth/conftest.py` tiene usuarios activo, inactivo y admin y un reloj controlado; la decisión 401/403 del login está en `issue_login_token` (`auth/router.py`).
 - **Fase 3 (tokens y `/auth`) hecha** (`978f9b2`): 74 pruebas unitarias en 7 módulos de `tests/auth/`; con ellas solas, la cobertura de auth es del 77 %.
 - **Bug H-2 corregido:** `change-password` respondía 400 `invalid_current_password` si la cuenta se borraba durante el cambio; ahora responde 401 `invalid_token`. Tiene prueba de regresión (CHG-X2) y está documentado en "Bugs encontrados" de `TESTING.md` (`c6fc80d`).
-- **Fase 4 (`users` y `profiles`) hecha, pendiente de revisión y commit:** 9 módulos más; en total, 16 módulos y 144 casos en `tests/auth/`. Con ellos solos, la cobertura de auth es del **88 %** (objetivo: 70 %).
-- **Bug H-1 confirmado, pendiente de decisión:** cambiar la contraseña por `PUT /users/{id}` no cierra las sesiones anteriores ni anula los enlaces pendientes. La prueba UPD-X3 lo recoge como `xfail` estricta.
+- **Fase 4 (`users` y `profiles`) hecha** (`a04cb7b`): 9 módulos más; en total, 16 módulos y 144 casos en `tests/auth/`. Con ellos solos, la cobertura de auth es del **88 %** (objetivo: 70 %).
+- **Bug H-1 corregido:** cambiar la contraseña por `PUT /users/{id}` no cerraba las sesiones anteriores ni anulaba los enlaces pendientes; ahora lo hace, como `change-password`. Pruebas de regresión UPD-X3; documentado en "Bugs encontrados" de `TESTING.md`.
 - **Después:** fases 3-4 (pruebas de la API), 5 (Jest), 6 (cierre de la documentación) y los extras API-042 y FE-019, que se confirman antes de empezar.
 - **Hipótesis de fallo por confirmar con pruebas:** H-1 (`PUT /users/{id}` con `password` no cierra las sesiones anteriores) y H-2 (carrera improbable en `change_password`). Si una prueba confirma un fallo, se consulta antes de corregirlo.
 - **PR:** será el #13, contra `feature/error-handling-audit`.
@@ -234,7 +234,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Fases 0 y 1 hechas (`ccefab9`, `e5ef1f5`); Fase 2 hecha (`3f913a0`, `b8572f0`); Fase 3 (pruebas de tokens y `/auth`) hecha (`978f9b2`); bug H-2 corregido (`c6fc80d`); Fase 4 (`users` y `profiles`) hecha, pendiente de revisión y commit. Bug H-1 confirmado, pendiente de decisión. Después, la Fase 5 (Jest). El plan de casos está en `services/brasaland-api/TESTING.md`.
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Fases 0 y 1 hechas (`ccefab9`, `e5ef1f5`); Fase 2 hecha (`3f913a0`, `b8572f0`); Fase 3 (pruebas de tokens y `/auth`) hecha (`978f9b2`); bug H-2 corregido (`c6fc80d`); Fase 4 (`users` y `profiles`) hecha (`a04cb7b`); bug H-1 corregido. Siguiente: la Fase 5 (Jest). El plan de casos está en `services/brasaland-api/TESTING.md`.
 
 0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
