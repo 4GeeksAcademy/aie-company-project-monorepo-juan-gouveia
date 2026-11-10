@@ -73,13 +73,14 @@ The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is m
 
 ```bash
 uv sync --extra dev    # pytest, pytest-cov and httpx
-uv run pytest          # all 705 tests
+uv run pytest          # all 806 tests
 uv run pytest --cov    # with coverage of app/ (98%)
 ```
 
-The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 705 tests break down as follows:
+The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 806 tests break down as follows:
 
 - **Authentication unit tests (146, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
+- **Supplier and incident unit tests (101, `tests/suppliers/` and `tests/incidents/`, ticket API-042):** the logic of the 6 supplier endpoints and the 5 incident manager endpoints, without HTTP, with the three levels for each. On their own, they reach 84% coverage of both domains.
 - **HTTP integration (304, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier and incident endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
 - **`core` (72):** configuration from the environment (the API doesn't start without a key), password hashing and tokens, email sending, and error headers.
 - **`incidents` (51, `tests/domains/`):** the CSV analyzer service and the incident manager (model with the exact values, and repository: lifecycle, filters, `/summary` and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.

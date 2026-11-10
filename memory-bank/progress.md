@@ -85,7 +85,8 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Cambio de producción para las pruebas:** la decisión del login pasó a `issue_login_token` (`auth/router.py`), sin cambiar el comportamiento.
 - **Verificación:** `uv run pytest` 705 pasan; `npm test` 55 pasan; `tsc`, `lint` y `build` del backoffice pasan.
 - **Documentación:** `services/brasaland-api/TESTING.md` y `TESTING.es.md` (plan, cómo ejecutar, cómo están construidas, revisión con IA, bugs, Jest y cobertura); README de la API y del backoffice; `docs/BRIEFING_DIVERGENCES.md`, sección "Batería de pruebas de autenticación" (7 divergencias y la tabla de los 8 criterios).
-- **Pendiente:** los extras API-042 (pytest de `suppliers` y el gestor de incidencias, 60 %) y FE-019 (Jest de tres utilidades del frontend), que se confirman antes de empezar; después, subir la rama y abrir el PR #13 contra `feature/error-handling-audit` (lo hace el desarrollador).
+- **Extra API-042 completado:** 11 módulos y 101 casos en `tests/suppliers/` y `tests/incidents/` (los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP); con ellos solos, la cobertura de los dos dominios es del 84 % (objetivo: 60 %). Las pruebas de router de los dos dominios pasaron a `tests/integration/`. `uv run pytest`: 806 pasan.
+- **Pendiente:** el extra FE-019 (Jest de tres utilidades del frontend), que se confirma antes de empezar; después, subir la rama y abrir el PR #13 contra `feature/error-handling-audit` (lo hace el desarrollador).
 
 **Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -235,7 +236,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Siguen los extras API-042 y FE-019, que se confirman antes de empezar, y después el PR #13 contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extra API-042 completado (101 pruebas, 84 %). Sigue el extra FE-019, que se confirma antes de empezar, y después el PR #13 contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
 
 0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
@@ -302,6 +303,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
   - el token vive en `localStorage`, como exige el ticket, así que un script inyectado podría leerlo (la propuesta 5.2 preveía una cookie `httpOnly`);
   - el registro es abierto, así que cualquiera puede crearse una cuenta `user`, y no hay permisos por herramienta;
   - la comprobación de sesión es del navegador; la protección de los datos está en la API.
+- **Next.js vulnerable en las dos aplicaciones** (`npm audit`, 2026-11-10): `uis/backoffice` y `uis/website` usan `next` 16.3.5, con avisos críticos de ejecución remota de código (optimización de imágenes con SVG, `use cache`, `next/og`) y otros altos (SSRF, DoS, envenenamiento de caché). El arreglo es `next` y `eslint-config-next` 16.4.6, sin cambio de versión mayor, más `npm audit fix` sin `--force` para `sharp`, `zod` y `source-map-js` (dependencias indirectas). **Decisión:** hacerlo en una rama propia desde `main` cuando no quede ningún PR de la cadena pendiente de fusionar, y verificar `lint`, `build`, pruebas y las vistas principales de las dos aplicaciones. Hasta entonces, no desplegar ninguna de las dos. Los avisos bajos y moderados que añadió Jest (AUTH-088) son solo de desarrollo.
 - **Dependencia temporal del backoffice**: mientras exista `packages/brasa-core`, se construye desde la raíz del repositorio, y los cambios en el paquete también deben comprobar `uis/backoffice`.
 
 ---

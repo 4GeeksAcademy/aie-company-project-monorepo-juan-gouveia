@@ -712,3 +712,14 @@ Ejecutado el 10 de noviembre de 2026. Hay una fila por cada criterio de evaluaci
 | Jest presente y pasando | `npm run test:coverage` en `uis/backoffice/` | 55 pasan; `lib/auth/` al 96 %. `tsc`, `lint` y `build` pasan |
 | Flujo asistido por IA evidente | "Revisión asistida por IA" y "Bugs encontrados" de `TESTING.md` | 7 casos marcados (IA) y dos bugs confirmados y corregidos (H-1 y H-2) |
 | Código limpio y nombres claros | Revisión | Nombres con el ID del caso (`test_tok_l1_…`), estructura F/L/X en cada módulo, fixtures y helpers comunes, comentarios en las afirmaciones no evidentes |
+
+### 9. Extra API-042: proveedores y gestor de incidencias
+
+Ticket extra de la misma consigna, en la misma rama. Coinciden con el ticket: dos grupos de endpoints del backoffice distintos de la autenticación (el directorio de proveedores y el gestor de incidencias), los tres niveles en cada endpoint, módulos nuevos en `tests/` y `TESTING.md` con los resultados de cobertura. Las decisiones E-1 a E-5 están en la sección "API-042" de `TESTING.md`.
+
+| Qué | Ticket | Implementación | Motivo |
+| --- | --- | --- | --- |
+| Pruebas de router existentes | No dice nada | `test_supplier_router.py`, `test_manager_router.py` y `test_router.py` (renombrado a `test_incident_analyzer_router.py`) pasan a `tests/integration/` | Mismo criterio que en AUTH-088: las pruebas HTTP son integración y `-m "not integration"` las excluye todas |
+| Medida del 60 % | "En los módulos que pruebes" | Solo `tests/suppliers/` y `tests/incidents/`, sobre los dos dominios completos: 84 % | Con las pruebas que ya existían la cifra era del 98 %; incluye el analizador del CSV, que no se probó y aun así se mide |
+
+Verificación (10 de noviembre de 2026): `uv run pytest tests/suppliers tests/incidents` da 101 pruebas que pasan; con `--cov=app.domains.suppliers --cov=app.domains.incidents`, 84 %. La batería completa (`uv run pytest`) da 806 pruebas que pasan.

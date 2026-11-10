@@ -1,6 +1,6 @@
 # Brasaland API tests
 
-> **Status (2026-11-10): complete suite (ticket AUTH-088).** The case plan was written and reviewed before writing any test; then it was implemented in full. All 705 pytest tests and 55 Jest tests pass. With `tests/auth/` alone, coverage of the authentication modules is **88%** (target: 70%). The suite found two bugs, both fixed (see "Bugs found").
+> **Status (2026-11-10): complete suite (ticket AUTH-088).** The case plan was written and reviewed before writing any test; then it was implemented in full. All 806 pytest tests and 55 Jest tests pass. With `tests/auth/` alone, coverage of the authentication modules is **88%** (target: 70%). The suite found two bugs, both fixed (see "Bugs found"). The API-042 extra (suppliers and incident manager) is complete: **84%** with its own modules alone (target: 60%).
 
 > _Spanish version: [TESTING.es.md](./TESTING.es.md)._
 
@@ -9,8 +9,9 @@
 | Suite | Folder | What it checks |
 |---|---|---|
 | **Authentication unit tests** (AUTH-088) | `tests/auth/` | The logic of each authentication endpoint: what it decides, not how it responds. They call each route's functions and their services directly, without an HTTP client. **16 modules and 146 cases**: `test_token.py` and one per each of the 15 endpoints. |
+| **Supplier and incident unit tests** (API-042) | `tests/suppliers/` and `tests/incidents/` | The logic of the 6 supplier directory endpoints and the 5 incident manager endpoints, without HTTP. **11 modules and 101 cases**. See "API-042: suppliers and incident manager". |
 | **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed: 99 for authentication (214 cases with parametrization), plus the supplier, incident manager and CSV analyzer ones (60 tests and 90 cases, moved in API-042). 304 cases in all. They carry the `integration` marker, applied to the whole folder by `tests/integration/conftest.py`. |
-| **Rest of the API** | `tests/core/` and `tests/domains/` | Configuration, security, email, errors, repositories, `create-admin`, and the `incidents` and `suppliers` domains. |
+| **Rest of the API** | `tests/core/` and `tests/domains/` | Configuration, security, email, errors, `create-admin`, and each domain's models, repositories and seeds. |
 | **Backoffice Jest** (AUTH-088) | `uis/backoffice/__tests__/auth/` | The backoffice's TypeScript authentication logic: form validation, post-login destination, the token in `localStorage`, and how API errors are split across fields. 55 tests. See "Backoffice tests (Jest)". |
 
 ## How to run them
@@ -21,8 +22,9 @@ From `services/brasaland-api/`:
 
 ```bash
 uv sync --extra dev                      # installs pytest, pytest-cov and httpx
-uv run pytest                            # the whole suite (705 tests, about 2 min because of bcrypt)
+uv run pytest                            # the whole suite (806 tests, about 2.5 min because of bcrypt)
 uv run pytest tests/auth                 # authentication unit tests only (146, about 45 s)
+uv run pytest tests/suppliers tests/incidents   # API-042 tests only (101, about 2 s)
 uv run pytest -m integration             # HTTP integration tests only
 uv run pytest -m "not integration"       # everything except the HTTP tests
 uv run pytest --cov                      # the whole suite with coverage of app/
@@ -33,6 +35,12 @@ Coverage of the authentication modules with the unit suite alone (the figure for
 ```bash
 uv run pytest tests/auth --cov=app.core.security --cov=app.domains.auth \
   --cov=app.domains.users --cov=app.domains.profiles
+```
+
+API-042 coverage with its own modules alone (the 60% target):
+
+```bash
+uv run pytest tests/suppliers tests/incidents --cov=app.domains.suppliers --cov=app.domains.incidents
 ```
 
 No `.env` is needed: `tests/conftest.py` sets a test `SECRET_KEY` and uses temporary TinyDB databases and a fake email sender. No test touches `storage/` or sends email.
@@ -263,6 +271,117 @@ With the draft cases done, a dedicated pass was made with the AI agent (Claude C
 - **Regression test:** CHG-X2 (`tests/auth/test_change_password.py`). It fails without the fix and passes with it.
 - **Impact:** low. It needs two requests to coincide (deleting the account and changing its password), but the message was false and could lead someone to retry a password that was correct.
 
+## API-042: suppliers and incident manager
+
+> **Status (2026-11-10): complete.** Extra ticket API-042: two groups of backoffice endpoints other than authentication, with the same three-level structure and at least 60% coverage of the tested modules. The case plan was reviewed before writing the tests. There are 11 modules and 101 cases; on their own, they reach **84%** coverage of both domains (see "Coverage").
+
+- **Groups (decision E-1):** the supplier directory (6 endpoints, `tests/suppliers/`) and the incident manager (5 endpoints, `tests/incidents/`). The CSV analyzer (`/incidents/analyze` and `/results/export`) is left out.
+- **How (E-2):** one module per endpoint that calls the route function with a temporary TinyDB repository, without HTTP, like `tests/auth/`. The router tests that already existed moved to `tests/integration/` (E-3).
+- **What is asserted:** the `ApiError` (status and code), what is stored, and the rules of the briefing models. FastAPI's validation of parameters (for example, an invalid `?country=`) is HTTP: the integration tests cover it; here the rule is tested, that is, that the value isn't in the briefing enum.
+- **Time:** `updated_at` is controlled by replacing the supplier repository's clock (the `clock` fixture, which pins `utc_now`) or with the incident repository's `now` parameter, never by waiting.
+- **Fixtures:** `repository` and `add_supplier` (`tests/suppliers/conftest.py`), and `repository` and `add_incident` (`tests/incidents/conftest.py`), which moves the incident to a status through valid transitions. Valid starting data in `supplier_data` and `incident_data` (each folder's `helpers.py`). `raises_api_error` moved to `tests/helpers.py`, shared by the three suites.
+- **Coverage (E-4):** with `tests/suppliers/` and `tests/incidents/` alone, over the `suppliers` and `incidents` domains. The figures without HTTP and for the full suite are given too.
+
+### `tests/suppliers/` — supplier directory
+
+#### `test_create_supplier.py` — `POST /suppliers`
+
+| ID | Case | Expected decision | Why |
+|---|---|---|---|
+| CSU-F1 | Valid Colombian supplier in COP | Stored with an assigned ID and `updated_at`; name and notes stored without surrounding spaces; `GET` returns it unchanged | |
+| CSU-L1 | Minimum positive rate (`0.01`), a single category and empty `notes` | Accepted; empty `notes` is stored as `null` | Model limits |
+| CSU-L2 | Name already registered in another case or with spaces | 409 `duplicate_supplier` and nothing is created | The name identifies the supplier |
+| CSU-X1 | Country and currency that don't match (Colombia with USD, USA with COP) | Rejected by the model | Business rule from the briefing |
+| CSU-X2 | Rate 0, negative, as text (`"10"`), NaN or infinite; repeated categories or an empty list; `id` or `updated_at` in the input | Rejected by the model | The system generates them; the rate is strict |
+
+#### `test_list_suppliers.py` — `GET /suppliers`
+
+| ID | Case | Expected decision |
+|---|---|---|
+| LSU-F1 | No filters | All of them, ordered by ID |
+| LSU-L1 | Combined filters (`country` + `category`); a supplier with several categories; a filter with no matches; empty database | Only those meeting both; the multi-category one shows up under any of them; empty list without error |
+| LSU-X1 | Country or category not in the briefing (`México`, `pescado`) | Rejected by the `Country` and `Category` enums |
+
+#### `test_get_supplier.py` — `GET /suppliers/{id}`
+
+| ID | Case | Expected decision |
+|---|---|---|
+| GSU-F1 | Existing ID | The supplier |
+| GSU-L1 | ID 0 or negative | 404 `supplier_not_found`, no internal error |
+| GSU-X1 | Unknown ID or a deleted supplier's ID | 404 `supplier_not_found` |
+
+#### `test_update_supplier_rate.py` — `PATCH /suppliers/{id}/rate`
+
+| ID | Case | Expected decision | Why |
+|---|---|---|---|
+| RSU-F1 | New rate | The rate changes and `updated_at` moves to the moment of the change; nothing else changes | Price audit from the briefing |
+| RSU-L1 | The same rate it already had | Accepted, and `updated_at` is updated anyway | Documents the current decision: each recorded change is an event |
+| RSU-X1 | Rate 0, negative or as text; an extra field | Rejected by `RateUpdate` | |
+| RSU-X2 | Unknown ID | 404 `supplier_not_found` and nothing is created | |
+
+#### `test_update_supplier_status.py` — `PATCH /suppliers/{id}/status`
+
+| ID | Case | Expected decision | Why |
+|---|---|---|---|
+| SSU-F1 | `active` → `suspended` | The status changes and `updated_at` does **not** | `updated_at` is the date of the latest rate |
+| SSU-L1 | Reactivating (`suspended` → `active`); setting the status it already has | Accepted | There's no lifecycle: both states go back and forth |
+| SSU-X1 | Status outside the briefing (`inactive`, `ACTIVE`) | Rejected by `StatusUpdate` | |
+| SSU-X2 | Unknown ID | 404 `supplier_not_found` | |
+
+#### `test_delete_supplier.py` — `DELETE /suppliers/{id}`
+
+| ID | Case | Expected decision | Why |
+|---|---|---|---|
+| DSU-F1 | Existing ID | Returns the supplier, which disappears from the list and the detail | |
+| DSU-L1 | Creating a supplier again with the deleted one's name | Accepted | The name becomes free |
+| DSU-X1 | Unknown ID; deleting twice | 404 `supplier_not_found`; the second time too | |
+
+### `tests/incidents/` — incident manager
+
+#### `test_create_incident.py` — `POST /incidents`
+
+| ID | Case | Expected decision | Why |
+|---|---|---|---|
+| CIN-F1 | Valid incident without `status` | Stored as `open`, with an ID and `created_at` equal to `updated_at`; title and description without surrounding spaces | Every new incident starts open |
+| CIN-L1 | A 120-character title and a 2000-character description; one more in each | The first are accepted; the second, not | Model limits |
+| CIN-L2 | Explicit `status: "open"` | Accepted | |
+| CIN-X1 | `status` other than `open` | Rejected by the model | The status changes later, through its route |
+| CIN-X2 | Category, origin or branch outside the briefing; legacy system values (`CUSTOMER_COMPLAINT`); a title with only spaces; `id` or `created_at` in the input | Rejected by the model | The values are exactly the briefing's |
+
+#### `test_list_incidents.py` — `GET /incidents`
+
+| ID | Case | Expected decision |
+|---|---|---|
+| LIN-F1 | No filters | All of them, newest first |
+| LIN-L1 | Two incidents at the same instant; the four filters combined; empty database | The tie is ordered by descending ID; only those meeting every filter; empty list without error |
+| LIN-X1 | Filters with values outside the briefing or from the legacy system (`OPEN`, `closed`) | Rejected by the model's enums |
+
+#### `test_incident_summary.py` — `GET /incidents/summary`
+
+| ID | Case | Expected decision | Why |
+|---|---|---|---|
+| SIN-F1 | Several incidents | Total and counts by status, category, origin and branch | |
+| SIN-L1 | Empty database | `total` 0 and **every** briefing value present, at 0 | The dashboard mustn't break because a key is missing |
+| SIN-X1 | After status changes | Each incident counted once, in its current status | A stale summary would give false totals |
+
+#### `test_get_incident.py` — `GET /incidents/{id}`
+
+| ID | Case | Expected decision |
+|---|---|---|
+| GIN-F1 | Existing ID | The incident |
+| GIN-L1 | ID 0 or negative | 404 `incident_not_found`, no internal error |
+| GIN-X1 | Unknown ID | 404 `incident_not_found` |
+
+#### `test_update_incident_status.py` — `PATCH /incidents/{id}/status`
+
+| ID | Case | Expected decision | Why |
+|---|---|---|---|
+| UIN-F1 | `open` → `in_progress` → `resolved` | Each step changes the status and `updated_at`; `created_at` doesn't change | Lifecycle from the briefing |
+| UIN-L1 | The four allowed transitions, including discarding from `open` and from `in_progress` | Accepted | |
+| UIN-X1 | Disallowed transitions (`open` → `resolved`, back to `open`, the same status) | 400 `invalid_transition` with the valid options; the status doesn't change | |
+| UIN-X2 | From a final state (`resolved`, `discarded`) | 400 `invalid_transition` with the final-state message | |
+| UIN-X3 | Unknown ID; a status outside the briefing | 404 `incident_not_found`; rejected by `StatusUpdate` | |
+
 ## Backoffice tests (Jest)
 
 They cover the TypeScript authentication logic of `uis/backoffice`. The frontend doesn't generate tokens or compute hashes (that lives in the API), so what's tested are its authentication utilities. Each function has at least one happy-path case and one failure case.
@@ -298,6 +417,24 @@ With the whole suite, `uv run pytest --cov` reports **98%** of all of `app/` (1,
 | `auth/router.py` | 80% | `read_credentials`: it reads the login's JSON or form body. That's HTTP; the integration tests cover it |
 | `users/database.py` and `users/dependencies.py` | 93% and 56% | Opening the real database and injecting it: the tests use a temporary database |
 | `users/create_admin.py` | 0% | It's the `uv run create-admin` console command, not an endpoint. `tests/domains/users/test_create_admin.py` covers it |
+
+**API-042** (`tests/suppliers/` and `tests/incidents/` alone, over the `suppliers` and `incidents` domains, 579 statements):
+
+| Suite | Tests | Coverage |
+|---|---|---|
+| **API-042 modules alone** (the 60% target) | 101 | **84%** |
+| Without HTTP tests (`-m "not integration"`) | 502 | 91% |
+| Full | 806 | 98% |
+| Baseline, without the router tests (before API-042) | 118 | 86% |
+
+| Module | Coverage | What's left and why |
+|---|---|---|
+| `suppliers/router.py`, `incidents/manager_router.py` and both domains' models | 100% | — |
+| `suppliers/repository.py` | 95% | `find_by_name` and `is_empty`, used by the seed |
+| `incidents/incident_repository.py` | 90% | `is_seeded` and `create_from_seed`, used to load the historical CSV |
+| `suppliers/seed.py` | 36% | The `uv run seed` command; `tests/domains/suppliers/test_supplier_seed.py` covers it |
+| `incidents/router.py`, `repository.py`, `schemas.py` and `service.py` | 33–100% | The CSV analyzer, outside API-042 (decision E-1); `tests/integration/test_incident_analyzer_router.py` and `tests/domains/incidents/` cover it |
+| Both `dependencies.py` | 60–64% | Opening the real database; the tests use a temporary one |
 
 **Jest** (`npm run test:coverage`):
 
