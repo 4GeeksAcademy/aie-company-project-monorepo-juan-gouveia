@@ -1,4 +1,5 @@
-"""Pruebas de integración HTTP de la autenticación (AUTH-088, decisión T-5).
+"""Pruebas de integración HTTP: autenticación (AUTH-088, decisión T-5), proveedores y el gestor y el
+analizador de incidencias (API-042, decisión E-3).
 
 Recorren la API con `TestClient`: comprueban el contrato con el backoffice (rutas protegidas,
 códigos de estado, formato `{"error": {...}}` y cabeceras), que una prueba unitaria no ve.

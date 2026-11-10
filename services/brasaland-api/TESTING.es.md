@@ -9,7 +9,7 @@
 | Suite | Carpeta | Qué comprueba |
 |---|---|---|
 | **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. **16 módulos y 146 casos**: `test_token.py` y uno por cada uno de los 15 endpoints. |
-| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 pruebas (214 casos con la parametrización). Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
+| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 de autenticación (214 casos con la parametrización), más las de proveedores, el gestor y el analizador de incidencias (60 pruebas y 90 casos, movidas en API-042). En total, 304 casos. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
 | **Resto de la API** | `tests/core/` y `tests/domains/` | Configuración, seguridad, correo, errores, repositorios, `create-admin` y los dominios `incidents` y `suppliers`. |
 | **Jest del backoffice** (AUTH-088) | `uis/backoffice/__tests__/auth/` | La lógica TypeScript de autenticación del backoffice: validación de formularios, destino tras el login, token en `localStorage` y reparto de los errores de la API. 55 pruebas. Ver "Pruebas del backoffice (Jest)". |
 

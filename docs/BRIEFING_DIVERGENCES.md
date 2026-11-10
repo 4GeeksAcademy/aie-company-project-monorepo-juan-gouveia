@@ -543,7 +543,7 @@ Ejecutado el 8 de noviembre de 2026. Las pruebas en vivo usaron la API y el back
 | Los inválidos no se insertan y se reportan en consola | El mismo comando | 4 inválidos (`BRS-000044`, `BRS-000049`, `BRS-000079`, `BRS-000086`) con su fila y motivo; ninguno en la base |
 | El seed es idempotente | Segunda ejecución | 0 insertadas y 96 omitidas; el total sigue en 96 |
 | Tras el seed, `/api/incidents/summary` da los totales esperados | `GET /api/incidents/summary` por el intermediario del backoffice | `open` 32, `resolved` 50, `discarded` 14; `customer_complaint` 48, `equipment_failure` 17, `supply_issue` 22, `staff_issue` 9 |
-| Códigos HTTP correctos en éxito y error | `tests/domains/incidents/test_manager_router.py`; rutas protegidas | 201, 200, 400, 404 y 401 sin token |
+| Códigos HTTP correctos en éxito y error | `tests/integration/test_manager_router.py` (antes en `tests/domains/incidents/`); rutas protegidas | 201, 200, 400, 404 y 401 sin token |
 | Los errores de validación identifican el campo | Las mismas pruebas; en vivo, alta sin sede y con categoría inválida | 400 con `details` de `category` y `branch` |
 | Ningún endpoint expone un stack trace | `test_unexpected_error_is_500_with_a_generic_message` | 500 `internal_error` con mensaje genérico, sin el detalle interno |
 | Las transiciones inválidas se rechazan con 400 | Pruebas de transiciones; en vivo, `open → resolved` | 400 `invalid_transition`: "Desde open solo se puede pasar a in_progress o discarded." |

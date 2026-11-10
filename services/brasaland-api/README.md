@@ -80,10 +80,10 @@ uv run pytest --cov    # with coverage of app/ (98%)
 The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 705 tests break down as follows:
 
 - **Authentication unit tests (146, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
-- **HTTP integration (214, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication endpoint over HTTP (sign-in with JSON and with a form, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
+- **HTTP integration (304, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier and incident endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
 - **`core` (72):** configuration from the environment (the API doesn't start without a key), password hashing and tokens, email sending, and error headers.
-- **`incidents` (96):** the CSV analyzer (the briefing values, the JSON, the exported CSV and every input error) and the incident manager (exact values, lifecycle, filters, `/summary`, the 404 and the generic 500, and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
-- **`suppliers` (112):** the model with the briefing values, the seeder, the repository (including writes from two processes) and every endpoint.
+- **`incidents` (51, `tests/domains/`):** the CSV analyzer service and the incident manager (model with the exact values, and repository: lifecycle, filters, `/summary` and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
+- **`suppliers` (67, `tests/domains/`):** the model with the briefing values, the seeder and the repository (including writes from two processes).
 - **`users`, `profiles` and `auth` (65, `tests/domains/`):** models, repositories (including writes from another process), the user service and `uv run create-admin`.
 
 Each test uses temporary TinyDB databases and its own configuration, so it never touches `storage/` or depends on `.env`.

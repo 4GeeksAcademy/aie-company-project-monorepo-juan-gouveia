@@ -9,7 +9,7 @@
 | Suite | Folder | What it checks |
 |---|---|---|
 | **Authentication unit tests** (AUTH-088) | `tests/auth/` | The logic of each authentication endpoint: what it decides, not how it responds. They call each route's functions and their services directly, without an HTTP client. **16 modules and 146 cases**: `test_token.py` and one per each of the 15 endpoints. |
-| **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed: 99 tests (214 cases with parametrization). They carry the `integration` marker, applied to the whole folder by `tests/integration/conftest.py`. |
+| **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed: 99 for authentication (214 cases with parametrization), plus the supplier, incident manager and CSV analyzer ones (60 tests and 90 cases, moved in API-042). 304 cases in all. They carry the `integration` marker, applied to the whole folder by `tests/integration/conftest.py`. |
 | **Rest of the API** | `tests/core/` and `tests/domains/` | Configuration, security, email, errors, repositories, `create-admin`, and the `incidents` and `suppliers` domains. |
 | **Backoffice Jest** (AUTH-088) | `uis/backoffice/__tests__/auth/` | The backoffice's TypeScript authentication logic: form validation, post-login destination, the token in `localStorage`, and how API errors are split across fields. 55 tests. See "Backoffice tests (Jest)". |
 
