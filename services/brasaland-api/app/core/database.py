@@ -32,10 +32,18 @@ if TYPE_CHECKING:
     from sqlalchemy import Engine
 
 DATABASE_URL_ENV = "DATABASE_URL"
+POSTGRESQL_SCHEME = "postgresql://"
+# Driver que instala la consigna (psycopg2-binary). SQLAlchemy 2.1 usa por defecto psycopg (v3)
+# para postgresql://, que no está instalado: sin indicarlo, la conexión falla con ModuleNotFoundError.
+PSYCOPG2_SCHEME = "postgresql+psycopg2://"
 
 
 def load_database_url(environ=os.environ) -> str:
-    """Lee y valida DATABASE_URL; lanza ConfigError con un mensaje que nombra la variable."""
+    """Lee y valida DATABASE_URL; lanza ConfigError con un mensaje que nombra la variable.
+
+    Acepta la cadena tal como la copia Supabase (postgresql://...) y la devuelve con el driver
+    psycopg2 explícito.
+    """
     url = environ.get(DATABASE_URL_ENV, "").strip()
     if not url:
         raise ConfigError(
@@ -44,6 +52,8 @@ def load_database_url(environ=os.environ) -> str:
     if url.startswith("postgres://"):
         # SQLAlchemy solo reconoce el esquema postgresql://.
         raise ConfigError(f"{DATABASE_URL_ENV} debe empezar por postgresql://, no por postgres://.")
+    if url.startswith(POSTGRESQL_SCHEME):
+        url = PSYCOPG2_SCHEME + url.removeprefix(POSTGRESQL_SCHEME)
     return url
 
 

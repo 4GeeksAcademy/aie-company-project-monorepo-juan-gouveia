@@ -11,8 +11,25 @@ from app.main import app
 SUPABASE_URL = "postgresql://postgres.ref:secreto@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
 
 
-def test_reads_database_url_without_surrounding_spaces():
-    assert load_database_url({"DATABASE_URL": f"  {SUPABASE_URL}  "}) == SUPABASE_URL
+PSYCOPG2_URL = SUPABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+
+
+def test_reads_database_url_without_surrounding_spaces_and_uses_psycopg2():
+    # SQLAlchemy 2.1 elegiría psycopg (v3), que no está instalado: el driver se fija a psycopg2.
+    assert load_database_url({"DATABASE_URL": f"  {SUPABASE_URL}  "}) == PSYCOPG2_URL
+
+
+def test_url_with_explicit_driver_is_kept():
+    assert load_database_url({"DATABASE_URL": PSYCOPG2_URL}) == PSYCOPG2_URL
+
+
+def test_engine_uses_the_installed_psycopg2_driver(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", SUPABASE_URL)
+    get_engine.cache_clear()
+    try:
+        assert get_engine().dialect.driver == "psycopg2"  # Crear el motor no conecta todavía.
+    finally:
+        get_engine.cache_clear()
 
 
 @pytest.mark.parametrize("environ", [{}, {"DATABASE_URL": "   "}])
