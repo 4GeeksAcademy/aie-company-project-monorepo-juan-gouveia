@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 
 from app.core.config import API_PREFIX, get_settings
+from app.core.database import get_engine, init_db
 from app.core.errors import register_error_handlers
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.router import router as auth_router
@@ -35,6 +36,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     result = seed_if_empty(repository)
     if result is not None:
         logger.info("Directorio de proveedores sembrado: %s proveedores insertados.", result.inserted)
+
+    # Inventario (Hito 5): sin DATABASE_URL la API no arranca. Crea en Supabase las tablas que falten.
+    # Las pruebas sustituyen get_engine por un SQLite temporal.
+    engine = app.dependency_overrides.get(get_engine, get_engine)()
+    init_db(engine)
     yield
 
 

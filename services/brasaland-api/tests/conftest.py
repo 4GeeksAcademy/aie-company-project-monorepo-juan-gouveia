@@ -2,8 +2,11 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
+from sqlmodel import create_engine
 
 from app.core.config import get_settings
+from app.core.database import get_engine, init_db
 from app.core.email import EmailMessage, get_email_sender
 from app.core.security import create_access_token
 from app.domains.users import service as user_service
@@ -84,6 +87,30 @@ def incident_repository(tmp_path):
     yield repository
     app.dependency_overrides.pop(get_incident_repository, None)
     repository.close()
+
+
+@pytest.fixture(autouse=True)
+def inventory_engine(tmp_path):
+    """Motor SQLModel sobre un SQLite temporal, con las tablas creadas: ninguna prueba toca Supabase.
+
+    Es autouse porque el arranque de la API (lifespan) crea las tablas de inventario con este motor.
+    SQLite no aplica las claves foráneas salvo que se active en cada conexión: el listener lo hace,
+    para que las FK se comprueben como en PostgreSQL. Es la única pieza que usa SQLAlchemy
+    directamente, y solo en las pruebas.
+    """
+    engine = create_engine(f"sqlite:///{tmp_path / 'inventory-test.db'}")
+
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    init_db(engine)
+    app.dependency_overrides[get_engine] = lambda: engine
+    yield engine
+    app.dependency_overrides.pop(get_engine, None)
+    engine.dispose()
 
 
 @pytest.fixture
