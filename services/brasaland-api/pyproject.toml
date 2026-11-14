@@ -34,6 +34,8 @@ brasaland-shared = { path = "../../packages/shared", editable = true }
 seed = "app.domains.suppliers.seed:main"
 # `uv run create-admin` crea el primer administrador (POST /users siempre crea rol `user`).
 create-admin = "app.domains.users.create_admin:run"
+# `uv run --env-file .env seed-inventory` carga en Supabase los datos semilla del inventario (Hito 5).
+seed-inventory = "app.domains.inventory.seed:main"
 
 [project.optional-dependencies]
 dev = [
