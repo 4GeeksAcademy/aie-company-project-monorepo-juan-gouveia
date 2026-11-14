@@ -89,16 +89,16 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Extra FE-019 completado:** 35 pruebas de Jest en `uis/backoffice/__tests__/utils/` para `lib/format.ts`, `toUserMessage` y `readJson`, todas al 100 %; `jest.config.js` fija `TZ=UTC`. El backoffice tiene 90 pruebas de Jest.
 - **PR:** #13, abierto el 2026-11-10 contra `feature/error-handling-audit` mientras el #12 no se fusione.
 
-**Gestión de inventario con ORM (Hito 5, ticket BRD-0512) completada en la rama `feature/inventory-orm`**, creada desde `feature/auth-tests` (`65f2a76`) el 2026-11-14 porque el PR #13 sigue abierto; local, sin subir. Decisiones D1 a D7 aprobadas (en `docs/_private/briefing-inventario-backend.md`) y fases 0 a 6 hechas, con un commit por fase hecho por el desarrollador:
+**Gestión de inventario con ORM (Hito 5, ticket BRD-0512) completada en la rama `feature/inventory-orm`**, creada desde `feature/auth-tests` (`65f2a76`) el 2026-11-14 porque el PR #13 sigue abierto. Decisiones D1 a D7 aprobadas (en `docs/_private/briefing-inventario-backend.md`) y fases 0 a 6 hechas, con un commit por fase hecho por el desarrollador:
 
 - **Dos conexiones:** TinyDB para la autenticación (sin cambios) y Supabase (PostgreSQL) con SQLModel para el inventario. `app/core/database.py` tiene el motor (`DATABASE_URL` en `.env`; la API no arranca sin ella), `create_all` al arrancar y `get_db` (una sesión por petición). Driver psycopg2 fijado en la URL, porque SQLAlchemy 2.1 elige psycopg 3 (corrección `2980037`).
 - **Dominio `inventory`:** `Ingredient`, `IngredientEntry` e `IngredientExit` con los nombres del briefing, FK de las órdenes a `ingredients` y sin columna de stock; schemas aparte. 6 rutas bajo `/api/v1/inventory`, todas protegidas, sin rutas de edición. `current_stock` = entradas − salidas, calculado en SQL y global por ingrediente (`?country=CO|US`). Las salidas que dejarían el stock en negativo dan 400 `insufficient_stock` (mensaje en español) antes de escribir. `user_uuid` sale del token. Sin N+1: 1 consulta en `GET /products` y 2 en `GET /orders`.
 - **Semilla:** `uv run --env-file .env seed-inventory` (6 ingredientes, 4 entradas y 3 salidas; stock 52/32/20/0), idempotente, con el UUID del administrador activo más antiguo. Cargada en Supabase.
 - **Verificación:** `uv run pytest`: 916 pasan (110 nuevas; cobertura del dominio, 97 %). En vivo contra Supabase (2026-11-14): semilla dos veces, stock, filtro por país, 400 sin escritura, 422 con `user_uuid` o `reason` inválido, `GET /orders`, 401 sin token y 405 al intentar editar el stock.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestión de inventario con ORM" (D1–D7, decisiones y la tabla de verificación de los criterios de evaluación); README de la API y de `services/`; `techContext.md`; `ARCHITECTURE_PROPOSAL.md` (quinto bloque en 2.7 y sección 7).
-- **Pendiente:** subir la rama y abrir el PR #14 contra `feature/auth-tests` (lo hace el desarrollador). El backoffice aún no tiene una herramienta de inventario (no la pide el hito).
+- **PR:** #14, abierto el 2026-11-14 contra `feature/auth-tests` mientras el #13 no se fusione. El backoffice aún no tiene una herramienta de inventario (no la pide el hito).
 
-**Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
+**Pull requests (comprobados en GitHub el 2026-11-14).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
 |---|---|---|
@@ -110,8 +110,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
 | #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
 | #13 AUTH-088 (pruebas, API-042 y FE-019) | `feature/auth-tests` → `feature/error-handling-audit` | ⏳ Abierto (2026-11-10) |
+| #14 Hito 5: inventario con SQLModel y Supabase | `feature/inventory-orm` → `feature/auth-tests` | ⏳ Abierto (2026-11-14) |
 
-- **Orden de merge:** #8, #9, #10, #11, #12 y #13, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11, #12, #13 y #14, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -247,7 +248,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. Falta subir la rama y abrir el PR #14 contra `feature/auth-tests`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
+0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 abierto contra `feature/auth-tests` mientras el #13 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 
 0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. PR #13 abierto contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
 
