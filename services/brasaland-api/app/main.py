@@ -7,11 +7,13 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 
 from app.core.config import API_PREFIX, get_settings
+from app.core.database import get_engine, init_db
 from app.core.errors import register_error_handlers
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.router import router as auth_router
 from app.domains.incidents.manager_router import router as incident_manager_router
 from app.domains.incidents.router import router as incidents_router
+from app.domains.inventory.router import router as inventory_router
 from app.domains.profiles.router import router as profiles_router
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.router import router as suppliers_router
@@ -35,6 +37,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     result = seed_if_empty(repository)
     if result is not None:
         logger.info("Directorio de proveedores sembrado: %s proveedores insertados.", result.inserted)
+
+    # Inventario (Hito 5): sin DATABASE_URL la API no arranca. Crea en Supabase las tablas que falten.
+    # Las pruebas sustituyen get_engine por un SQLite temporal.
+    engine = app.dependency_overrides.get(get_engine, get_engine)()
+    init_db(engine)
     yield
 
 
@@ -46,6 +53,8 @@ app.include_router(incidents_router, prefix=API_PREFIX, dependencies=PROTECTED)
 # Gestor de incidencias centralizado: mismo prefijo /incidents que el analizador del CSV.
 app.include_router(incident_manager_router, prefix=API_PREFIX, dependencies=PROTECTED)
 app.include_router(suppliers_router, prefix=API_PREFIX, dependencies=PROTECTED)
+# Inventario (Hito 5): APIRouter con prefijo /inventory, datos en Supabase. Todas sus rutas exigen token.
+app.include_router(inventory_router, prefix=API_PREFIX, dependencies=PROTECTED)
 # Autenticación (AUTH-01): login, usuarios (solo credenciales) y perfiles. AUTH-03 añade a /auth el
 # restablecimiento (público) y el cambio (protegido) de contraseña.
 app.include_router(auth_router, prefix=API_PREFIX)

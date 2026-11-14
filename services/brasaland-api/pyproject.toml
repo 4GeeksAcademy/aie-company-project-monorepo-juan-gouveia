@@ -19,6 +19,10 @@ dependencies = [
     "resend>=2.52.0",
     # Reglas del CSV de incidentes compartidas con los scripts (packages/shared).
     "brasaland-shared",
+    # ORM del inventario (Hito 5): modelos y consultas sobre Supabase (PostgreSQL).
+    "sqlmodel>=0.0.50",
+    # Driver de PostgreSQL que usa SQLModel para conectarse a Supabase.
+    "psycopg2-binary>=2.9.13",
 ]
 
 [tool.uv.sources]
@@ -30,6 +34,8 @@ brasaland-shared = { path = "../../packages/shared", editable = true }
 seed = "app.domains.suppliers.seed:main"
 # `uv run create-admin` crea el primer administrador (POST /users siempre crea rol `user`).
 create-admin = "app.domains.users.create_admin:run"
+# `uv run --env-file .env seed-inventory` carga en Supabase los datos semilla del inventario (Hito 5).
+seed-inventory = "app.domains.inventory.seed:main"
 
 [project.optional-dependencies]
 dev = [

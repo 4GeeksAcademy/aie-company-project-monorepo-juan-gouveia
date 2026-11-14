@@ -20,8 +20,8 @@
 
 ### Backend / Servicios
 
-- **`services/brasaland-api/`** — API central en **FastAPI** (Python ≥ 3.11, Pydantic 2), con la estructura por dominios de la propuesta de arquitectura. Dependencias en `pyproject.toml` (`fastapi`, `uvicorn[standard]`, `python-multipart`, `tinydb`, `pydantic[email]`, `python-jose[cryptography]` y `libpass[bcrypt]`; de desarrollo, `pytest` y `httpx`), gestionadas con **uv** (`uv.lock` versionado) y entorno virtual propio en `.venv/`, ignorado en Git. Comandos: `uv sync --extra dev`, `uv run --env-file .env uvicorn app.main:app --port 8000`, `uv run pytest`, `uv run seed` y `uv run create-admin` (scripts de `[project.scripts]`).
-- **Configuración (`app/core/config.py`):** `SECRET_KEY` (mínimo 32 caracteres) y `ACCESS_TOKEN_EXPIRE_MINUTES` son obligatorias y sin valor por defecto; la API no arranca sin ellas. En local van en `services/brasaland-api/.env` (ignorado; plantilla `.env.example`). Opcionales: `AUTH_DB_PATH` y `BRASALAND_DB_PATH`. `API_PREFIX = "/api/v1"` vive aquí.
+- **`services/brasaland-api/`** — API central en **FastAPI** (Python ≥ 3.11, Pydantic 2), con la estructura por dominios de la propuesta de arquitectura. Dependencias en `pyproject.toml` (`fastapi`, `uvicorn[standard]`, `python-multipart`, `tinydb`, `pydantic[email]`, `python-jose[cryptography]`, `libpass[bcrypt]`, `sqlmodel` y `psycopg2-binary`; de desarrollo, `pytest` y `httpx`), gestionadas con **uv** (`uv.lock` versionado) y entorno virtual propio en `.venv/`, ignorado en Git. Comandos: `uv sync --extra dev`, `uv run --env-file .env uvicorn app.main:app --port 8000`, `uv run pytest`, `uv run seed` y `uv run create-admin` (scripts de `[project.scripts]`).
+- **Configuración (`app/core/config.py`):** `SECRET_KEY` (mínimo 32 caracteres) y `ACCESS_TOKEN_EXPIRE_MINUTES` son obligatorias y sin valor por defecto; la API no arranca sin ellas. En local van en `services/brasaland-api/.env` (ignorado; plantilla `.env.example`). Opcionales: `AUTH_DB_PATH` y `BRASALAND_DB_PATH`. `API_PREFIX = "/api/v1"` vive aquí. `DATABASE_URL` (Supabase, también obligatoria) la lee `app/core/database.py`.
 - **Autenticación (ticket AUTH-01, rama `feature/auth-api`, completada y verificada).**
   - **Modelo:** JWT stateless, sin sesiones ni cookies. `app/core/security.py` hashea con bcrypt (libpass, `from passlib.hash import bcrypt`) y firma con HS256 (python-jose) tokens con solo `sub` (UUID del usuario), `iat` y `exp`.
   - **Dominios:** `users` (solo credenciales: `id` UUID4, `email` único en minúsculas, `hashed_password`, `is_active`, `role` ∈ `admin`/`manager`/`user`, `created_at`; capa `service.py`), `profiles` (`id`, `user_id`, `name`, `phone`, `address`, uno a uno) y `auth` (`POST /auth/login` con JSON o formulario, `GET /auth/me`, `get_current_user`, `require_admin`).
@@ -34,6 +34,14 @@
   - **Correo:** `app/core/email.py` (`EmailSender`; `ResendEmailSender` con el SDK `resend`; `DisabledEmailSender` sin `RESEND_API_KEY`; `send_safely` en `BackgroundTasks`). Variables opcionales: `RESEND_API_KEY`, `EMAIL_FROM` (por defecto `onboarding@resend.dev`, que sin dominio solo entrega al email de la cuenta de Resend), `FRONTEND_URL` y `PASSWORD_RESET_EXPIRE_MINUTES` (15–60, por defecto 30).
   - **Pruebas:** usan un emisor falso autouse (`conftest.py`).
   - **TinyDB:** `app/core/storage.py` (`insert_with_file_id`) calcula el `doc_id` desde el archivo en `users`, `profiles` y `password_resets`, para no chocar con escrituras de otro proceso.
+- **Dominio `inventory` (Hito 5, ticket BRD-0512, rama `feature/inventory-orm`).**
+  - **Dos conexiones:** TinyDB para usuarios y autenticación (sin cambios) y Supabase (PostgreSQL) con **SQLModel** para el inventario. `app/core/database.py`: `get_engine()` (lee `DATABASE_URL`, la convierte a `postgresql+psycopg2://` porque SQLAlchemy 2.1 elige psycopg 3 por defecto; la API no arranca sin ella), `init_db()` (`create_all`, llamado en el `lifespan`) y `get_db()` (una `Session` por petición con `Depends`).
+  - **Modelos (`models.py`, `table=True`):** `Ingredient` (`ingredients`: `id`, `name`, `sku` único, `unit`, `category`, `country`; sin columna de stock), `IngredientEntry` (`ingredient_entries`) e `IngredientExit` (`ingredient_exits`), con FK `ingredient_id → ingredients.id`, `user_uuid` sin FK y `created_at` `timestamptz` en UTC.
+  - **Schemas (`schemas.py`):** separados de los modelos; enums con los valores del briefing, `extra="forbid"` (no admiten `user_uuid`, `created_at` ni `current_stock`), `quantity` > 0, `location_id` 1–14. `current_stock` solo en `IngredientRead`.
+  - **Rutas:** `APIRouter(prefix="/inventory")` bajo `/api/v1`, todas protegidas: `GET/POST /products` (`?country=CO|US`), `GET /products/{id}`, `POST /orders/inbound`, `POST /orders/outbound` y `GET /orders` (`{"inbound", "outbound"}`). Sin rutas de edición ni borrado.
+  - **Reglas (`service.py`):** stock global = suma de entradas − suma de salidas, calculado en SQL (1 consulta para el listado; `GET /orders`, 2 con `join`; sin N+1 y sin SQLAlchemy directo). Las salidas bloquean el ingrediente (`with_for_update`) y responden 400 `insufficient_stock` antes de escribir. `user_uuid` = `id` del usuario de `get_current_user`.
+  - **Semilla:** `uv run --env-file .env seed-inventory` (6 ingredientes, 4 entradas y 3 salidas; stock 52/32/20/0), idempotente, con el UUID del administrador activo más antiguo.
+  - **Pruebas:** SQLite temporal (fixture autouse `inventory_engine`, FK activadas); `tests/inventory/` y `tests/integration/test_inventory_router.py`.
 - **Dominio `suppliers` (directorio de proveedores, milestone 09).**
   - **Rutas:** `POST/GET /api/v1/suppliers` (filtros `country` y `category`), `GET/DELETE /suppliers/{id}`, `PATCH /suppliers/{id}/rate` y `PATCH /suppliers/{id}/status`.
   - **Modelos (`models.py`):** Pydantic con enums que tienen los valores exactos del briefing. La moneda debe corresponder al país, `extra="forbid"`, y la tarifa es estricta y mayor que 0.
@@ -62,7 +70,7 @@
   - **Sin `proxy.ts`:** el servidor no puede leer `localStorage`.
   - **Recuperación de contraseña (AUTH-03, rama `feature/password-reset`):** `/forgot-password` y `/reset-password` en `(publico)`. `/reset-password` comprueba el enlace al abrirse y declara `referrer: no-referrer`. `lib/auth/validation.ts` reúne las reglas de contraseña (`passwordError`, `validateNewPassword`) y `mergeFieldErrors`. Pendiente: `/account/change-password`.
   - **Perfil:** `/account/profile` (`components/account/`) usa el usuario de `useSession()` y guarda con `PUT /profiles/me`, enviando solo los campos cambiados (vacío → `null`). Después actualiza la sesión con `setUser`.
-- **Sigue pendiente:** la base de datos definitiva (TinyDB es provisional) y el resto de dominios. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
+- **Sigue pendiente:** migrar a Supabase los dominios que siguen en TinyDB provisional (`suppliers` e `incidents`; usuarios y perfiles se quedan en TinyDB por directiva) y el resto de dominios. No hay migraciones de esquema: `create_all` solo crea tablas nuevas. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
 
 ### Paquetes Compartidos
 
@@ -190,7 +198,7 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ### Backend
 
-- Existen los dominios `incidents` y `suppliers` de `services/brasaland-api/`. El último análisis de incidentes vive en memoria y se pierde al reiniciar. Los proveedores persisten en TinyDB, que es provisional hasta Postgres con ORM y no está pensado para muchos procesos escribiendo a la vez.
+- Existen los dominios `incidents`, `suppliers` e `inventory` de `services/brasaland-api/`. El último análisis de incidentes vive en memoria y se pierde al reiniciar. Los proveedores y las incidencias del gestor persisten en TinyDB, que es provisional y no está pensado para muchos procesos escribiendo a la vez. El inventario ya está en Supabase (PostgreSQL) con SQLModel, sin migraciones de esquema (`create_all`).
 - El tracker sigue usando la API de playground (ver sección de Stack → Backend).
 - La autenticación JWT protege todas las rutas salvo login, registro y `/health` (rama `feature/auth-api`). No hay permisos por rol fuera de la gestión de usuarios. El backoffice envía el token a través del BFF (rama `feature/auth-frontend`).
 
@@ -203,7 +211,7 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 ### Infraestructura
 
 - Sin Docker, docker-compose, CI/CD, o scripts de deploy.
-- Sin base de datos de servidor; solo los archivos TinyDB locales de `suppliers` y de usuarios y perfiles.
+- Base de datos de servidor: un proyecto de Supabase (PostgreSQL) para el inventario, con la cadena en `DATABASE_URL`. El resto sigue en archivos TinyDB locales (proveedores, incidencias, usuarios y perfiles).
 - Sin configuración de hosting/cloud.
 
 ### Datos

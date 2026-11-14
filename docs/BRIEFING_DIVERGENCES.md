@@ -19,6 +19,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 6. [Gestor de incidencias centralizado](#gestor-de-incidencias-centralizado) (briefing "Gestor de Incidencias Centralizado")
 7. [Auditoría de gestión de errores](#auditoría-de-gestión-de-errores) (briefing "Auditoría de gestión de errores", rama `feature/error-handling-audit`)
 8. [Batería de pruebas de autenticación](#batería-de-pruebas-de-autenticación) (ticket AUTH-088, rama `feature/auth-tests`)
+9. [Gestión de inventario con ORM](#gestión-de-inventario-con-orm) (Hito 5, ticket BRD-0512, rama `feature/inventory-orm`)
 
 ---
 
@@ -734,3 +735,121 @@ Ticket extra de la misma consigna, en la misma rama. Coinciden con el ticket: tr
 | Zona horaria de las pruebas | No dice nada | `jest.config.js` fija `TZ=UTC` | `lib/format.ts` formatea en la hora local: sin esto, las fechas esperadas dependerían del equipo |
 
 Verificación (10 de noviembre de 2026): `npm test -- __tests__/utils` da 35 pruebas que pasan; `npm run test:coverage` da 90 que pasan, con `lib/format.ts` y `lib/error-message.ts` al 100 % y `readJson` cubierta por completo. `tsc --noEmit` y `npm run lint` pasan.
+
+---
+
+## Gestión de inventario con ORM
+
+Inventario de ingredientes con stock calculado (Hito 5, ticket BRD-0512), en la rama `feature/inventory-orm`. La API mantiene dos conexiones a la vez: TinyDB para la autenticación y Supabase (PostgreSQL, con SQLModel) para el inventario. Coinciden exactamente con el briefing:
+
+- las entidades `Ingredient`, `IngredientEntry` e `IngredientExit` y todos sus campos;
+- los valores válidos de `unit`, `category`, `country` y `reason`, y `location_id` de 1 a 14;
+- `current_stock` calculado como `SUMA(entradas) − SUMA(salidas)`, solo en el schema de respuesta y nunca como columna;
+- la FK de las órdenes a `Ingredient`, aplicada por la base de datos, y `user_uuid` sin FK ni tabla de usuarios en Supabase;
+- el 400 de una salida que dejaría el stock en negativo, antes de escribir nada;
+- los 6 endpoints del briefing, con un `APIRouter(prefix="/inventory")`;
+- los datos semilla: los 6 ingredientes, 4 entradas (2 de `BRS-BEEF-001`) y 3 salidas, una de ellas `"waste"`.
+
+Las diferencias son de ubicación, rutas, idioma y lo que el briefing no concreta. Las decisiones D1 a D7 se tomaron con el desarrollador el 14 de noviembre de 2026.
+
+> **Estado:** implementado y verificado en vivo contra Supabase (2026-11-14). `uv run pytest`: 916 pruebas pasan (110 de inventario y de la conexión SQL); cobertura del dominio, 97 %.
+
+| Qué | Consigna o briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Estructura de archivos (D1) | `services/main.py`, `database.py`, `models.py`, `schemas.py` y `routers/inventory.py` | Dominio `app/domains/inventory/` (`models.py`, `schemas.py`, `service.py`, `router.py`, `seed.py`) y conexión SQL en `app/core/database.py` | La consigna pide extender el servicio existente, no crear otro |
+| `database.py` con las dos conexiones | "Cliente TinyDB + motor SQLModel + `get_db`" en un archivo | `app/core/database.py` solo tiene el motor SQLModel y `get_db`; TinyDB sigue en `app/core/storage.py` y `app/domains/users/database.py` | La consigna pide dejar intacta la configuración TinyDB de auth ("o equivalente") |
+| Prefijo de las rutas (D2) | `/inventory/...` | `APIRouter(prefix="/inventory")` montado en `/api/v1`: `/api/v1/inventory/...` | Versión única de la API, como en todos los ejercicios anteriores |
+| Origen de `user_uuid` (D3) | Un campo de la orden | Sale siempre del token (`get_current_user`); enviarlo en el cuerpo da 422 | Cada orden debe ser trazable a quien la creó; nadie puede registrarla en nombre de otro |
+| Autenticación en los `GET` | La define el briefing, que no dice nada | Las 6 rutas exigen token | Como el resto de la API; el stock es un dato interno de Operaciones |
+| Base de la semilla (D4) | "Tu base de datos de desarrollo local" | El proyecto de Supabase | La consigna lleva los datos de negocio a Supabase, con la cadena en `.env` |
+| SQLAlchemy (D5) | "No uses SQLAlchemy directamente" | La API solo usa `sqlmodel`; el tipo `Engine` se importa bajo `TYPE_CHECKING` y las pruebas usan `sqlalchemy.event` | SQLModel no reexporta el tipo del motor ni los eventos |
+| Mensaje del 400 (D6) | `"Insufficient stock for ingredient '{name}'. Available: {available}, requested: {requested}."` | `{"error": {"code": "insufficient_stock", "message": "Stock insuficiente para el ingrediente '{name}'. Disponible: {available}, solicitado: {requested}."}}` | Formato único de errores y mensajes en español de la API (decisión del desarrollador) |
+| Alcance del stock (D7) | Fórmula global; `location_id` en las órdenes | Stock global por ingrediente; `GET /products?country=CO` o `US` | Es la fórmula del briefing y lo que comprueba el evaluador; `country` cubre la regla 3 |
+| Forma de `GET /orders` | "Lista todas las entradas y salidas con datos del ingrediente" | `{"inbound": [...], "outbound": [...]}`, de la más reciente a la más antigua | Cada lista con su schema y sus campos propios |
+| Comando de la semilla | No dice cómo | `uv run --env-file .env seed-inventory` | Como `uv run seed` y `uv run create-admin` |
+
+### 1. Estructura de archivos y `database.py`
+
+El hito "extiende el servicio FastAPI de tu monorepo; no crearás un nuevo servicio". La API ya organiza cada responsabilidad en un dominio, así que el inventario es uno más: `models.py` (SQLModel) y `schemas.py` (Pydantic) siguen separados, como pide la consigna, y la lógica vive en `service.py` para que el router solo traduzca HTTP.
+
+La consigna también pide "deja intacta la configuración TinyDB de auth". Por eso el motor SQLModel tiene su propio módulo, `app/core/database.py`, y no se mezcla con el cliente TinyDB. El docstring del módulo explica qué va a cada almacén. Las dos conexiones se inicializan en el mismo arranque: la API no arranca sin `DATABASE_URL` (igual que sin `SECRET_KEY`), y `create_all` crea en Supabase las tablas que falten.
+
+### 2. Rutas bajo `/api/v1`
+
+Es la misma decisión que en [el analizador](#2-backend-servicesbrasaland-api-y-rutas-bajo-apiv1), los proveedores, la autenticación y el gestor de incidencias. El router tiene exactamente `prefix="/inventory"`; `main.py` lo registra bajo `API_PREFIX`. Una prueba de integración recorre el esquema OpenAPI y comprueba que las rutas de inventario son exactamente las 6 del briefing.
+
+### 3. `user_uuid` del token y `GET` protegidos
+
+La consigna dice que "el UUID del usuario autenticado (de TinyDB) debe almacenarse en `user_uuid`". Si el cliente pudiera enviarlo, una orden podría atribuirse a otro usuario. Por eso los schemas de entrada no admiten `user_uuid` (422) y las rutas de órdenes lo toman de `get_current_user`. La respuesta sí lo incluye.
+
+El briefing no dice si los `GET` son públicos. Se protegen como el resto de la API: el stock y las órdenes son datos internos de Operaciones, y el backoffice ya envía el token.
+
+### 4. Supabase como base de desarrollo
+
+El briefing pide crear la semilla "al configurar tu base de datos de desarrollo local", pero la consigna lleva el inventario a Supabase y pide su cadena de conexión en `.env`. No hay un PostgreSQL local aparte: el proyecto de Supabase es la base de desarrollo y de la demo. Las pruebas no tocan Supabase: usan un SQLite temporal con las claves foráneas activadas.
+
+Se usa la cadena del **Session pooler** de Supabase, que funciona por IPv4; la conexión directa del plan gratuito solo funciona por IPv6.
+
+### 5. SQLModel sin SQLAlchemy directo
+
+La consigna pide SQLModel y "no uses SQLAlchemy directamente", y a la vez evitar el problema N+1. La forma habitual de lo segundo (`selectinload` o `joinedload`) se importa de `sqlalchemy.orm`, así que se resolvió con lo que exporta `sqlmodel`:
+
+- `GET /inventory/products` es una sola consulta: los ingredientes con `LEFT OUTER JOIN` a dos subconsultas que suman entradas y salidas por ingrediente (`func.sum`, `func.coalesce`).
+- `GET /inventory/orders` son dos consultas, una por tabla, cada una con `select(Orden, Ingredient).join(Ingredient)`.
+- Los `Relationship` están declarados, pero el código no los recorre en bucles.
+
+Una prueba cuenta las sentencias SQL: 1 y 2 consultas, con 1 o con 20 ingredientes. Contra una versión ingenua que lee `entry.ingredient` en un bucle, el mismo contador da 21 consultas.
+
+Hay tres usos de SQLAlchemy fuera de lo anterior, ninguno para modelar ni consultar:
+
+- `app/core/database.py` importa el tipo `Engine` bajo `TYPE_CHECKING`, solo para las anotaciones; no se ejecuta nunca.
+- SQLAlchemy 2.1 usa por defecto el driver psycopg (v3) para `postgresql://`, pero la consigna instala `psycopg2-binary`. `load_database_url` convierte la cadena de Supabase en `postgresql+psycopg2://`. Sin esto, la primera conexión real fallaba (corrección `2980037`).
+- Las pruebas usan `sqlalchemy.event` para activar las claves foráneas de SQLite y para contar las consultas, e `inspect` para comprobar las tablas.
+
+### 6. Mensaje del 400 en español
+
+El briefing da el texto exacto en inglés. La API devuelve todos los errores con el mismo formato, `{"error": {"code", "message"}}`, y con mensajes en español desde la auditoría de errores. El desarrollador decidió traducirlo y mantener el formato: el código HTTP (400) y la información (nombre, disponible y solicitado) son los del briefing, y el código `insufficient_stock` permite detectarlo sin leer el texto. Las cantidades se muestran sin ceros sobrantes (`52`, `40.5`).
+
+### 7. Stock global y filtro por país
+
+La consigna pide acotar el stock "por cualquier clave de partición que defina tu BRIEFING". El briefing define la fórmula por ingrediente, sin partición, y guarda `location_id` sin hacerlo FK. El desarrollador eligió el stock global: la salida se compara con el stock total del ingrediente. La regla 3 ("usa `country` para filtrar por mercado") se cubre con `GET /inventory/products?country=CO` (o `US`).
+
+### 8. Decisiones de funcionamiento
+
+Estas decisiones no se apartan del briefing, pero concretan lo que no especifica.
+
+| Decisión | Motivo | Límite conocido |
+| --- | --- | --- |
+| Tablas `ingredients`, `ingredient_entries` e `ingredient_exits` | Nombres en plural y en snake_case; las clases conservan los nombres del briefing | — |
+| `sku` único a nivel de base de datos; 409 `duplicate_sku` | "Código interno único" | — |
+| Las salidas bloquean la fila del ingrediente (`SELECT ... FOR UPDATE`) antes de calcular el stock | Dos salidas simultáneas no pueden gastar el mismo stock | SQLite (pruebas) lo ignora; se aplica en PostgreSQL |
+| El stock se compara y se devuelve redondeado a 6 decimales | `0.1 + 0.2 − 0.3` debe dar 0, no un residuo de coma flotante | — |
+| `unit` restringida a `kg`, `litro` y `unidad` | Son los valores que lista el briefing | Una unidad nueva exige cambiar el schema |
+| `quantity` estrictamente mayor que 0, sin textos ni infinitos | Una orden de cantidad 0 o negativa no tiene sentido | — |
+| `created_at` en UTC con zona (`timestamp with time zone`) | SQLModel 0.0.50 rechaza fechas sin zona | En la semilla, todas las órdenes comparten hora (una inserción por lotes); el orden desempata por `id` |
+| `location_id` de la semilla: 1 para Colombia y 10 para EE. UU. | El briefing no asigna locales a países | Valores de ejemplo dentro del rango 1–14 |
+| La semilla usa el UUID del administrador activo más antiguo de TinyDB | "Usa valores de `user_uuid` que correspondan a usuarios existentes" | Sin administrador, termina con código 1 y pide `uv run create-admin` |
+| La semilla es idempotente y va en una única transacción | Repetirla no duplica ni deja cargas a medias | Solo siembra si no hay ingredientes |
+| La API no siembra al arrancar | Necesita un usuario real de TinyDB | — |
+| Sin rutas para editar o borrar ingredientes y órdenes | "Ningún endpoint permite modificar directamente un campo de stock" | Corregir un error exige una orden compensatoria |
+
+### 9. Cómo verificarlo
+
+Ejecutado el 14 de noviembre de 2026. La verificación en vivo usó la API en local contra el proyecto de Supabase, con un token del administrador generado por la propia API. Hay una fila por cada criterio de evaluación de la consigna.
+
+| Criterio | Comando o acción | Resultado |
+| --- | --- | --- |
+| Dos conexiones presentes y usadas correctamente | Arranque de la API; `tests/core/test_database.py` | TinyDB para usuarios (`get_current_user`) y Supabase para inventario; sin `DATABASE_URL` la API no arranca |
+| Endpoints agrupados bajo `/inventory` con un `APIRouter` dedicado | `test_router_exposes_exactly_the_six_briefing_routes_and_none_to_edit_stock` | Exactamente las 6 rutas del briefing bajo `/api/v1/inventory` |
+| FK declaradas a la entidad del briefing | Inspección de las tablas en Supabase; `test_database_rejects_order_of_missing_ingredient` | `ingredient_entries` e `ingredient_exits` con FK a `ingredients(id)`; la base rechaza un `ingredient_id` inexistente |
+| `current_stock` se calcula; ningún endpoint lo modifica | En vivo: `PATCH` y `PUT /products/1`; `current_stock` en el alta | 405; `current_stock` en el cuerpo da 422; `ingredients` no tiene columna de stock |
+| El cálculo respeta el alcance del briefing | `test_stock_is_global_across_locations` | Stock global por ingrediente (D7) |
+| Salida que supera el stock: 400 antes de escribir | En vivo: salida de 60 kg de Falda de ternera | 400 `insufficient_stock` con el mensaje; el stock sigue en 52 y no hay orden nueva |
+| Cada orden guarda el `user_uuid` del creador autenticado | `test_each_order_stores_the_uuid_of_the_user_who_sent_it`; en vivo, `GET /orders` | El `id` de TinyDB del usuario de cada token; enviarlo en el cuerpo da 422 |
+| `models.py` y `schemas.py` separados; ningún endpoint devuelve un objeto SQLModel | `test_orm_models_are_not_response_schemas`; `test_orders_list_has_ingredient_data_and_only_schema_fields` | Los schemas no heredan de SQLModel; las respuestas solo tienen los campos del schema |
+| Sesión por petición con `Depends()`, sin sesión global | `test_get_db_yields_a_new_session_per_call_and_closes_it` | Una sesión nueva por llamada, cerrada al terminar |
+| Parámetros de conexión en `.env`, ignorado en Git | `.gitignore` raíz (`.env*`); `.env.example` | `DATABASE_URL` solo en `.env`; la plantilla la deja vacía |
+| Nombres de entidades y campos del briefing | `tests/inventory/test_models.py` y `test_schemas.py` | Columnas y valores válidos exactos |
+| Semilla presente; `GET /products` refleja el neto | En vivo: `uv run --env-file .env seed-inventory` dos veces y `GET /products` | 6 ingredientes, 4 entradas y 3 salidas; la segunda vez no inserta nada. Stock: Falda 52, Costilla 32, Chimichurri 20 y el resto 0 |
+| Sin N+1 | `tests/inventory/test_queries.py` | 1 consulta en `GET /products` y 2 en `GET /orders`, con 1 o con 20 ingredientes |
+| Sin regresiones | `uv run pytest` | 916 pasan |

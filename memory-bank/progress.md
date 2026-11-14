@@ -87,7 +87,16 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `services/brasaland-api/TESTING.md` y `TESTING.es.md` (plan, cómo ejecutar, cómo están construidas, revisión con IA, bugs, Jest y cobertura); README de la API y del backoffice; `docs/BRIEFING_DIVERGENCES.md`, sección "Batería de pruebas de autenticación" (7 divergencias y la tabla de los 8 criterios).
 - **Extra API-042 completado:** 11 módulos y 101 casos en `tests/suppliers/` y `tests/incidents/` (los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP); con ellos solos, la cobertura de los dos dominios es del 84 % (objetivo: 60 %). Las pruebas de router de los dos dominios pasaron a `tests/integration/`. `uv run pytest`: 806 pasan.
 - **Extra FE-019 completado:** 35 pruebas de Jest en `uis/backoffice/__tests__/utils/` para `lib/format.ts`, `toUserMessage` y `readJson`, todas al 100 %; `jest.config.js` fija `TZ=UTC`. El backoffice tiene 90 pruebas de Jest.
-- **Pendiente:** subir la rama y abrir el PR #13 contra `feature/error-handling-audit` (lo hace el desarrollador).
+- **PR:** #13, abierto el 2026-11-10 contra `feature/error-handling-audit` mientras el #12 no se fusione.
+
+**Gestión de inventario con ORM (Hito 5, ticket BRD-0512) completada en la rama `feature/inventory-orm`**, creada desde `feature/auth-tests` (`65f2a76`) el 2026-11-14 porque el PR #13 sigue abierto; local, sin subir. Decisiones D1 a D7 aprobadas (en `docs/_private/briefing-inventario-backend.md`) y fases 0 a 6 hechas, con un commit por fase hecho por el desarrollador:
+
+- **Dos conexiones:** TinyDB para la autenticación (sin cambios) y Supabase (PostgreSQL) con SQLModel para el inventario. `app/core/database.py` tiene el motor (`DATABASE_URL` en `.env`; la API no arranca sin ella), `create_all` al arrancar y `get_db` (una sesión por petición). Driver psycopg2 fijado en la URL, porque SQLAlchemy 2.1 elige psycopg 3 (corrección `2980037`).
+- **Dominio `inventory`:** `Ingredient`, `IngredientEntry` e `IngredientExit` con los nombres del briefing, FK de las órdenes a `ingredients` y sin columna de stock; schemas aparte. 6 rutas bajo `/api/v1/inventory`, todas protegidas, sin rutas de edición. `current_stock` = entradas − salidas, calculado en SQL y global por ingrediente (`?country=CO|US`). Las salidas que dejarían el stock en negativo dan 400 `insufficient_stock` (mensaje en español) antes de escribir. `user_uuid` sale del token. Sin N+1: 1 consulta en `GET /products` y 2 en `GET /orders`.
+- **Semilla:** `uv run --env-file .env seed-inventory` (6 ingredientes, 4 entradas y 3 salidas; stock 52/32/20/0), idempotente, con el UUID del administrador activo más antiguo. Cargada en Supabase.
+- **Verificación:** `uv run pytest`: 916 pasan (110 nuevas; cobertura del dominio, 97 %). En vivo contra Supabase (2026-11-14): semilla dos veces, stock, filtro por país, 400 sin escritura, 422 con `user_uuid` o `reason` inválido, `GET /orders`, 401 sin token y 405 al intentar editar el stock.
+- **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestión de inventario con ORM" (D1–D7, decisiones y la tabla de verificación de los criterios de evaluación); README de la API y de `services/`; `techContext.md`; `ARCHITECTURE_PROPOSAL.md` (quinto bloque en 2.7 y sección 7).
+- **Pendiente:** subir la rama y abrir el PR #14 contra `feature/auth-tests` (lo hace el desarrollador). El backoffice aún no tiene una herramienta de inventario (no la pide el hito).
 
 **Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -100,9 +109,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
 | #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
 | #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
-| #13 AUTH-088 (pendiente de abrir) | `feature/auth-tests` → `feature/error-handling-audit` | 🚧 Completo (núcleo y extras); falta subir la rama y abrir el PR |
+| #13 AUTH-088 (pruebas, API-042 y FE-019) | `feature/auth-tests` → `feature/error-handling-audit` | ⏳ Abierto (2026-11-10) |
 
-- **Orden de merge:** #8, #9, #10, #11 y #12, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11, #12 y #13, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -180,8 +189,9 @@ Paquete transitorio `@repo/brasa-core` con modelos de dominio, lógica de negoci
 | Dominio `incidents` — `POST /api/v1/incidents/analyze`, `GET /api/v1/incidents/results/export`, `GET /health`; 24 pruebas pytest | ✅ Implementado; último análisis en memoria |
 | Dominio `suppliers` — CRUD del directorio de proveedores, filtros `country`/`category`, `PATCH` de tarifa (registra `updated_at`) y de estado, 409 por nombre duplicado; seeder `uv run seed`; 108 pruebas pytest | ✅ Implementado; TinyDB en `storage/brasaland-db.json` |
 | Dominios `auth`, `users` y `profiles` — login JWT, `GET /auth/me`, CRUD de usuarios, `/profiles/me` y `/profiles/{user_id}`, `get_current_user`, `uv run create-admin`; 146 pruebas unitarias en `tests/auth/` (AUTH-088, 88 % de cobertura), más las de integración HTTP en `tests/integration/` | ✅ Implementados en `feature/auth-api`; TinyDB en `storage/auth-db.json` |
+| Dominio `inventory` (Hito 5) — ingredientes, entradas y salidas bajo `/api/v1/inventory`; stock calculado (entradas − salidas), 400 ante stock negativo, `user_uuid` del token, sin N+1; `uv run seed-inventory`; 110 pruebas | ✅ Implementado en `feature/inventory-orm`; Supabase (PostgreSQL) con SQLModel |
 | Resto de dominios (`locations`, `recruitment`…) | ❌ No iniciado |
-| Base de datos | ⏳ TinyDB provisional para `suppliers` (directiva del CTO); el motor definitivo (Postgres con ORM) está sin decidir. Usuarios y perfiles se quedan en TinyDB también después (directiva del briefing AUTH-01) |
+| Base de datos | ⏳ Inventario en Supabase (PostgreSQL) con SQLModel desde el Hito 5. `suppliers` e `incidents` siguen en TinyDB provisional. Usuarios y perfiles se quedan en TinyDB (directiva del briefing AUTH-01). Falta la herramienta de migraciones (hoy, `create_all`) |
 | Autenticación / Autorización | ✅ JWT stateless (sin sesiones ni cookies). Todas las rutas exigen token salvo login, registro, `/health` y las de restablecimiento de contraseña (AUTH-03). Cambiar o restablecer la contraseña cierra las sesiones anteriores. El backoffice envía el token a través del BFF (`feature/auth-frontend`). ⏳ Permisos por rol solo en la gestión de usuarios (admin) |
 
 ### 5. Agentes / IA
@@ -237,7 +247,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. Falta abrir el PR #13 contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
+0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. Falta subir la rama y abrir el PR #14 contra `feature/auth-tests`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
+
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. PR #13 abierto contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
 
 0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
@@ -294,8 +306,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ## Riesgos y Bloqueantes
 
-- **Backend incipiente**: solo existen los dominios `incidents` (su último análisis vive en memoria), `suppliers` (TinyDB provisional) y la autenticación JWT. El tracker sigue usando la API de playground.
-- **Sin base de datos definitiva**: TinyDB es provisional y solo para `suppliers`. Falta decidir el motor (el CTO apunta a Postgres con ORM), las migraciones y el esquema. TinyDB no está pensado para muchos procesos escribiendo a la vez.
+- **Backend incipiente**: solo existen los dominios `incidents` (su último análisis vive en memoria), `suppliers` (TinyDB provisional), `inventory` (Supabase) y la autenticación JWT. El tracker sigue usando la API de playground.
+- **Base de datos a medio migrar**: el inventario ya está en Supabase (PostgreSQL) con SQLModel, pero `suppliers` e `incidents` siguen en TinyDB, que no está pensado para muchos procesos escribiendo a la vez. Faltan las migraciones de esquema: `create_all` solo crea tablas nuevas, así que cambiar una tabla existente exige hacerlo a mano en Supabase.
+- **Inventario con stock global**: el stock no se parte por local (decisión D7). Cuando exista `locations/`, habrá que decidir si pasa a calcularse por local.
 - **`suppliers` frente a `procurement`**: la propuesta reservaba los proveedores para `procurement/`. Cuando se aborden el historial de precios y las compras, hay que integrar ambos dominios para que solo uno sea dueño de los proveedores (propuesta, 2.7).
 - **Dependencia de Python para agentes**: el esqueleto está en Python, pero el resto del stack es TypeScript/JavaScript — se debe decidir si los agentes serán Python puro o se integran vía MCP/subprocess.
 - **Sin gestor de monorepo**: no hay `package.json` raíz ni scripts compartidos; cada proyecto se gestiona independientemente.
@@ -309,4 +322,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-11-10_
+_Actualizado: 2026-11-14_
