@@ -87,7 +87,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `services/brasaland-api/TESTING.md` y `TESTING.es.md` (plan, cómo ejecutar, cómo están construidas, revisión con IA, bugs, Jest y cobertura); README de la API y del backoffice; `docs/BRIEFING_DIVERGENCES.md`, sección "Batería de pruebas de autenticación" (7 divergencias y la tabla de los 8 criterios).
 - **Extra API-042 completado:** 11 módulos y 101 casos en `tests/suppliers/` y `tests/incidents/` (los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP); con ellos solos, la cobertura de los dos dominios es del 84 % (objetivo: 60 %). Las pruebas de router de los dos dominios pasaron a `tests/integration/`. `uv run pytest`: 806 pasan.
 - **Extra FE-019 completado:** 35 pruebas de Jest en `uis/backoffice/__tests__/utils/` para `lib/format.ts`, `toUserMessage` y `readJson`, todas al 100 %; `jest.config.js` fija `TZ=UTC`. El backoffice tiene 90 pruebas de Jest.
-- **Pendiente:** subir la rama y abrir el PR #13 contra `feature/error-handling-audit` (lo hace el desarrollador).
+- **PR:** #13, abierto el 2026-11-10 contra `feature/error-handling-audit` mientras el #12 no se fusione.
 
 **Pull requests (comprobados en GitHub el 2026-11-10).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -100,9 +100,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
 | #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
 | #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
-| #13 AUTH-088 (pendiente de abrir) | `feature/auth-tests` → `feature/error-handling-audit` | 🚧 Completo (núcleo y extras); falta subir la rama y abrir el PR |
+| #13 AUTH-088 (pruebas, API-042 y FE-019) | `feature/auth-tests` → `feature/error-handling-audit` | ⏳ Abierto (2026-11-10) |
 
-- **Orden de merge:** #8, #9, #10, #11 y #12, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11, #12 y #13, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -237,7 +237,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. Falta abrir el PR #13 contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. PR #13 abierto contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
 
 0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 

@@ -19,6 +19,10 @@ dependencies = [
     "resend>=2.52.0",
     # Reglas del CSV de incidentes compartidas con los scripts (packages/shared).
     "brasaland-shared",
+    # ORM del inventario (Hito 5): modelos y consultas sobre Supabase (PostgreSQL).
+    "sqlmodel>=0.0.50",
+    # Driver de PostgreSQL que usa SQLModel para conectarse a Supabase.
+    "psycopg2-binary>=2.9.13",
 ]
 
 [tool.uv.sources]
