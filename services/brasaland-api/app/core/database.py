@@ -57,11 +57,13 @@ def get_engine() -> "Engine":
 
 
 def init_db(engine: "Engine") -> None:
-    """Crea en la base las tablas de los modelos SQLModel registrados que aún no existan.
+    """Crea en la base las tablas de inventario que aún no existan (no modifica las que ya existen).
 
-    Los modelos se registran al importar su módulo; `app.main` importa el router de inventario,
-    que importa `app.domains.inventory.models`, antes de que el arranque llame a esta función.
+    Los modelos se registran en `SQLModel.metadata` al importar su módulo; importarlo aquí garantiza
+    que estén todos, sea cual sea el orden de importación.
     """
+    import app.domains.inventory.models  # noqa: F401
+
     SQLModel.metadata.create_all(engine)
 
 
