@@ -33,6 +33,11 @@ export const tools: Tool[] = [
     description: "Proveedores activos y suspendidos de Colombia y USA, con sus categorías y tarifas vigentes.",
   },
   {
+    href: "/inventario/ingredientes",
+    name: "Inventario",
+    description: "Stock actual de cada ingrediente, registro de entradas y salidas, e historial de órdenes.",
+  },
+  {
     href: "/funciones",
     name: "Pruebas de funciones",
     description: "Pruebas manuales de filtros, búsquedas, reportes y validaciones de negocio.",
