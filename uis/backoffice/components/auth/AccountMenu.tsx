@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Tooltip from "@/components/Tooltip";
 import { useSession } from "@/hooks/useSession";
 
 const ITEM =
@@ -24,8 +25,9 @@ function LogoutIcon() {
   );
 }
 
-// Bloque de cuenta de la cabecera. Hasta xl solo muestra iconos (con aria-label), para no cambiar
-// la altura fija de la cabecera de la que depende FilterBar.
+// Bloque de cuenta de la cabecera: solo iconos en todos los tamaños, con aria-label para los lectores
+// de pantalla y un Tooltip propio al pasar el ratón o llegar con el teclado. Así deja sitio al menú y
+// no cambia la altura fija de la cabecera de la que depende FilterBar.
 export default function AccountMenu() {
   const { user, logout } = useSession();
   if (!user) return null;
@@ -34,14 +36,16 @@ export default function AccountMenu() {
 
   return (
     <div className="flex shrink-0 items-center gap-1 border-l border-red-100 pl-2">
-      <Link href="/account/profile" className={ITEM} aria-label={`Mi perfil (${displayName})`} title={displayName}>
-        <UserIcon />
-        <span className="hidden max-w-40 truncate xl:block">{displayName}</span>
-      </Link>
-      <button type="button" onClick={logout} className={ITEM} aria-label="Cerrar sesión" title="Cerrar sesión">
-        <LogoutIcon />
-        <span className="hidden whitespace-nowrap xl:block">Cerrar sesión</span>
-      </button>
+      <Tooltip label={displayName}>
+        <Link href="/account/profile" className={ITEM} aria-label={`Mi perfil (${displayName})`}>
+          <UserIcon />
+        </Link>
+      </Tooltip>
+      <Tooltip label="Cerrar sesión">
+        <button type="button" onClick={logout} className={ITEM} aria-label="Cerrar sesión">
+          <LogoutIcon />
+        </button>
+      </Tooltip>
     </div>
   );
 }
