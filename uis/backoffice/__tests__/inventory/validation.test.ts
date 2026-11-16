@@ -6,6 +6,7 @@ import {
   EMPTY_EXIT_FORM,
   exceedsStock,
   parseQuantity,
+  presetIngredientId,
   toEntryInput,
   toExitInput,
   validateEntryForm,
@@ -14,6 +15,23 @@ import {
 
 const VALID_ENTRY = { ingredient_id: "1", quantity: "50", supplier_name: "  Carnes del Valle S.A. ", location_id: "1" };
 const VALID_EXIT = { ingredient_id: "1", quantity: "3,5", reason: "waste" as const, location_id: "14" };
+
+describe("presetIngredientId", () => {
+  it.each([
+    ["1", "1"],
+    ["42", "42"],
+    [" 7 ", "7"],
+  ])("acepta %p como %p", (raw, expected) => {
+    expect(presetIngredientId(raw)).toBe(expected);
+  });
+
+  it.each([[undefined], [""], ["0"], ["-3"], ["1.5"], ["abc"], ["01"], [["1", "2"]]])(
+    "descarta %p",
+    (raw) => {
+      expect(presetIngredientId(raw)).toBe("");
+    }
+  );
+});
 
 describe("parseQuantity", () => {
   it.each([

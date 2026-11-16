@@ -35,6 +35,13 @@ export const EXIT_FORM_FIELDS: readonly ExitFormField[] = ["ingredient_id", "qua
 export const EMPTY_ENTRY_FORM: EntryFormValues = { ingredient_id: "", quantity: "", supplier_name: "", location_id: "" };
 export const EMPTY_EXIT_FORM: ExitFormValues = { ingredient_id: "", quantity: "", reason: "", location_id: "" };
 
+// `?ingredient_id=` de los enlaces de la lista de ingredientes: el id en texto si es un entero
+// positivo, o "" si falta o no es válido (se repite, es "abc", "0", "-3" o "1.5").
+export function presetIngredientId(raw: string | string[] | undefined): string {
+  if (typeof raw !== "string" || !/^[1-9]\d*$/.test(raw.trim())) return "";
+  return raw.trim();
+}
+
 // Cantidad escrita por el usuario. Admite coma o punto decimal ("12,5" o "12.5"). Devuelve null si
 // no es un número.
 export function parseQuantity(text: string): number | null {
