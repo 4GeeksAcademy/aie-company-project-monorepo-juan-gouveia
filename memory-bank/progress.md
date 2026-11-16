@@ -107,6 +107,13 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Ajustes tras el plan (commit aparte):** pestañas del inventario en dos líneas en móvil, y Proveedor de la entrada como lista de los proveedores activos del directorio, filtrada por el país y la categoría equivalente del ingrediente (`lib/inventory-suppliers.ts`).
 - **PR:** #15, abierto el 2026-11-16 contra `feature/inventory-orm` mientras el #14 no se fusione. Los cambios de cabecera y menú (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) van en la rama `feature/backoffice-navigation`, creada desde esta.
 
+**Navegación del backoffice completada en la rama `feature/backoffice-navigation`**, creada desde `feature/inventory-frontend` (`3c7fe3d`) el 2026-11-16 porque el PR #15 sigue abierto. Sin ticket; un commit por cambio:
+
+- **Cuenta:** "Mi perfil" y "Cerrar sesión" solo con iconos en todos los tamaños, con un tooltip propio (`components/Tooltip.tsx`) al pasar el ratón o llegar con el teclado.
+- **Menú por secciones:** `lib/tools.ts` agrupa las herramientas en `toolSections` (Inventario, Proveedores, Incidencias y Herramientas). En la cabecera, las secciones con varias herramientas son desplegables (`components/NavDropdown.tsx`), y la portada muestra las mismas secciones.
+- **Menú hamburguesa** por debajo de `xl` (`components/MobileNav.tsx`): panel superpuesto bajo la cabecera, sin cambiar su altura. Ya se puede navegar desde cualquier página en móvil y tablet, así que la divergencia del menú del gestor de incidencias queda resuelta (`docs/BRIEFING_DIVERGENCES.md`).
+- **Siguiente:** abrir el PR contra `feature/inventory-frontend`.
+
 **Pull requests (comprobados en GitHub el 2026-11-16).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
@@ -258,7 +265,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). Queda abrir el PR contra `feature/inventory-orm`. Después, en una rama aparte: iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
+0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`; queda abrir su PR contra `feature/inventory-frontend`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
 0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 abierto contra `feature/auth-tests` mientras el #13 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 

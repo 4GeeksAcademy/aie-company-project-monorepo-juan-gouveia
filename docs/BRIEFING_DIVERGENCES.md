@@ -475,7 +475,7 @@ Las diferencias son de rutas, de cómo se evita duplicar el seed, del alcance de
 | Control de duplicados del seed | Por `incident_id`, que "no se almacena"; si falta, `title + created_at` | `incident_id` en una tabla aparte, `incident_seed_log`, fuera del modelo | Sin guardarlo no se puede comprobar después; `title + created_at` no sirve con este CSV |
 | Código de los errores de validación | 400 | 400 en las rutas del gestor; el resto de la API mantiene 422 | No cambiar el contrato de proveedores y autenticación, ya entregados |
 | `status` en el formulario | "Incluye todos los campos del modelo" | Se muestra fijo en `open`, no editable; la API solo acepta `open` al crear | Una incidencia recién registrada no puede nacer resuelta o descartada |
-| Menú en móvil y tablet | Registro "accesible desde el menú de la aplicación" | Desde `xl`, en la cabecera; por debajo, en la portada (logo), que es el menú en esas pantallas | Con 6 herramientas, la cabecera no tiene sitio en pantallas pequeñas (decisión del desarrollador) |
+| Menú en móvil y tablet (resuelta) | Registro "accesible desde el menú de la aplicación" | Hasta el 16 de noviembre, desde `xl` en la cabecera y por debajo en la portada; desde entonces, en el desplegable "Incidencias" y, por debajo de `xl`, en el menú hamburguesa | Antes no cabía en la cabecera de pantallas pequeñas; el menú hamburguesa lo resolvió ([apartado 5](#5-el-menú-en-móvil-y-tablet)) |
 | Lógica compartida | Extraída a `packages/shared/` | Paquete Python `brasaland-shared` junto al paquete TypeScript que ya había en esa carpeta | La carpeta ya existía con `@repo/shared-types`; los dos conviven sin tocarse |
 
 ### 1. Rutas bajo `/api/v1`
@@ -507,7 +507,10 @@ El formulario "incluye todos los campos del modelo". `id`, `created_at` y `updat
 
 ### 5. El menú en móvil y tablet
 
-La consigna pide que la página de registro sea "accesible desde el menú de la aplicación". Desde 1280 px (`xl`), la cabecera muestra los enlaces a las 6 herramientas, entre ellos "Registrar incidencia" y "Gestor de incidencias". Por debajo, el desarrollador pidió que la tablet se comporte como el móvil: la cabecera solo muestra el logo y la cuenta, y se navega desde la portada, que tiene una tarjeta por herramienta (las dos del gestor incluidas). Con 6 herramientas, los enlaces no caben junto a la cuenta y no pueden pasar a una segunda línea, porque la barra de filtros de `/talento` depende de la altura fija de la cabecera.
+La consigna pide que la página de registro sea "accesible desde el menú de la aplicación".
+
+- **Hasta el 16 de noviembre de 2026:** desde 1280 px (`xl`), la cabecera mostraba un enlace por herramienta, entre ellos "Registrar incidencia" y "Gestor de incidencias". Por debajo, solo mostraba el logo y la cuenta, y se navegaba desde la portada, que tiene una tarjeta por herramienta. Los enlaces no cabían junto a la cuenta y no podían pasar a una segunda línea, porque la barra de filtros de `/talento` depende de la altura fija de la cabecera.
+- **Desde entonces** (rama `feature/backoffice-navigation`): el menú agrupa las herramientas en secciones, y las tres de incidencias están en el desplegable "Incidencias". Por debajo de `xl`, un menú hamburguesa despliega las mismas secciones en un panel que se superpone a la página, sin cambiar la altura de la cabecera. El registro es accesible desde el menú en todos los tamaños, así que esta divergencia ya no existe.
 
 ### 6. Decisiones de funcionamiento
 
@@ -875,7 +878,7 @@ Las diferencias son de configuración, rutas y una etiqueta. Las decisiones F1 a
 | URL de la API (F1) | `NEXT_PUBLIC_INVENTORY_API_URL=http://localhost:8000` en `.env.local` | Sin variable nueva: `lib/inventory.ts` llama a `/api/inventory/...` y el intermediario la reenvía con `API_BASE_URL` | Mismo camino que el resto de herramientas; sin CORS; la URL de la consigna no incluye `/api/v1` |
 | Rutas (F2) | `/backoffice/inventory/products`, `.../orders/inbound`, `.../orders/outbound` y `.../orders` | `/inventario/ingredientes`, `/inventario/ordenes/entrada`, `/inventario/ordenes/salida` y `/inventario/ordenes`; `/inventario` redirige a ingredientes | Rutas en español, como el resto del backoffice, con el vocabulario del briefing; el backoffice es la raíz de su aplicación |
 | Etiqueta de `user_uuid` | La consigna nombra el campo `user_uuid` | La columna se rotula "Usuario"; el valor es el `user_uuid` completo y la página explica qué es | Que la columna se vea como las demás (decisión del desarrollador, 16 de noviembre) |
-| Menú en móvil y tablet | — | "Inventario" en la cabecera desde `xl`; por debajo, en la portada | La regla del [gestor de incidencias](#5-el-menú-en-móvil-y-tablet), ahora con 7 herramientas |
+| Menú en móvil y tablet | — | "Inventario" en la cabecera desde `xl`; por debajo, en el menú hamburguesa (desde el 16 de noviembre; antes, en la portada) | La regla del [gestor de incidencias](#5-el-menú-en-móvil-y-tablet) |
 
 ### 1. Intermediario en lugar de `NEXT_PUBLIC_INVENTORY_API_URL`
 
