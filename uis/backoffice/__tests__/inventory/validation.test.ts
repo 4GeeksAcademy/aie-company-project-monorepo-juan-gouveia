@@ -91,7 +91,7 @@ describe("validateEntryForm", () => {
   it.each([
     [{ quantity: "0" }, "quantity", "La cantidad debe ser mayor que 0."],
     [{ quantity: "doce" }, "quantity", "Escribe un número, por ejemplo 12 o 12.5."],
-    [{ supplier_name: "   " }, "supplier_name", "Escribe el nombre del proveedor."],
+    [{ supplier_name: "   " }, "supplier_name", "Elige el proveedor."],
     [{ supplier_name: "x".repeat(121) }, "supplier_name", "El proveedor no puede superar 120 caracteres."],
     [{ location_id: "15" }, "location_id", "Elige el local."],
   ])("con %p marca %s", (changes, field, message) => {

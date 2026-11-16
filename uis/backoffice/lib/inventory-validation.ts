@@ -73,7 +73,7 @@ export function validateEntryForm(values: EntryFormValues): EntryFormErrors {
   if (!values.ingredient_id) errors.ingredient_id = "Elige el ingrediente.";
   const quantity = quantityError(values.quantity);
   if (quantity) errors.quantity = quantity;
-  if (!supplier) errors.supplier_name = "Escribe el nombre del proveedor.";
+  if (!supplier) errors.supplier_name = "Elige el proveedor.";
   else if (supplier.length > MAX_SUPPLIER_NAME_LENGTH) {
     errors.supplier_name = `El proveedor no puede superar ${MAX_SUPPLIER_NAME_LENGTH} caracteres.`;
   }

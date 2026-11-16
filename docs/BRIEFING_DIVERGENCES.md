@@ -868,7 +868,7 @@ Sección de inventario de `uis/backoffice` (Hito 5, fase frontend, ticket BRD-05
 
 Las diferencias son de configuración, rutas y una etiqueta. Las decisiones F1 a F6 se tomaron con el desarrollador el 14 de noviembre de 2026.
 
-> **Estado:** implementado y verificado en vivo contra una API temporal (SQLite y TinyDB fuera del repositorio), sin tocar Supabase (2026-11-16). `npm test`: 150 pruebas pasan (60 de inventario); `tsc`, `lint` y `build` sin errores. El desarrollador revisó cada vista en el navegador.
+> **Estado:** implementado y verificado en vivo contra una API temporal (SQLite y TinyDB fuera del repositorio), sin tocar Supabase (2026-11-16). `npm test`: 159 pruebas pasan (69 de inventario); `tsc`, `lint` y `build` sin errores. El desarrollador revisó cada vista en el navegador.
 
 | Qué | Consigna o briefing | Implementación | Motivo principal |
 | --- | --- | --- | --- |
@@ -917,6 +917,8 @@ Estas decisiones no se apartan de la consigna, pero concretan lo que no especifi
 | El stock de la salida se pide a la API al elegir el ingrediente (`GET /products/{id}`) y se descartan las respuestas atrasadas | "De forma reactiva, antes de introducir la cantidad" | Se refresca tras cada envío, no en tiempo real |
 | La advertencia de cantidad excesiva no bloquea el envío | Es una ayuda de UX: el stock puede haber cambiado y la regla real la aplica la API | — |
 | El 400 `insufficient_stock` se coloca en el campo de cantidad (`exitErrorsFromApi`) y el aviso general remite a él | "Inline, junto al campo de cantidad" | — |
+| El proveedor de la entrada se elige de una lista: los proveedores activos del directorio con el país y la categoría equivalente del ingrediente (`lib/inventory-suppliers.ts`: `meat`→`carne`, `produce`→`verduras_y_hortalizas`, `sauce`→`salsas_y_condimentos`, `beverage`→`bebidas`, `packaging`→`packaging`, `cleaning`→`productos_limpieza`; `CO`→`Colombia`, `US`→`USA`). Se sigue enviando `supplier_name` con su nombre. Sin proveedores activos, un aviso enlaza al directorio y no hay texto libre (decisión del desarrollador, 16 de noviembre) | Evita nombres escritos de varias formas y deja el historial agrupable por proveedor, sin cambiar el contrato del briefing (`supplier_name` es texto) | El vínculo solo existe en la interfaz: la API acepta cualquier nombre, y no puede haber clave foránea porque los proveedores están en TinyDB y el inventario en Supabase. Si se renombra un proveedor, las entradas antiguas conservan el nombre anterior. Si cambian las categorías de alguno de los dos briefings, hay que actualizar la tabla de equivalencias |
+| Pestañas del inventario en dos líneas de dos en móvil y en una línea desde `sm` | En una sola fila desplazable, "Historial de órdenes" quedaba fuera de la vista | — |
 | Tras una entrada se limpia el formulario (conserva el ingrediente del enlace); tras una salida solo se limpia la cantidad y se refresca el stock | Registrar varias salidas seguidas del mismo ingrediente es lo habitual | — |
 | El historial junta entradas y salidas de la más reciente a la más antigua, con "+ Entrada" en verde y "− Salida" en rojo | La API las devuelve en dos listas; la consigna pide distinguirlas | Sin filtros ni paginación |
 | `user_uuid` completo con "Tú" en las órdenes propias, sin nombres ni emails (F6) | La API no los da y un usuario normal no puede leer los datos de otros | Las órdenes de otros solo muestran el UUID |
@@ -938,4 +940,4 @@ Ejecutado el 16 de noviembre de 2026, con el backoffice (`next dev`) contra una 
 | 8. El historial muestra todas las órdenes con tipo, ingrediente, cantidad, fecha y `user_uuid` | En vivo, `/inventario/ordenes`; `mergeOrders` en `orders.test.ts` | Entradas y salidas juntas por fecha, con "+ Entrada"/"− Salida" y el `user_uuid` con "Tú". Revisado por el desarrollador |
 | 9. Las cuatro páginas redirigen al login sin sesión | Navegador sin sesión (ventana privada) en las cuatro rutas | Las cuatro llevan a `/login?next=<ruta>`: viven en `app/(protegido)/`, cuyo `SessionProvider` protege toda página del grupo. Revisado por el desarrollador |
 | 10. Entidades y etiquetas del briefing | Revisión de las vistas; `lib/inventory-labels.ts` | Ingrediente, Entrada, Salida y Órdenes; códigos exactos con su descripción. Única excepción: la columna "Usuario" ([apartado 3](#3-la-columna-usuario)) |
-| Sin regresiones | `npm test`, `npx tsc --noEmit`, `npm run lint` y `npm run build` en `uis/backoffice` | 150 pruebas pasan; el build genera las 4 rutas de inventario sin errores |
+| Sin regresiones | `npm test`, `npx tsc --noEmit`, `npm run lint` y `npm run build` en `uis/backoffice` | 159 pruebas pasan; el build genera las 4 rutas de inventario sin errores |

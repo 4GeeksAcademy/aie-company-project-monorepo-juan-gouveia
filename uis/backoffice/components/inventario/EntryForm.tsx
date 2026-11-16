@@ -7,6 +7,8 @@ import FormField from "@/components/FormField";
 import LabeledSelect from "@/components/LabeledSelect";
 import FormAlert from "@/components/auth/FormAlert";
 import IngredientSelect from "@/components/inventario/IngredientSelect";
+import SupplierSelect from "@/components/inventario/SupplierSelect";
+import { useIngredientSuppliers } from "@/hooks/useIngredientSuppliers";
 import { useIngredients } from "@/hooks/useIngredients";
 import { formErrorsFromApi } from "@/lib/auth/api-errors";
 import { mergeFieldErrors } from "@/lib/auth/validation";
@@ -15,7 +17,6 @@ import { FIELD_LABELS, LOCATION_OPTIONS, formatQuantity } from "@/lib/inventory-
 import {
   EMPTY_ENTRY_FORM,
   ENTRY_FORM_FIELDS,
-  MAX_SUPPLIER_NAME_LENGTH,
   toEntryInput,
   validateEntryForm,
   type EntryFormErrors,
@@ -46,6 +47,7 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
   const selected = ingredients.find((ingredient) => String(ingredient.id) === values.ingredient_id);
   // Un id del enlace que no está en la lista (ingrediente borrado o enlace manipulado).
   const unknownIngredient = fetchState.status === "success" && Boolean(values.ingredient_id) && !selected;
+  const { suppliers, reload: reloadSuppliers } = useIngredientSuppliers(selected);
 
   function localErrors(): EntryFormErrors {
     const errors = validateEntryForm(values);
@@ -125,7 +127,11 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
         fetchState={fetchState}
         onRetry={reload}
         value={values.ingredient_id}
-        onChange={(value) => setField("ingredient_id", value)}
+        onChange={(value) => {
+          setField("ingredient_id", value);
+          // Los proveedores dependen del ingrediente: el elegido puede no servir para el nuevo.
+          setField("supplier_name", "");
+        }}
         error={errors.ingredient_id}
         disabled={submitting}
       />
@@ -160,16 +166,14 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
         </LabeledSelect>
       </div>
 
-      <FormField
-        label={FIELD_LABELS.supplier_name}
+      <SupplierSelect
+        ingredient={selected}
+        suppliers={suppliers}
+        onRetry={reloadSuppliers}
         value={values.supplier_name}
         onChange={(value) => setField("supplier_name", value)}
-        required
-        size="lg"
         error={errors.supplier_name}
-        hint={`Nombre del proveedor que entrega. Máximo ${MAX_SUPPLIER_NAME_LENGTH} caracteres.`}
         disabled={submitting}
-        inputProps={{ name: "supplier_name", maxLength: MAX_SUPPLIER_NAME_LENGTH, autoComplete: "off" }}
       />
 
       <p className="text-xs text-gray-600">Los campos con * son obligatorios.</p>
