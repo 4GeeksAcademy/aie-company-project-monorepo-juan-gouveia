@@ -1,10 +1,12 @@
 // Validación en el cliente de los formularios de entrada y salida (lib/inventory-validation.ts) y
 // las utilidades de etiquetas del inventario (lib/inventory-labels.ts).
+import { ApiError } from "@/lib/api-client";
 import { formatAmount, formatQuantity, LOCATION_OPTIONS, locationLabel } from "@/lib/inventory-labels";
 import {
   EMPTY_ENTRY_FORM,
   EMPTY_EXIT_FORM,
   exceedsStock,
+  exitErrorsFromApi,
   parseQuantity,
   presetIngredientId,
   toEntryInput,
@@ -15,6 +17,32 @@ import {
 
 const VALID_ENTRY = { ingredient_id: "1", quantity: "50", supplier_name: "  Carnes del Valle S.A. ", location_id: "1" };
 const VALID_EXIT = { ingredient_id: "1", quantity: "3,5", reason: "waste" as const, location_id: "14" };
+
+describe("exitErrorsFromApi", () => {
+  it("coloca el 400 insufficient_stock junto a la cantidad", () => {
+    const message = "Stock insuficiente para el ingrediente 'Yuca'. Disponible: 0, solicitado: 3.";
+    expect(exitErrorsFromApi(new ApiError(message, 400, "insufficient_stock"))).toEqual({
+      fields: { quantity: message },
+      message: "Revisa los campos marcados.",
+    });
+  });
+
+  it("reparte los 422 por campo, como formErrorsFromApi", () => {
+    const err = new ApiError("La petición no es válida.", 422, "invalid_request", [
+      { field: "quantity", message: "Debe ser mayor que 0." },
+      { field: "reason", message: "Valor no permitido." },
+    ]);
+    expect(exitErrorsFromApi(err)).toEqual({
+      fields: { quantity: "Debe ser mayor que 0.", reason: "Valor no permitido." },
+      message: "Revisa los campos marcados.",
+    });
+  });
+
+  it("deja los demás errores en el aviso general", () => {
+    const err = new ApiError("No existe ningún ingrediente con el ID 999.", 404, "ingredient_not_found");
+    expect(exitErrorsFromApi(err)).toEqual({ fields: {}, message: "No existe ningún ingrediente con el ID 999." });
+  });
+});
 
 describe("presetIngredientId", () => {
   it.each([

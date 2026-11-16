@@ -1,3 +1,5 @@
+import { ApiError } from "@/lib/api-client";
+import { formErrorsFromApi, type FormApiErrors } from "@/lib/auth/api-errors";
 import type { ExitReason, IngredientEntryInput, IngredientExitInput } from "@/types/inventory";
 
 // Validación en el cliente de los formularios de entrada y salida, antes de enviar. La API vuelve a
@@ -96,6 +98,17 @@ export function validateExitForm(values: ExitFormValues): ExitFormErrors {
 export function exceedsStock(quantityText: string, stock: number | null): boolean {
   const quantity = parseQuantity(quantityText);
   return quantity !== null && stock !== null && quantity > stock;
+}
+
+// Errores de POST /inventory/orders/outbound repartidos por campo. El 400 `insufficient_stock` no
+// trae `details`, pero se refiere a la cantidad: su mensaje ("Stock insuficiente para el ingrediente
+// 'Yuca'. Disponible: 0, solicitado: 3.") va junto a ese campo; el aviso general remite a él, como
+// hace formErrorsFromApi con los errores por campo.
+export function exitErrorsFromApi(err: unknown): FormApiErrors<ExitFormField> {
+  if (err instanceof ApiError && err.code === "insufficient_stock") {
+    return { fields: { quantity: err.message }, message: "Revisa los campos marcados." };
+  }
+  return formErrorsFromApi(err, EXIT_FORM_FIELDS, "No se pudo registrar la salida.");
 }
 
 // Cuerpos de la API. Solo se llaman con un formulario sin errores.
