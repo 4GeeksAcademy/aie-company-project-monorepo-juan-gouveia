@@ -64,7 +64,7 @@ How it works:
 
 | Route | Tool | Data |
 |---|---|---|
-| `/` | Home page with a card for each tool | `lib/tools.ts` |
+| `/` | Home page with the tools grouped in the same sections as the menu (Inventario, Proveedores, Incidencias and Herramientas), one card per tool | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidates, status, stage, and notes | REST API |
 | `/incidencias` | Incident analysis: uploads the Operations CSV, shows the summary and the invalid records with their reason, and downloads `results.csv` | Brasaland API, through the intermediary |
 | `/gestor-incidencias` | Incident manager: summary (totals by status, category, origin and location, from `GET /incidents/summary`) and a list filtered by `status`, `origin` and `branch`, newest first. Each block has its own loading state and error with "Reintentar", so a summary failure does not break the list. An empty list and "no results for the filters" have their own message. Each incident changes status from the list (valid transitions only): the change shows at once and, if the API rejects it or fails, it goes back to the previous status and warns. Dates are shown in UTC, because the history was loaded as midnight UTC | Brasaland API (`incidents` domain, TinyDB), through the intermediary |
@@ -80,7 +80,7 @@ How it works:
 
 1. Create its route in `app/(protegido)/<tool>/`, so it requires a session. The group does not change the URL.
 2. Put its own files in `components/<tool>/` and `lib/<tool>/`. Reusable pieces stay directly in `components/`.
-3. Add an entry to `lib/tools.ts`. The home page and navigation are generated from that list.
+3. Add an entry to `lib/tools.ts`, inside its section in `toolSections`. The home page and navigation are generated from that list: a section with a single tool is a direct link in the header; one with several is a dropdown (`components/NavDropdown.tsx`).
 
 Internal areas, including training, join this project as tools, not as separate applications. Later on, each `lib/tools.ts` entry may declare the permission it needs, and the list will be filtered with `GET /auth/me`. That filter will only affect the interface: real authorization lives in the API.
 

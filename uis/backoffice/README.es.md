@@ -64,7 +64,7 @@ Cómo funciona:
 
 | Ruta | Herramienta | Datos |
 |---|---|---|
-| `/` | Portada con una tarjeta por herramienta | `lib/tools.ts` |
+| `/` | Portada con las herramientas agrupadas en las mismas secciones que el menú (Inventario, Proveedores, Incidencias y Herramientas), una tarjeta por herramienta | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidatos, status, stage y notas | API REST |
 | `/incidencias` | Análisis de incidencias: sube el CSV de Operaciones, muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv` | API de Brasaland, a través del intermediario |
 | `/gestor-incidencias` | Gestor de incidencias: resumen (totales por estado, categoría, origen y sede, de `GET /incidents/summary`) y listado con filtros por `status`, `origin` y `branch`, de la más reciente a la más antigua. Cada bloque tiene su propia carga y su error con "Reintentar", así que un fallo del resumen no rompe el listado. Lista vacía y "sin resultados con los filtros" tienen su mensaje. Cada incidencia cambia de estado desde el listado (solo las transiciones válidas): el cambio se ve al momento y, si la API lo rechaza o falla, vuelve al estado anterior y avisa. Las fechas se muestran en UTC, porque el histórico se cargó como medianoche UTC | API de Brasaland (dominio `incidents`, TinyDB), a través del intermediario |
@@ -80,7 +80,7 @@ Cómo funciona:
 
 1. Crea su ruta en `app/(protegido)/<herramienta>/`, para que exija sesión. El grupo no cambia la URL.
 2. Pon sus archivos propios en `components/<herramienta>/` y `lib/<herramienta>/`. Las piezas reutilizables van directamente en `components/`.
-3. Añade una entrada en `lib/tools.ts`. La portada y la navegación se generan desde esa lista.
+3. Añade una entrada en `lib/tools.ts`, dentro de su sección de `toolSections`. La portada y la navegación se generan desde esa lista: una sección con una sola herramienta es un enlace directo en la cabecera; con varias, un desplegable (`components/NavDropdown.tsx`).
 
 Las áreas internas, incluida la formación, se incorporan aquí como herramientas, no como aplicaciones aparte. Más adelante, cada entrada de `lib/tools.ts` podrá declarar el permiso que necesita y la lista se filtrará con `GET /auth/me`. Ese filtro solo afectará a la interfaz: la autorización real está en la API.
 

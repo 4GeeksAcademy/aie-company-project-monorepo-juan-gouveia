@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { tools } from "@/lib/tools";
+import NavDropdown, { NAV_ITEM } from "@/components/NavDropdown";
+import { toolSections } from "@/lib/tools";
 
 interface HeaderProps {
   // Sin navegación ni cuenta: para el login, el registro y mientras se comprueba la sesión.
@@ -36,15 +37,17 @@ export default function Header({ minimal = false, account }: HeaderProps) {
             cabecera, así que no pueden pasar a una segunda línea. */}
         {!minimal && (
           <nav aria-label="Herramientas" className="hidden xl:block">
-            <ul className="flex justify-end gap-1">
-              {tools.map((tool) => (
-                <li key={tool.href}>
-                  <Link
-                    href={tool.href}
-                    className="block rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100"
-                  >
-                    {tool.name}
-                  </Link>
+            <ul className="flex items-center justify-end gap-1">
+              {toolSections.map((section) => (
+                <li key={section.name}>
+                  {section.tools.length === 1 ? (
+                    // Una sola herramienta: enlace directo con el nombre de la sección.
+                    <Link href={section.tools[0].href} className={NAV_ITEM}>
+                      {section.name}
+                    </Link>
+                  ) : (
+                    <NavDropdown section={section} />
+                  )}
                 </li>
               ))}
             </ul>
