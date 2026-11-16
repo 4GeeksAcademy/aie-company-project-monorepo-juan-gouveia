@@ -16,7 +16,7 @@
 **Proyectos UI actuales:**
 
 - `uis/website` (puerto 3000) — Landing y registro de Brasa Points para clientes.
-- `uis/backoffice` (puerto 3001) — Herramientas internas: Talent Pipeline Tracker (`/talento`), pruebas de funciones (`/funciones`), análisis de incidencias (`/incidencias`) y directorio de proveedores (`/proveedores`). Las dos últimas llaman a la API de Brasaland a través del BFF.
+- `uis/backoffice` (puerto 3001) — Herramientas internas: Talent Pipeline Tracker (`/talento`), pruebas de funciones (`/funciones`), análisis de incidencias (`/incidencias`), gestor de incidencias (`/gestor-incidencias`), directorio de proveedores (`/proveedores`) e inventario (`/inventario/...`, Hito 5). Todas salvo el tracker y `/funciones` llaman a la API de Brasaland a través del BFF; el inventario, con su módulo de integración `lib/inventory.ts`.
 
 ### Backend / Servicios
 

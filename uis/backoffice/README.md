@@ -34,7 +34,7 @@ npm run test:coverage   # the same, with coverage (report in coverage/)
 
 `npm install` links `@repo/brasa-core` from `packages/brasa-core`, so run it again after a fresh clone.
 
-The Jest tests cover the authentication logic in `lib/auth/` (`__tests__/auth/`, ticket AUTH-088) and the `lib/format.ts`, `toUserMessage` and `readJson` utilities (`__tests__/utils/`, ticket FE-019). Each folder runs on its own with `npm test -- __tests__/auth` or `npm test -- __tests__/utils`. What each file tests and its coverage are in [`services/brasaland-api/TESTING.md`](../../services/brasaland-api/TESTING.md#backoffice-tests-jest) and in its FE-019 section.
+The Jest tests cover the authentication logic in `lib/auth/` (`__tests__/auth/`, ticket AUTH-088), the `lib/format.ts`, `toUserMessage` and `readJson` utilities (`__tests__/utils/`, ticket FE-019) and the inventory section (`__tests__/inventory/`, ticket BRD-0512): `lib/inventory.ts` calls with a mocked `fetch`, stock levels, form validation and the merged order history. Each folder runs on its own with `npm test -- __tests__/auth`, `__tests__/utils` or `__tests__/inventory`. What each file tests and its coverage are in [`services/brasaland-api/TESTING.md`](../../services/brasaland-api/TESTING.md#backoffice-tests-jest) and in its FE-019 section.
 
 ## Session
 
@@ -70,6 +70,10 @@ How it works:
 | `/gestor-incidencias` | Incident manager: summary (totals by status, category, origin and location, from `GET /incidents/summary`) and a list filtered by `status`, `origin` and `branch`, newest first. Each block has its own loading state and error with "Reintentar", so a summary failure does not break the list. An empty list and "no results for the filters" have their own message. Each incident changes status from the list (valid transitions only): the change shows at once and, if the API rejects it or fails, it goes back to the previous status and warns. Dates are shown in UTC, because the history was loaded as midnight UTC | Brasaland API (`incidents` domain, TinyDB), through the intermediary |
 | `/gestor-incidencias/nueva` | Register an incident (centralized incident manager): title, description, category, origin and location, with large fields for tablets. It validates the required fields before sending; with `origin = branch` it highlights the location; the location drop-down shows the briefing names ("Medellín Centro"). While sending, the button is disabled with a loading indicator; API errors appear next to their field and, after success, the form is cleared and confirms. Every new incident starts as `open` | Brasaland API (`incidents` domain, TinyDB), through the intermediary |
 | `/proveedores` | Supplier directory: list of active and suspended suppliers, country and category filters, registration, rate updates and activating or suspending | Brasaland API (`suppliers` domain, TinyDB), through the intermediary |
+| `/inventario/ingredientes` | Inventory (Milestone 5): ingredients with SKU, category, country, unit and current stock, with its level (out of stock, low or healthy; per-unit thresholds in `lib/inventory-stock-level.ts`) and a legend. Each row opens the inbound or outbound form with that ingredient selected (`?ingredient_id=`). `/inventario` redirects here | Brasaland API (`inventory` domain, Supabase), through the intermediary |
+| `/inventario/ordenes/entrada` | Record an inbound order: ingredient (by name, with SKU and unit), quantity, supplier and location. Validates before sending; API errors appear next to their field or in an alert; on success it confirms and clears | Same |
+| `/inventario/ordenes/salida` | Record an outbound order: ingredient, quantity, reason (`consumption` or `waste`) and location. Shows the current stock when the ingredient is chosen, warns without blocking if the quantity exceeds it, and shows the insufficient-stock 400 next to the quantity | Same |
+| `/inventario/ordenes` | Read-only order history: inbound and outbound orders together, newest first, with type, ingredient, quantity, supplier or reason, location, date and user (`user_uuid`, with "Tú" on your own) | Same |
 | `/funciones` | Manual tests for filters, search, reports, and validations | `@repo/brasa-core` sample data |
 
 ## Adding a tool
@@ -94,9 +98,9 @@ Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client
 - `components/`:
   - reusable base components, including `PasswordField`, with a button to show the password, `FileDropzone`, for any tool that receives files, and `TextAreaField`. `FormField`, `TextAreaField` and `LabeledSelect` accept `size="lg"` for touch forms;
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` and the login, registration and password recovery forms) and `account/` (profile and password change);
-  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/` and `proveedores/`.
+  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/` and `inventario/`.
 - `hooks/`: custom hooks, including `useSession`.
-- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, and one folder per tool.
+- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, and one folder per tool. The inventory uses `lib/inventory*.ts` files: `inventory.ts` is its integration module, the only one that calls `/api/inventory/...`.
 - `types/`: API types (`api.ts` for errors and `auth.ts` for users and profiles).
 
 ## Known limitations
@@ -107,6 +111,7 @@ Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client
 - **`/funciones` is temporary:** it tests the rules in `@repo/brasa-core`, a transitional package. Once those rules move to the backend, it must be retired or call the API. Do not add business calculations to the frontends. Being a developer tool, an unexpected error shows a readable message plus the technical error (`detail`), instead of hiding it like the rest of the backoffice does.
 - **`/incidencias` downloads the API's latest analysis:** it is kept in memory, so if the API restarts the file must be uploaded again, and if two people analyze at the same time, the most recent one is downloaded.
 - **`/proveedores` writes to the API's local database:** registrations and rate or status changes are saved in `services/brasaland-api/storage/brasaland-db.json`. To go back to the initial data, delete that file and restart the API. The interface does not offer deleting suppliers: the usual flow is to suspend them.
-- **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). Tool links are hidden on mobile and tablet (below `xl`), because with 6 tools they do not fit next to the account menu; staff navigate from the home page (the logo leads there). Below `xl`, "Mi perfil" and "Cerrar sesión" are shown as icons only.
+- **`/inventario` writes to the API's database:** with the API configured against Supabase, every inbound or outbound order changes the real stock and cannot be deleted (it is corrected with a compensating order). For testing, start the API with a temporary `DATABASE_URL` (for example, SQLite). The outbound stock refreshes when the ingredient is chosen and after each submission, not in real time: the API applies the rule with the stock at that moment.
+- **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). Tool links are hidden on mobile and tablet (below `xl`), because with 7 tools they do not fit next to the account menu; staff navigate from the home page (the logo leads there). Below `xl`, "Mi perfil" and "Cerrar sesión" are shown as icons only.
 - **Shared API:** the tracker uses a shared playground API, so avoid test writes against it. That API is a third party and does not receive the session token.
 - **After moving routes, `tsc` may fail on stale `.next` types:** delete `.next`, which is a generated artifact.

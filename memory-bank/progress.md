@@ -96,7 +96,15 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Semilla:** `uv run --env-file .env seed-inventory` (6 ingredientes, 4 entradas y 3 salidas; stock 52/32/20/0), idempotente, con el UUID del administrador activo más antiguo. Cargada en Supabase.
 - **Verificación:** `uv run pytest`: 916 pasan (110 nuevas; cobertura del dominio, 97 %). En vivo contra Supabase (2026-11-14): semilla dos veces, stock, filtro por país, 400 sin escritura, 422 con `user_uuid` o `reason` inválido, `GET /orders`, 401 sin token y 405 al intentar editar el stock.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestión de inventario con ORM" (D1–D7, decisiones y la tabla de verificación de los criterios de evaluación); README de la API y de `services/`; `techContext.md`; `ARCHITECTURE_PROPOSAL.md` (quinto bloque en 2.7 y sección 7).
-- **PR:** #14, abierto el 2026-11-14 contra `feature/auth-tests` mientras el #13 no se fusione. El backoffice aún no tiene una herramienta de inventario (no la pide el hito).
+- **PR:** #14, abierto el 2026-11-14 contra `feature/auth-tests` mientras el #13 no se fusione. La herramienta de inventario del backoffice llegó en la fase frontend (párrafo siguiente).
+
+**Inventario en el backoffice (Hito 5, fase frontend, BRD-0512) completado en la rama `feature/inventory-frontend`**, creada desde `feature/inventory-orm` el 2026-11-14 porque el PR #14 sigue abierto. Decisiones F1 a F6 aprobadas (en `docs/_private/briefing-inventario-backend.md`) y fases 0 a 5 hechas, con un commit por fase hecho por el desarrollador:
+
+- **Integración:** `uis/backoffice/lib/inventory.ts` es el único módulo que llama a `/api/inventory/...`, con `apiJson` (token en `Authorization`, errores legibles, cierre de sesión ante un 401). Va por el intermediario con `API_BASE_URL`, sin `NEXT_PUBLIC_INVENTORY_API_URL` (F1).
+- **Vistas** (rutas en español, F2): `/inventario/ingredientes` (stock con nivel por unidad, F4), `/inventario/ordenes/entrada`, `/inventario/ordenes/salida` (stock reactivo, aviso que no bloquea y 400 junto a la cantidad) y `/inventario/ordenes` (historial con "Tú", F6). Herramienta "Inventario" en `lib/tools.ts`. La columna `user_uuid` se rotula "Usuario" (cambio del 2026-11-16).
+- **Verificación:** `npm test` 150 pasan (60 de inventario); `tsc`, `lint` y `build` pasan. En vivo contra una API temporal (SQLite y TinyDB fuera del repositorio), sin tocar Supabase.
+- **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Inventario en el backoffice" (divergencias, decisiones y tabla de los 10 criterios); README del backoffice.
+- **Pendiente tras el plan, en un commit aparte:** pestañas del inventario en dos líneas en móvil, Proveedor como lista del directorio filtrada por país y categoría del ingrediente, y otros ajustes del desarrollador. Después, abrir el PR contra `feature/inventory-orm`.
 
 **Pull requests (comprobados en GitHub el 2026-11-14).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -247,6 +255,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 ## Propuesta de Próximos Pasos
 
 ### Inmediatos (Sprint Actual)
+
+0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 completadas y verificadas contra una API temporal (2026-11-16). Quedan los ajustes acordados (pestañas en móvil, Proveedor como lista del directorio y otros del desarrollador), en un commit aparte, y abrir el PR contra `feature/inventory-orm`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
 0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 abierto contra `feature/auth-tests` mientras el #13 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 

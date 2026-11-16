@@ -20,6 +20,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 7. [Auditoría de gestión de errores](#auditoría-de-gestión-de-errores) (briefing "Auditoría de gestión de errores", rama `feature/error-handling-audit`)
 8. [Batería de pruebas de autenticación](#batería-de-pruebas-de-autenticación) (ticket AUTH-088, rama `feature/auth-tests`)
 9. [Gestión de inventario con ORM](#gestión-de-inventario-con-orm) (Hito 5, ticket BRD-0512, rama `feature/inventory-orm`)
+10. [Inventario en el backoffice](#inventario-en-el-backoffice) (Hito 5, fase frontend, ticket BRD-0512, rama `feature/inventory-frontend`)
 
 ---
 
@@ -853,3 +854,88 @@ Ejecutado el 14 de noviembre de 2026. La verificación en vivo usó la API en lo
 | Semilla presente; `GET /products` refleja el neto | En vivo: `uv run --env-file .env seed-inventory` dos veces y `GET /products` | 6 ingredientes, 4 entradas y 3 salidas; la segunda vez no inserta nada. Stock: Falda 52, Costilla 32, Chimichurri 20 y el resto 0 |
 | Sin N+1 | `tests/inventory/test_queries.py` | 1 consulta en `GET /products` y 2 en `GET /orders`, con 1 o con 20 ingredientes |
 | Sin regresiones | `uv run pytest` | 916 pasan |
+
+---
+
+## Inventario en el backoffice
+
+Sección de inventario de `uis/backoffice` (Hito 5, fase frontend, ticket BRD-0512), en la rama `feature/inventory-frontend`. Sustituye al cliente REST: el personal de Operaciones consulta el stock y registra entradas y salidas desde el backoffice, con la API de [Gestión de inventario con ORM](#gestión-de-inventario-con-orm). Coinciden con la consigna y el briefing:
+
+- las cuatro vistas: ingredientes con su stock, registro de entradas, registro de salidas e historial de órdenes, todas protegidas;
+- un módulo de integración dedicado (`lib/inventory.ts`) sin `fetch` en los componentes y con `Authorization: Bearer <token>` en cada petición;
+- las entidades, campos y valores del briefing (`Ingredient`, `IngredientEntry`, `IngredientExit`; `consumption`, `waste`, `CO`, `US`, las categorías y las unidades), con su código exacto;
+- la regla del stock: el cliente solo avisa; la API decide y su 400 se muestra junto a la cantidad.
+
+Las diferencias son de configuración, rutas y una etiqueta. Las decisiones F1 a F6 se tomaron con el desarrollador el 14 de noviembre de 2026.
+
+> **Estado:** implementado y verificado en vivo contra una API temporal (SQLite y TinyDB fuera del repositorio), sin tocar Supabase (2026-11-16). `npm test`: 150 pruebas pasan (60 de inventario); `tsc`, `lint` y `build` sin errores. El desarrollador revisó cada vista en el navegador.
+
+| Qué | Consigna o briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| URL de la API (F1) | `NEXT_PUBLIC_INVENTORY_API_URL=http://localhost:8000` en `.env.local` | Sin variable nueva: `lib/inventory.ts` llama a `/api/inventory/...` y el intermediario la reenvía con `API_BASE_URL` | Mismo camino que el resto de herramientas; sin CORS; la URL de la consigna no incluye `/api/v1` |
+| Rutas (F2) | `/backoffice/inventory/products`, `.../orders/inbound`, `.../orders/outbound` y `.../orders` | `/inventario/ingredientes`, `/inventario/ordenes/entrada`, `/inventario/ordenes/salida` y `/inventario/ordenes`; `/inventario` redirige a ingredientes | Rutas en español, como el resto del backoffice, con el vocabulario del briefing; el backoffice es la raíz de su aplicación |
+| Etiqueta de `user_uuid` | La consigna nombra el campo `user_uuid` | La columna se rotula "Usuario"; el valor es el `user_uuid` completo y la página explica qué es | Que la columna se vea como las demás (decisión del desarrollador, 16 de noviembre) |
+| Menú en móvil y tablet | — | "Inventario" en la cabecera desde `xl`; por debajo, en la portada | La regla del [gestor de incidencias](#5-el-menú-en-móvil-y-tablet), ahora con 7 herramientas |
+
+### 1. Intermediario en lugar de `NEXT_PUBLIC_INVENTORY_API_URL`
+
+La consigna pide añadir `NEXT_PUBLIC_INVENTORY_API_URL=http://localhost:8000` a `.env.local` y llamar a la API desde el navegador. El backoffice ya tiene un intermediario (`app/api/[...path]/route.ts`) que reenvía `/api/...` a la API con `API_BASE_URL`, una variable solo de servidor. Usarlo:
+
+- mantiene un único camino a la API para todas las herramientas, con el mismo manejo de errores (502 si la API no responde, 504 a los 15 s);
+- evita configurar CORS en la API;
+- evita un error de la consigna: su URL no incluye `/api/v1`, así que las llamadas darían 404.
+
+`lib/inventory.ts` centraliza las 5 llamadas que usa el backoffice (todas las rutas menos `POST /inventory/products`, que la consigna no pide) con `apiJson`, que añade el token de la sesión, convierte cualquier `4xx` o `5xx` en un mensaje legible y cierra la sesión ante un 401. No hace falta tocar `.env.local`.
+
+### 2. Rutas en español
+
+| Consigna | Backoffice |
+| --- | --- |
+| `/backoffice/inventory/products` | `/inventario/ingredientes` |
+| `/backoffice/inventory/orders/inbound` | `/inventario/ordenes/entrada` |
+| `/backoffice/inventory/orders/outbound` | `/inventario/ordenes/salida` |
+| `/backoffice/inventory/orders` | `/inventario/ordenes` |
+
+El resto del backoffice usa rutas en español (`/proveedores`, `/gestor-incidencias`…), y la consigna pide el vocabulario del briefing, que habla de ingredientes, no de productos. El prefijo `/backoffice` no existe: el backoffice es la raíz de su propia aplicación. Las llamadas a la API no cambian.
+
+### 3. La columna "Usuario"
+
+La decisión F3 mostraba `user_uuid` con su nombre literal, como lo escribe la consigna. Al revisar el historial, el desarrollador pidió rotularla "Usuario" para que la cabecera se vea como el resto (en mayúsculas en escritorio). El contenido no cambia: es el `user_uuid` completo, en letra monoespaciada, con la etiqueta "Tú" en las órdenes propias (F6), y la descripción de la página nombra el campo `user_uuid`.
+
+### 4. Decisiones de funcionamiento
+
+Estas decisiones no se apartan de la consigna, pero concretan lo que no especifica.
+
+| Decisión | Motivo | Límite conocido |
+| --- | --- | --- |
+| Tres niveles de stock con umbral por unidad (F4): sin stock (0, rojo), bajo (ámbar) y saludable (verde); `kg` < 40, `litro` < 25 y `unidad` < 100, en `lib/inventory-stock-level.ts` | La consigna pide umbrales propios documentados en un comentario; las cantidades de unidades distintas no son comparables | Valores iniciales: Operaciones puede ajustarlos en ese archivo, y la leyenda de la página cambia sola |
+| Cada nivel lleva texto y un punto, además del color | El color no puede ser la única señal | — |
+| Locales "Local 1" a "Local 14", obligatorios y sin valor por defecto (F5), desde una única lista | El briefing no da nombres a los números | Para mostrar los nombres reales basta con cambiar esa lista |
+| Valores con su código exacto y la descripción del briefing cuando existe: `consumption (consumo)`, `waste (merma)`, `CO (Colombia)`, `US (Estados Unidos)` (F3) | Regla de nombres exactos, como en el gestor de incidencias | Categorías y unidades tal cual: el briefing no las describe |
+| El selector de ingrediente muestra nombre, SKU y unidad | "Nunca un ID en bruto"; el SKU distingue los ingredientes de cada país | — |
+| Las filas de ingredientes abren los formularios con `?ingredient_id=` preseleccionado | La consigna pide crear una orden "de ese producto" desde su fila | Un id que no existe se marca en el selector y no se envía |
+| El stock de la salida se pide a la API al elegir el ingrediente (`GET /products/{id}`) y se descartan las respuestas atrasadas | "De forma reactiva, antes de introducir la cantidad" | Se refresca tras cada envío, no en tiempo real |
+| La advertencia de cantidad excesiva no bloquea el envío | Es una ayuda de UX: el stock puede haber cambiado y la regla real la aplica la API | — |
+| El 400 `insufficient_stock` se coloca en el campo de cantidad (`exitErrorsFromApi`) y el aviso general remite a él | "Inline, junto al campo de cantidad" | — |
+| Tras una entrada se limpia el formulario (conserva el ingrediente del enlace); tras una salida solo se limpia la cantidad y se refresca el stock | Registrar varias salidas seguidas del mismo ingrediente es lo habitual | — |
+| El historial junta entradas y salidas de la más reciente a la más antigua, con "+ Entrada" en verde y "− Salida" en rojo | La API las devuelve en dos listas; la consigna pide distinguirlas | Sin filtros ni paginación |
+| `user_uuid` completo con "Tú" en las órdenes propias, sin nombres ni emails (F6) | La API no los da y un usuario normal no puede leer los datos de otros | Las órdenes de otros solo muestran el UUID |
+| Tarjetas en móvil y tablet; tabla desde `lg` (1024 px) | Siete columnas no caben en una tablet | — |
+
+### 5. Cómo verificarlo
+
+Ejecutado el 16 de noviembre de 2026, con el backoffice (`next dev`) contra una API temporal: SQLite para el inventario, TinyDB temporal para los usuarios, un administrador de pruebas y la semilla del inventario. Supabase no se tocó. Hay una fila por cada criterio de evaluación de la consigna.
+
+| Criterio | Comando o acción | Resultado |
+| --- | --- | --- |
+| 1. Módulo de integración dedicado, sin `fetch` en los componentes | `lib/inventory.ts`; búsqueda de `fetch` en `components/` y `hooks/` del inventario | Las 5 llamadas pasan por `apiJson`; ningún componente usa `fetch` |
+| 2. Todas las peticiones protegidas llevan `Authorization` | `__tests__/inventory/api.test.ts`; en vivo, sin token | `Bearer` con el token de `localStorage` en las 5 llamadas; 401 sin token |
+| 3. La página de ingredientes carga datos reales con indicadores de nivel | En vivo, `/inventario/ingredientes` | 6 ingredientes de la semilla: Falda 52 kg saludable, Costilla 32 kg y Chimichurri 20 litros bajos, el resto sin stock. Revisado por el desarrollador |
+| 4. La entrada muestra confirmación o error legible | En vivo: entrada válida, cantidad 0 con proveedor vacío e ingrediente 999 | 201 "Entrada #5 registrada: 12.5 kg de Costilla de cerdo."; 422 junto a `quantity` y `supplier_name`; 404 en el aviso. Revisado por el desarrollador |
+| 5. La salida muestra el stock del ingrediente elegido de forma reactiva | Navegador | "Stock actual: 52 kg" con su nivel al elegir; cambia al cambiar de ingrediente. Revisado por el desarrollador |
+| 6. La salida advierte si la cantidad supera el stock | Navegador: 3 kg de Yuca (stock 0) | Aviso ámbar junto a la cantidad, sin bloquear el envío. Revisado por el desarrollador |
+| 7. El 400 de la salida se muestra en la interfaz | En vivo y en el navegador: la misma salida; `exitErrorsFromApi` en `validation.test.ts` | 400 `insufficient_stock`: "Stock insuficiente para el ingrediente 'Yuca'. Disponible: 0, solicitado: 3.", junto a la cantidad. Revisado por el desarrollador |
+| 8. El historial muestra todas las órdenes con tipo, ingrediente, cantidad, fecha y `user_uuid` | En vivo, `/inventario/ordenes`; `mergeOrders` en `orders.test.ts` | Entradas y salidas juntas por fecha, con "+ Entrada"/"− Salida" y el `user_uuid` con "Tú". Revisado por el desarrollador |
+| 9. Las cuatro páginas redirigen al login sin sesión | Navegador sin sesión (ventana privada) en las cuatro rutas | Las cuatro llevan a `/login?next=<ruta>`: viven en `app/(protegido)/`, cuyo `SessionProvider` protege toda página del grupo. Revisado por el desarrollador |
+| 10. Entidades y etiquetas del briefing | Revisión de las vistas; `lib/inventory-labels.ts` | Ingrediente, Entrada, Salida y Órdenes; códigos exactos con su descripción. Única excepción: la columna "Usuario" ([apartado 3](#3-la-columna-usuario)) |
+| Sin regresiones | `npm test`, `npx tsc --noEmit`, `npm run lint` y `npm run build` en `uis/backoffice` | 150 pruebas pasan; el build genera las 4 rutas de inventario sin errores |
