@@ -4,7 +4,8 @@ import type { Country, ExitReason } from "@/types/inventory";
 // los genéricos de la consigna ("producto"). Los valores se muestran con su código exacto; solo se
 // acompañan de la descripción que da el propio briefing.
 
-// Etiquetas de los campos del briefing. `user_uuid` se muestra literal, como lo nombra la consigna.
+// Etiquetas de los campos del briefing. `user_uuid` se rotula "Usuario" como el resto de columnas
+// (cambio del 2026-11-16 sobre F3); el valor se sigue mostrando completo y la página nombra el campo.
 export const FIELD_LABELS = {
   name: "Nombre",
   sku: "SKU",
@@ -17,7 +18,7 @@ export const FIELD_LABELS = {
   location_id: "Local",
   reason: "Motivo",
   created_at: "Fecha",
-  user_uuid: "user_uuid",
+  user_uuid: "Usuario",
 } as const;
 
 // Briefing, tabla de IngredientExit: "consumption" (consumo) o "waste" (merma).
