@@ -114,6 +114,12 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Menú hamburguesa** por debajo de `xl` (`components/MobileNav.tsx`): panel superpuesto bajo la cabecera, sin cambiar su altura. Ya se puede navegar desde cualquier página en móvil y tablet, así que la divergencia del menú del gestor de incidencias queda resuelta (`docs/BRIEFING_DIVERGENCES.md`).
 - **PR:** #16, abierto el 2026-11-16 contra `feature/inventory-frontend` mientras el #15 no se fusione (3 commits: `14f69ff`, `fee7215` y `64f0d68`).
 
+**Contenedorización del monorepo (ticket #infra-40) en curso en la rama `feature/dockerize`**, creada desde `feature/backoffice-navigation` (`64f0d68`) el 2026-11-16 porque el PR #16 sigue abierto. El objetivo es que `docker compose up` desde la raíz levante dos servicios en la red `brasaland-net`: `uis` (website en el 3000 y backoffice en el 3001, con `next dev`) y `api` (Uvicorn con `--reload`). Ambos usan bind mounts y leen sus variables del `.env` de la raíz. El despliegue al VPS de la consigna quedó fuera de alcance: ese apartado se eliminó. Los paquetes `packages/shared` y `packages/brasa-core` entran a las imágenes con `additional_contexts` de Compose.
+
+- **Fase 0 (`20c10ce`):** `.env.example` en la raíz (con `API_BASE_URL=http://api:8000/api/v1`), `services/requirements.txt` generado desde `uv.lock` y `.gitattributes` (`*.sh` con LF). El `.env` de la raíz existe en local y no se versiona.
+- **Fase 1:** `services/Dockerfile` (`python:3.12-slim`, `uv` 0.13.7 copiado de la imagen oficial de Astral, `uv pip install -r requirements.txt`, `packages/shared` editable desde el contexto adicional `shared`, Uvicorn con `--reload` y usuario sin privilegios) y `services/.dockerignore`. La imagen se construye y `app.main` se importa dentro del contenedor.
+- **Pendiente:** Dockerfile de interfaces y `start.sh` (Fase 2), `docker-compose.yml` (Fase 3), verificación (Fase 4) y documentación (Fase 5).
+
 **Pull requests (comprobados en GitHub el 2026-11-16).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
@@ -257,6 +263,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 | Elemento | Estado |
 |---|---|
 | `infra/` — Docker, deploy | ❌ No iniciado |
+| Docker Compose de desarrollo (`docker-compose.yml`, `uis/Dockerfile`, `services/Dockerfile`; #infra-40) | 🔄 En curso: fases 0 y 1 de 5 hechas (rama `feature/dockerize`) |
 | `scripts/incident-report/` — procesador de reportes de incidentes (Python, sin dependencias, 32 pruebas `unittest`) | ✅ Implementado |
 | `internal/` — CLIs internos | ❌ No iniciado |
 
@@ -265,6 +272,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 ## Propuesta de Próximos Pasos
 
 ### Inmediatos (Sprint Actual)
+
+0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Fases 0 (`20c10ce`) y 1 (imagen de la API) hechas. Siguiente: Fase 2, el Dockerfile de interfaces y `start.sh`. Plan en `docs/_private/plan-contenedorizacion.md`.
 
 0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 abierto contra `feature/inventory-frontend`. Pendiente: fusionar la cadena en orden (#8 a #16) y, cuando no quede ninguno, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
@@ -343,4 +352,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-11-14_
+_Actualizado: 2026-11-17_
