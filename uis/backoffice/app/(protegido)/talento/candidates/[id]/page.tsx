@@ -4,14 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getRecordById, PartialSaveError, updateRecord } from "@/lib/talento/api";
 import BackLink from "@/components/BackLink";
-import Button from "@/components/Button";
 import CandidateDetails from "@/components/talento/CandidateDetails";
 import CandidateFormModal from "@/components/talento/CandidateFormModal";
 import CandidateHeader from "@/components/talento/CandidateHeader";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import NotesSection from "@/components/talento/NotesSection";
 import StatusStageSelectors from "@/components/talento/StatusStageSelectors";
+import RetryableError from "@/components/RetryableError";
 import type { RecordCreateInput, RecordDetail } from "@/types/record";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -59,12 +58,9 @@ export default function CandidateDetailPage() {
       {status === "loading" && <LoadingMessage>Cargando candidato...</LoadingMessage>}
 
       {status === "error" && (
-        <div role="alert" className="flex flex-col items-start gap-3">
-          <ErrorMessage>{error}</ErrorMessage>
-          <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
-            Reintentar
-          </Button>
-        </div>
+        <RetryableError onRetry={() => setReloadKey((k) => k + 1)}>
+          {error}
+        </RetryableError>
       )}
 
       {status === "success" && record && (

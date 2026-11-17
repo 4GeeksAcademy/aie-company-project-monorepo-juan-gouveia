@@ -1,10 +1,9 @@
 "use client";
 
-import Button from "@/components/Button";
 import EmptyMessage from "@/components/EmptyMessage";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import OrderHistory from "@/components/inventario/OrderHistory";
+import RetryableError from "@/components/RetryableError";
 import { useOrders } from "@/hooks/useOrders";
 import { useSession } from "@/hooks/useSession";
 
@@ -20,12 +19,9 @@ export default function OrdersPanel() {
       {fetchState.status === "loading" && <LoadingMessage>Cargando el historial...</LoadingMessage>}
 
       {fetchState.status === "error" && (
-        <div role="alert" className="flex flex-col items-start gap-3">
-          <ErrorMessage>{fetchState.message}</ErrorMessage>
-          <Button variant="secondary" onClick={reload}>
-            Reintentar
-          </Button>
-        </div>
+        <RetryableError onRetry={reload}>
+          {fetchState.message}
+        </RetryableError>
       )}
 
       {fetchState.status === "success" &&

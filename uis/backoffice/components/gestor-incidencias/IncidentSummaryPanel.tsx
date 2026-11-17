@@ -1,7 +1,6 @@
-import Button from "@/components/Button";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import IncidentStatusBadge from "@/components/gestor-incidencias/IncidentStatusBadge";
+import RetryableError from "@/components/RetryableError";
 import {
   BRANCH_LABELS,
   CATEGORY_DESCRIPTIONS,
@@ -42,12 +41,9 @@ export default function IncidentSummaryPanel({ state, onRetry }: IncidentSummary
       )}
 
       {state.status === "error" && (
-        <div role="alert" className="flex flex-col items-start gap-3">
-          <ErrorMessage compact>{state.message}</ErrorMessage>
-          <Button variant="secondary" onClick={onRetry}>
-            Reintentar
-          </Button>
-        </div>
+        <RetryableError compact onRetry={onRetry}>
+          {state.message}
+        </RetryableError>
       )}
 
       {state.status === "success" && <SummaryContent summary={state.data} />}

@@ -1,11 +1,10 @@
 "use client";
 
-import Button from "@/components/Button";
 import EmptyMessage from "@/components/EmptyMessage";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import IngredientTable from "@/components/inventario/IngredientTable";
 import StockLevelLegend from "@/components/inventario/StockLevelLegend";
+import RetryableError from "@/components/RetryableError";
 import { useIngredients } from "@/hooks/useIngredients";
 import { stockLevel } from "@/lib/inventory-stock-level";
 
@@ -23,12 +22,9 @@ export default function IngredientsPanel() {
       {fetchState.status === "loading" && <LoadingMessage>Cargando ingredientes...</LoadingMessage>}
 
       {fetchState.status === "error" && (
-        <div role="alert" className="flex flex-col items-start gap-3">
-          <ErrorMessage>{fetchState.message}</ErrorMessage>
-          <Button variant="secondary" onClick={reload}>
-            Reintentar
-          </Button>
-        </div>
+        <RetryableError onRetry={reload}>
+          {fetchState.message}
+        </RetryableError>
       )}
 
       {fetchState.status === "success" &&
