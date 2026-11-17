@@ -249,3 +249,5 @@ Una corrección por commit, con nueva medición de la misma URL después de cada
 3. **P3** — Icono del website (Best Practices).
 4. **R1 + R2** — Extraer `useAsyncData` y `RetryableError` en el backoffice.
 5. **R3** — Extraer `BrandLogo` en el website.
+
+> **Resultado:** P1, P3, R1, R2 y R3 se aplicaron, cada uno en su commit. P2 se midió y se descartó: el LCP en móvil no bajó y el escritorio empeoró, así que el cambio se revirtió. El detalle está en [`REPORT.md`](REPORT.md).
