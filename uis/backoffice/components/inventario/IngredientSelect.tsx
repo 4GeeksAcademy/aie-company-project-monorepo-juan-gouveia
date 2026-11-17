@@ -1,15 +1,11 @@
 import Button from "@/components/Button";
 import LabeledSelect from "@/components/LabeledSelect";
+import type { AsyncState } from "@/hooks/useAsyncData";
 import type { Ingredient } from "@/types/inventory";
-
-type IngredientsState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "success" };
 
 interface IngredientSelectProps {
   ingredients: Ingredient[];
-  fetchState: IngredientsState;
+  fetchState: AsyncState<Ingredient[]>;
   onRetry: () => void;
   value: string;
   onChange: (value: string) => void;

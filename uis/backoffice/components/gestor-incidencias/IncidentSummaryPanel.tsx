@@ -8,15 +8,11 @@ import {
   ORIGIN_DESCRIPTIONS,
   STATUS_DESCRIPTIONS,
 } from "@/lib/gestor-incidencias/labels";
+import type { AsyncState } from "@/hooks/useAsyncData";
 import type { IncidentStatus, IncidentSummary } from "@/types/incident-manager";
 
-type SummaryState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "success"; summary: IncidentSummary };
-
 interface IncidentSummaryPanelProps {
-  state: SummaryState;
+  state: AsyncState<IncidentSummary>;
   onRetry: () => void;
 }
 
@@ -54,7 +50,7 @@ export default function IncidentSummaryPanel({ state, onRetry }: IncidentSummary
         </div>
       )}
 
-      {state.status === "success" && <SummaryContent summary={state.summary} />}
+      {state.status === "success" && <SummaryContent summary={state.data} />}
     </section>
   );
 }
