@@ -21,6 +21,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 8. [Batería de pruebas de autenticación](#batería-de-pruebas-de-autenticación) (ticket AUTH-088, rama `feature/auth-tests`)
 9. [Gestión de inventario con ORM](#gestión-de-inventario-con-orm) (Hito 5, ticket BRD-0512, rama `feature/inventory-orm`)
 10. [Inventario en el backoffice](#inventario-en-el-backoffice) (Hito 5, fase frontend, ticket BRD-0512, rama `feature/inventory-frontend`)
+11. [Contenedorización del monorepo](#contenedorización-del-monorepo) (ticket #infra-40, rama `feature/dockerize`)
 
 ---
 
@@ -944,3 +945,109 @@ Ejecutado el 16 de noviembre de 2026, con el backoffice (`next dev`) contra una 
 | 9. Las cuatro páginas redirigen al login sin sesión | Navegador sin sesión (ventana privada) en las cuatro rutas | Las cuatro llevan a `/login?next=<ruta>`: viven en `app/(protegido)/`, cuyo `SessionProvider` protege toda página del grupo. Revisado por el desarrollador |
 | 10. Entidades y etiquetas del briefing | Revisión de las vistas; `lib/inventory-labels.ts` | Ingrediente, Entrada, Salida y Órdenes; códigos exactos con su descripción. Única excepción: la columna "Usuario" ([apartado 3](#3-la-columna-usuario)) |
 | Sin regresiones | `npm test`, `npx tsc --noEmit`, `npm run lint` y `npm run build` en `uis/backoffice` | 159 pruebas pasan; el build genera las 4 rutas de inventario sin errores |
+
+---
+
+## Contenedorización del monorepo
+
+Entorno de desarrollo en Docker (ticket #infra-40), en la rama `feature/dockerize`. `docker compose up` desde la raíz levanta dos contenedores en la red `brasaland-net`: `uis` (website en el 3000 y backoffice en el 3001, con `next dev`, desde un único contenedor) y `api` (FastAPI con Uvicorn y `--reload`). Coinciden con la consigna:
+
+- `uis/Dockerfile` sobre `node:22-alpine`, con las dependencias de cada app instaladas por separado y un `CMD` que invoca `start.sh`;
+- `services/Dockerfile` sobre `python:3.12-slim`, que instala `uv`, instala las dependencias con `uv pip install -r requirements.txt` y arranca Uvicorn con `--reload`;
+- los dos `.dockerignore` con, al menos, las exclusiones pedidas;
+- `docker-compose.yml` en la raíz con dos servicios, bind mounts, los puertos expuestos y una red con nombre explícito;
+- las variables en un `.env` en la raíz, ignorado por Git, y ningún secreto en los `Dockerfile` ni en el YAML;
+- la comunicación entre servicios por su nombre (`http://api:8000/api/v1`).
+
+Las diferencias vienen de la estructura del monorepo, de Windows y de un cambio en la consigna. Las decisiones se tomaron con el desarrollador el 16 y el 17 de noviembre de 2026.
+
+> **Estado:** implementado y verificado en local (2026-11-17), con un commit por fase hecho por el desarrollador. El despliegue al VPS queda fuera de alcance ([apartado 1](#1-sin-despliegue-al-vps)).
+
+| Qué | Consigna | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Despliegue a producción | Desplegar el stack en el VPS y aportar evidencia | Fuera de alcance; sin modo de producción ni `docker-compose.prod.yml` | Ese apartado se eliminó de la consigna |
+| Paquetes locales | — | `packages/shared` y `packages/brasa-core` llegan a las imágenes como `additional_contexts` de Compose, y las imágenes reproducen la estructura `/repo/...` | Están fuera de `/uis` y `/services`, que son los contextos de build que pide la consigna |
+| `requirements.txt` | La API instala desde `requirements.txt` | `services/requirements.txt` se genera desde `uv.lock`; el paquete local `brasaland-shared` se instala aparte, en modo editable | La API gestiona sus dependencias con `pyproject.toml` y `uv.lock`; así no hay dos fuentes de verdad |
+| Next.js en Docker | `next dev` para ambas apps | `next dev --webpack` en el contenedor; fuera de Docker sigue Turbopack | Turbopack (Next 16.3.5) no detecta los cambios en los bind mounts |
+| Sondeo de archivos | — | `watchOptions.pollIntervalMs` en los dos `next.config.ts` (solo si existe `NEXT_WATCH_POLL_INTERVAL_MS`) y `WATCHFILES_FORCE_POLLING` en la API | Docker Desktop no propaga los eventos de archivos de Windows ni de macOS |
+| Puesta en marcha | `docker compose up` "sin pasos adicionales" | `cp .env.example .env` y rellenar los secretos, una vez; después, `docker compose up` | Los secretos no pueden estar en el repositorio |
+| Pull Request | Desde la rama hacia `main` | Contra `feature/backoffice-navigation`, la rama anterior de la cadena | Los PR anteriores siguen abiertos; al fusionarlos, GitHub cambia el destino a `main` |
+
+### 1. Sin despliegue al VPS
+
+La consigna original pedía desplegar los contenedores en el VPS de etapas anteriores y aportar evidencia (`docker compose ps` por SSH o una URL en vivo). El desarrollador confirmó el 16 de noviembre que ese apartado se eliminó de la consigna. Por eso no hay modo de producción: ni `docker-compose.prod.yml`, ni imágenes con `next build`, ni variables de producción. El criterio de evaluación 8 no aplica.
+
+### 2. Paquetes locales fuera de los contextos de build
+
+La consigna construye cada imagen desde su carpeta (`/uis` y `/services`), pero dos dependencias viven en `packages/`: la API instala `brasaland-shared` desde `../../packages/shared`, y el backoffice depende de `file:../../packages/brasa-core`. Docker no puede copiar nada fuera de su contexto. Las alternativas eran peores:
+
+- construir desde la raíz ignoraría los `.dockerignore` de `/uis` y `/services` que pide la consigna;
+- copiar los paquetes dentro de cada carpeta duplicaría código;
+- publicarlos en un registro añadiría infraestructura para dos paquetes internos.
+
+Con `additional_contexts`, Compose entrega cada paquete como un contexto con nombre (`shared` y `brasa-core`). Las imágenes reproducen la estructura del monorepo bajo `/repo`, así que las rutas relativas de `pyproject.toml` y `package.json`, y la raíz de Turbopack del backoffice, siguen siendo válidas. En desarrollo, los dos paquetes también se montan con bind mounts, así que sus cambios se ven sin reconstruir.
+
+### 3. `requirements.txt` generado desde `uv.lock`
+
+La API no tenía `requirements.txt`: sus dependencias están en `pyproject.toml`, fijadas en `uv.lock`. Para cumplir `uv pip install -r requirements.txt` sin mantener dos listas a mano, `services/requirements.txt` se genera con `uv export --frozen --no-dev --no-hashes` (el comando exacto está en su cabecera). Excluye el propio proyecto y `brasaland-shared`: el `Dockerfile` instala este último aparte, en modo editable. `uv` 0.13.7, la misma versión que se usa en local, se copia desde la imagen oficial de Astral (`ghcr.io/astral-sh/uv`), el método que recomienda su documentación.
+
+**Coste:** si cambian las dependencias de la API, hay que regenerar `requirements.txt` y reconstruir la imagen.
+
+### 4. Next.js con webpack en Docker
+
+La consigna pide `next dev` para las dos apps. Next 16 usa Turbopack por defecto, y la verificación mostró que Turbopack no detecta los cambios en los bind mounts:
+
+- ni con sondeo (`watchOptions.pollIntervalMs`, cargado correctamente);
+- ni sin él;
+- ni con cambios hechos dentro del propio contenedor.
+
+En el host, la misma prueba sí funciona. Con `next dev --webpack` y sondeo, un cambio hecho desde Windows se ve sin reconstruir. `start.sh` arranca así las dos apps. Webpack lee el mismo `watchOptions.pollIntervalMs` de `next.config.ts`, así que no hacen falta más cambios. Fuera de Docker, `npm run dev` sigue con Turbopack.
+
+**Coste:** en Docker compila otro bundler que en el host (algo más lento, y con alguna diferencia posible de comportamiento). `next build` no cambia. Si una versión futura de Next corrige el sondeo de Turbopack, basta con quitar `--webpack` de `start.sh`.
+
+### 5. Sondeo de archivos
+
+Docker Desktop no propaga a los contenedores los eventos de archivos de Windows: el contenido cambiado llega, pero el aviso de cambio no (se comprobó con `fs.watch` en un bind mount). Sin sondeo, ninguna de las dos recargas en caliente funcionaría. La API usa `WATCHFILES_FORCE_POLLING=true`. En Next.js, la variable habitual, `WATCHPACK_POLLING`, no la lee Turbopack, así que los dos `next.config.ts` activan `watchOptions.pollIntervalMs` solo si existe `NEXT_WATCH_POLL_INTERVAL_MS`. La define Compose (1000 ms), así que fuera de Docker no cambia nada.
+
+**Coste:** el sondeo consume algo de CPU mientras el stack está en marcha.
+
+### 6. Un paso previo: crear el `.env`
+
+El criterio 1 pide levantar la plataforma "sin pasos adicionales de configuración". La API necesita secretos (`SECRET_KEY`, `DATABASE_URL` de Supabase y `RESEND_API_KEY`), y la propia consigna prohíbe versionarlos. Por eso hay un único paso previo, una sola vez: `cp .env.example .env` y rellenar los secretos. Los valores no secretos ya vienen en `.env.example`. Si falta una variable obligatoria, Compose se detiene con un mensaje que la nombra (`${VAR:?mensaje}`), en lugar de arrancar una API que fallaría.
+
+### 7. Pull Request contra la rama anterior
+
+La consigna pide abrir el PR hacia `main`. La rama parte de `feature/backoffice-navigation` porque los PR #8 a #16 siguen abiertos, como en las entregas anteriores. El PR apunta a esa rama para mostrar solo los cambios de este ticket; al fusionar la cadena en orden, GitHub cambia su destino a `main`.
+
+### 8. Decisiones de funcionamiento
+
+Estas decisiones no se apartan de la consigna, pero concretan lo que no especifica.
+
+| Decisión | Motivo | Límite conocido |
+| --- | --- | --- |
+| Cada servicio recibe solo sus variables, con `environment:` y `${VAR}`, en lugar de un `env_file` compartido | Mínimo privilegio: el frontend no recibe los secretos de la API | Una variable nueva hay que añadirla también al YAML |
+| Obligatorias con `${VAR:?mensaje}`; opcionales con `${VAR:-}` | Un error claro antes de arrancar; la API trata los opcionales vacíos como ausentes | Compose exige las obligatorias en cualquier comando, también en `down` |
+| Healthcheck de `api` contra `/health`, y `uis` espera a que esté sana | El backoffice no arranca contra una API caída | Si la API no arranca (por ejemplo, sin acceso a Supabase), `uis` tampoco |
+| Usuarios sin privilegios: `brasaland` (uid 1000) en la API y `node` en las interfaces | Buena práctica; se comprobó que pueden escribir en los bind mounts desde Windows | — |
+| Volúmenes anónimos para `node_modules`, `.next` y el `.venv` de la API | Los binarios de Linux no se mezclan con los del host, y el sondeo no recorre el `.venv` | Tras cambiar dependencias: `docker compose up --build --renew-anon-volumes` |
+| `start.sh` prefija la salida (`[website]`, `[backoffice]`), reenvía `SIGTERM` y `SIGINT`, y termina con error si una app se cae | Logs legibles, parada limpia (1 s) y un contenedor que no queda a medias | — |
+| `.dockerignore` con exclusiones extra: entornos y cachés locales, cobertura y las bases TinyDB | Imágenes más pequeñas y sin datos locales | — |
+| Los datos TinyDB se comparten con el host por el bind mount | Mismos usuarios y proveedores dentro y fuera de Docker | La API del host y la del contenedor escriben en los mismos archivos: conviene no tener las dos en marcha a la vez |
+| Next.js carga `uis/backoffice/.env.local` desde la carpeta montada | Es el comportamiento de Next; las variables de Compose tienen prioridad (comprobado) | Una variable que solo esté en `.env.local` también llega al contenedor |
+| Los scripts de la API se lanzan con `python -m` o `python -c` (por ejemplo, `create-admin`) | La imagen instala las dependencias, no el proyecto, así que los atajos de `uv run` no existen | Comandos más largos; están en el README raíz |
+
+### 9. Cómo verificarlo
+
+Ejecutado el 17 de noviembre de 2026 en Windows 11 con Docker Desktop 29.9.3 (Compose v5.7.0). Hay una fila por cada criterio de evaluación de la consigna.
+
+| Criterio | Comando o acción | Resultado |
+| --- | --- | --- |
+| 1. `docker compose up` levanta la plataforma sin errores ni pasos adicionales | Con el `.env` creado: `docker compose down -v`, `docker compose build --no-cache` y `docker compose up -d`; `docker compose ps` | `api` healthy y `uis` en marcha, sin pasos manuales. Responden 200 `localhost:3000`, `/registro`, `localhost:3001`, `/login`, `/funciones`, `localhost:8000/docs` y `/health`. Único paso previo: el `.env` ([apartado 6](#6-un-paso-previo-crear-el-env)) |
+| 2. Los cambios del host se ven sin reconstruir | Cambios temporales desde Windows, revertidos después, en `services/brasaland-api/app/main.py` (`/health`), el título del website y el de `/login` del backoffice | WatchFiles recarga la API, y las dos apps sirven el título nuevo en segundos. Con Turbopack las apps no se recargaban: ver el [apartado 4](#4-nextjs-con-webpack-en-docker) |
+| 3. Las dos apps en puertos distintos desde un único contenedor | `docker compose ps`; logs de `uis` | Un contenedor `uis` publica el 3000 y el 3001; la salida lleva el prefijo `[website]` o `[backoffice]` |
+| 4. Comunicación por nombre de servicio | `docker compose exec uis wget -qO- http://api:8000/health`; desde `api`, `http://uis:3001/login`; login real por el BFF con una cuenta temporal | `{"status":"ok"}` y 200. Por `localhost:3001/api/...`: registro 201, login 200, `/auth/me` 200, `/inventory/products` 200 (6 ingredientes, solo lectura en Supabase), borrado de la cuenta 200 y login posterior 401. El log de la API muestra todas las peticiones desde la IP del contenedor `uis` |
+| 5. Sin secretos en `Dockerfile` ni en `docker-compose.yml` | Búsqueda de los valores reales del `.env` en todos los archivos versionados; revisión de los `Dockerfile`, el YAML y `.env.example` | Ningún valor real aparece en el repositorio; el YAML solo usa `${VAR}` y `.env.example` deja vacíos los secretos |
+| 6. `.env` en el `.gitignore` y fuera del historial | `git check-ignore -v .env`; `git log --all -- .env` | Ignorado por `.gitignore:2:.env*`; ningún commit lo contiene |
+| 7. Existen `.dockerignore` en `/uis` y `/services` | Revisión de los archivos y del contenido de las imágenes | Los dos existen con las exclusiones pedidas; las imágenes no llevan `.env`, `node_modules` ni `.next` del host, `tests/`, cobertura ni bases TinyDB |
+| 8. Contenedores en producción en el VPS | — | No aplica: el apartado se eliminó de la consigna ([apartado 1](#1-sin-despliegue-al-vps)) |
+| Sin regresiones | `uv run pytest` en `services/brasaland-api`; `npm test`, `npx tsc --noEmit` y `npx eslint next.config.ts` en las dos apps | 916 y 163 pruebas pasan; `tsc` y `eslint` sin errores |

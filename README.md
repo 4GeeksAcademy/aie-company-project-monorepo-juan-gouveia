@@ -64,7 +64,46 @@ This repository holds the **Brasaland** project. `CONTEXT.md` (and its Spanish v
 | AI, automation and infrastructure | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Template structure and examples only |
 
 - Instructions for coding agents are in the root [`AGENTS.md`](./AGENTS.md), with development rules and skills in `.agents/`.
-- There is no root `docker-compose.yml` or workspace runner yet: each project is installed and run from its own folder, following its README.
+- The whole platform runs in Docker with one command (see [Running with Docker](#running-with-docker)). Each project can also be installed and run from its own folder, following its README. There is no workspace runner.
+
+---
+
+## Running with Docker
+
+The development environment is defined in [`docker-compose.yml`](./docker-compose.yml) (ticket #infra-40): two containers on the `brasaland-net` network, with hot reload and the source code mounted from the host.
+
+**Requirements:** Docker Desktop, or Docker Engine with the Compose v2 plugin. You do not need Node or Python on your machine.
+
+```bash
+cp .env.example .env   # once: fill in the secrets (SECRET_KEY, DATABASE_URL, RESEND_API_KEY)
+docker compose up      # add -d to run in the background
+```
+
+Creating `.env` is the only manual step: secrets cannot live in Git. If `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` or `DATABASE_URL` is missing, Compose stops and says which one. `.env` is ignored by Git.
+
+| Service | Contents | URL from the host |
+| --- | --- | --- |
+| `uis` | `uis/website` and `uis/backoffice` (`next dev`), started by [`uis/start.sh`](./uis/start.sh) | http://localhost:3000 and http://localhost:3001 |
+| `api` | `services/brasaland-api` (Uvicorn with `--reload`) | http://localhost:8000 (docs at `/docs`) |
+
+- **Service-to-service calls use the service name.** The backoffice proxy (BFF) calls `http://api:8000/api/v1` (`API_BASE_URL`). URLs used by the browser (`NEXT_PUBLIC_API_BASE_URL`, `FRONTEND_URL`) stay as `localhost` URLs.
+- **Hot reload:** the code is bind-mounted, so changes on the host show up without rebuilding. Docker Desktop does not forward file events from Windows or macOS, so both services poll for changes (`NEXT_WATCH_POLL_INTERVAL_MS`, `WATCHFILES_FORCE_POLLING`). In Docker, Next.js runs with webpack (`next dev --webpack`) because Turbopack does not detect changes on bind mounts; outside Docker, `npm run dev` still uses Turbopack.
+- **Data:** the TinyDB files in `services/brasaland-api/storage/` are the same ones the API uses outside Docker. The inventory is in Supabase, outside the stack.
+- **Each service gets only its own variables**, interpolated from `.env`. Next.js also loads `uis/backoffice/.env.local` from the mounted folder, but Compose's variables take precedence.
+
+Useful commands (from the repository root):
+
+| Task | Command |
+| --- | --- |
+| Status and logs | `docker compose ps` · `docker compose logs -f api` |
+| Stop | `docker compose down` (add `-v` to also remove the container volumes) |
+| After changing dependencies (`package-lock.json`, `requirements.txt`) | `docker compose up --build --renew-anon-volumes` |
+| Shell in a container | `docker compose exec api sh` · `docker compose exec uis sh` |
+| Seed the supplier directory | `docker compose exec api python -m app.domains.suppliers.seed` |
+| Create the first admin (interactive) | `docker compose exec api python -c "import sys; from app.domains.users.create_admin import run; sys.exit(run())"` |
+| Seed the inventory (Supabase) | `docker compose exec api python -c "import sys; from app.domains.inventory.seed import main; sys.exit(main())"` |
+
+The API image installs its dependencies from [`services/requirements.txt`](./services/requirements.txt), generated from `uv.lock`. After changing the API's dependencies, regenerate it as its header explains. The local packages `packages/shared` and `packages/brasa-core` reach the images as Compose `additional_contexts`. Deploying to a production server is out of scope: see [`docs/BRIEFING_DIVERGENCES.md`](./docs/BRIEFING_DIVERGENCES.md#contenedorización-del-monorepo).
 
 ---
 

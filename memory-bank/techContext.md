@@ -99,6 +99,7 @@
 ### Infraestructura y Datos
 
 - `infra/`, `internal/` — solo READMEs, sin implementación.
+- **Docker (desarrollo, #infra-40):** `docker-compose.yml` en la raíz con los servicios `uis` (`uis/Dockerfile`, `node:22-alpine`; `start.sh` arranca website en el 3000 y backoffice en el 3001 con `next dev --webpack`) y `api` (`services/Dockerfile`, `python:3.12-slim` con `uv` 0.13.7 y `services/requirements.txt` generado desde `uv.lock`; Uvicorn con `--reload`), en la red `brasaland-net`. Bind mounts del código, `packages/` como `additional_contexts`, variables por servicio interpoladas desde el `.env` de la raíz (plantilla en `.env.example`) y recarga por sondeo. Guía en la sección "Ejecutar con Docker" del README raíz.
 - `scripts/incident-report/` — procesador de reportes de incidentes en **Python 3**, solo con la librería estándar (`csv`, `decimal`) y pruebas con `unittest`. Lee de `data/raw/` y exporta a `data/process/results.csv`.
 - `data/` — estructura por etapas: `raw/`, `process/`, `pipelines/`, `eval/`. `raw/` contiene `incidents-brasaland.csv`; el resto solo tiene READMEs.
 
@@ -210,7 +211,9 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ### Infraestructura
 
-- Sin Docker, docker-compose, CI/CD, o scripts de deploy.
+- Docker Compose solo para desarrollo local (#infra-40). Sin modo de producción, CI/CD ni scripts de deploy: el despliegue al VPS se eliminó de la consigna.
+- En Docker, Next.js corre con webpack: Turbopack (Next 16.3.5) no detecta los cambios en los bind mounts. El sondeo se activa con `NEXT_WATCH_POLL_INTERVAL_MS` (`watchOptions.pollIntervalMs` en cada `next.config.ts`) y `WATCHFILES_FORCE_POLLING`, porque Docker Desktop no propaga los eventos de archivos de Windows.
+- Si cambian las dependencias: regenerar `services/requirements.txt` (si es la API) y `docker compose up --build --renew-anon-volumes`.
 - Base de datos de servidor: un proyecto de Supabase (PostgreSQL) para el inventario, con la cadena en `DATABASE_URL`. El resto sigue en archivos TinyDB locales (proveedores, incidencias, usuarios y perfiles).
 - Sin configuración de hosting/cloud.
 
