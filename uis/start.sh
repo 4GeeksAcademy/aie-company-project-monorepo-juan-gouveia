@@ -11,9 +11,9 @@ cd "$(dirname "$0")"
 
 # Lanza `next dev` en una aplicación y escribe su salida con prefijo. La salida pasa por un FIFO para
 # que $! sea el PID de Next.js (y no el del filtro), y así poder enviarle las señales.
-# Con el sondeo activo (NEXT_WATCH_POLL_INTERVAL_MS), Turbopack avisa con "watch error ... NotFound"
-# por cada ruta que vigila por si llega a existir (src/, .config, .next-internal...). Es inofensivo y
-# solo aparece con sondeo, así que se descartan esas líneas; cualquier otro error se muestra.
+# En Docker se usa webpack (--webpack) en lugar de Turbopack: Turbopack (Next 16.3.5) no detecta los
+# cambios en los bind mounts, ni con sondeo; webpack sí, con el watchOptions.pollIntervalMs de
+# next.config.ts. Fuera de Docker, `npm run dev` sigue con Turbopack.
 # Uso: start_app <nombre> <puerto>; deja el PID en la variable APP_PID.
 start_app() {
   name=$1
@@ -21,11 +21,8 @@ start_app() {
   fifo="/tmp/$name.fifo"
   rm -f "$fifo"
   mkfifo "$fifo"
-  awk -v prefix="[$name] " '
-    /watch error \(.*kind: NotFound/ { next }
-    { print prefix $0; fflush() }
-  ' < "$fifo" &
-  (cd "$name" && exec ./node_modules/.bin/next dev -H 0.0.0.0 -p "$port") > "$fifo" 2>&1 &
+  awk -v prefix="[$name] " '{ print prefix $0; fflush() }' < "$fifo" &
+  (cd "$name" && exec ./node_modules/.bin/next dev --webpack -H 0.0.0.0 -p "$port") > "$fifo" 2>&1 &
   APP_PID=$!
 }
 
