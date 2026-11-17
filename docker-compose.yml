@@ -1,0 +1,86 @@
+# Entorno de desarrollo de Brasaland (ticket #infra-40). Desde la raíz del repositorio:
+#   cp .env.example .env    # una sola vez; rellena los secretos
+#   docker compose up
+# Servicios:
+#   uis -> website en http://localhost:3000 y backoffice en http://localhost:3001 (next dev)
+#   api -> API de Brasaland en http://localhost:8000 (Uvicorn con --reload; documentación en /docs)
+# El código se monta desde el host (bind mounts): los cambios se ven sin reconstruir las imágenes.
+# Las variables se leen del .env de la raíz y se interpolan aquí con ${VARIABLE}; ningún valor real
+# vive en este archivo. Cada servicio recibe solo las variables que necesita.
+
+name: brasaland
+
+services:
+  api:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      # packages/shared está fuera de ./services: llega a la imagen como contexto adicional.
+      additional_contexts:
+        shared: ./packages/shared
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/brasaland-api:/repo/services/brasaland-api
+      - ./packages/shared:/repo/packages/shared
+      # Oculta el .venv del host (Windows): la imagen usa su propio Python y el sondeo de la
+      # recarga no tiene que recorrerlo.
+      - /repo/services/brasaland-api/.venv
+    environment:
+      # Obligatorias: sin ellas, la API no arranca y Compose se detiene con este mensaje.
+      SECRET_KEY: ${SECRET_KEY:?Falta SECRET_KEY en el .env de la raíz (copia .env.example a .env)}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:?Falta ACCESS_TOKEN_EXPIRE_MINUTES en el .env de la raíz}
+      DATABASE_URL: ${DATABASE_URL:?Falta DATABASE_URL en el .env de la raíz (cadena de conexión de Supabase)}
+      # Opcionales: vacías, la API usa sus valores por defecto.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      FRONTEND_URL: ${FRONTEND_URL:-}
+      PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-}
+      # Recarga en caliente por sondeo (los bind mounts no propagan los eventos de archivos).
+      WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
+    healthcheck:
+      # /health es pública y no toca la base de datos. La imagen no trae curl: se usa Python.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - brasaland-net
+
+  uis:
+    build:
+      context: ./uis
+      dockerfile: Dockerfile
+      # packages/brasa-core está fuera de ./uis: llega a la imagen como contexto adicional.
+      additional_contexts:
+        brasa-core: ./packages/brasa-core
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    volumes:
+      - ./uis:/repo/uis
+      - ./packages/brasa-core:/repo/packages/brasa-core
+      # node_modules y .next se quedan en el contenedor: los binarios de Linux no se mezclan con
+      # los del host. Tras cambiar dependencias: docker compose up --build --renew-anon-volumes.
+      - /repo/uis/website/node_modules
+      - /repo/uis/backoffice/node_modules
+      - /repo/uis/website/.next
+      - /repo/uis/backoffice/.next
+    environment:
+      # El intermediario (BFF) del backoffice llama a la API de servidor a servidor, por el nombre
+      # del servicio en la red Docker.
+      API_BASE_URL: ${API_BASE_URL:-http://api:8000/api/v1}
+      # La usa el navegador (tracker /talento): debe ser una URL accesible desde el host.
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
+      # Recarga en caliente por sondeo de Turbopack (watchOptions.pollIntervalMs de next.config.ts).
+      NEXT_WATCH_POLL_INTERVAL_MS: ${NEXT_WATCH_POLL_INTERVAL_MS:-1000}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - brasaland-net
+
+networks:
+  brasaland-net:
+    name: brasaland-net

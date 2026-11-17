@@ -119,7 +119,8 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Fase 0 (`20c10ce`):** `.env.example` en la raíz (con `API_BASE_URL=http://api:8000/api/v1`), `services/requirements.txt` generado desde `uv.lock` y `.gitattributes` (`*.sh` con LF). El `.env` de la raíz existe en local y no se versiona.
 - **Fase 1:** `services/Dockerfile` (`python:3.12-slim`, `uv` 0.13.7 copiado de la imagen oficial de Astral, `uv pip install -r requirements.txt`, `packages/shared` editable desde el contexto adicional `shared`, Uvicorn con `--reload` y usuario sin privilegios) y `services/.dockerignore`. La imagen se construye y `app.main` se importa dentro del contenedor.
 - **Fase 2:** `uis/Dockerfile` (`node:22-alpine`, usuario `node`, `npm ci` por aplicación y `packages/brasa-core` desde el contexto adicional `brasa-core`), `uis/.dockerignore` y `uis/start.sh` (las dos apps con `next dev`, salida con prefijo, reenvío de señales y salida con error si una se cae). Como Turbopack no lee `WATCHPACK_POLLING` y Docker Desktop no propaga los eventos de archivos de Windows, los dos `next.config.ts` activan `watchOptions.pollIntervalMs` solo si existe `NEXT_WATCH_POLL_INTERVAL_MS` (la define Compose; fuera de Docker no cambia nada).
-- **Pendiente:** `docker-compose.yml` (Fase 3), verificación (Fase 4) y documentación (Fase 5).
+- **Fase 3:** `docker-compose.yml` en la raíz (proyecto `brasaland`): servicios `api` (8000, healthcheck contra `/health`) y `uis` (3000 y 3001, arranca cuando `api` está healthy), red `brasaland-net`, bind mounts del código y de `packages/`, y volúmenes anónimos para `.venv`, `node_modules` y `.next`. Cada servicio recibe solo sus variables, interpoladas desde el `.env`; si faltan `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` o `DATABASE_URL`, Compose se detiene con un mensaje claro. Comprobado: `docker compose up -d --build` levanta los dos servicios, responden desde el host y `uis` llega a `api` por su nombre (también a través del BFF).
+- **Pendiente:** verificación (Fase 4) y documentación (Fase 5).
 
 **Pull requests (comprobados en GitHub el 2026-11-16).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -264,7 +265,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 | Elemento | Estado |
 |---|---|
 | `infra/` — Docker, deploy | ❌ No iniciado |
-| Docker Compose de desarrollo (`docker-compose.yml`, `uis/Dockerfile`, `services/Dockerfile`; #infra-40) | 🔄 En curso: fases 0 a 2 de 5 hechas (rama `feature/dockerize`) |
+| Docker Compose de desarrollo (`docker-compose.yml`, `uis/Dockerfile`, `services/Dockerfile`; #infra-40) | 🔄 En curso: fases 0 a 3 de 5 hechas (rama `feature/dockerize`) |
 | `scripts/incident-report/` — procesador de reportes de incidentes (Python, sin dependencias, 32 pruebas `unittest`) | ✅ Implementado |
 | `internal/` — CLIs internos | ❌ No iniciado |
 
@@ -274,7 +275,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Fases 0 (`20c10ce`), 1 (`9cdd4f5`, imagen de la API) y 2 (imagen de interfaces) hechas. Siguiente: Fase 3, `docker-compose.yml`. Plan en `docs/_private/plan-contenedorizacion.md`.
+0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Fases 0 (`20c10ce`), 1 (`9cdd4f5`, imagen de la API), 2 (`f84b9c1`, imagen de interfaces) y 3 (`docker-compose.yml`) hechas. Siguiente: Fase 4, la verificación completa. Plan en `docs/_private/plan-contenedorizacion.md`.
 
 0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 abierto contra `feature/inventory-frontend`. Pendiente: fusionar la cadena en orden (#8 a #16) y, cuando no quede ninguno, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
