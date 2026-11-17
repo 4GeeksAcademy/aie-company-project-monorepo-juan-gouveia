@@ -19,4 +19,8 @@ Organiza `uis/` por **distintas áreas de la compañía** — cada subcarpeta ag
 | [`website`](./website/README.es.md) | Landing y registro de Brasa Points para clientes | Next.js, React, Tailwind CSS | 3000 |
 | [`backoffice`](./backoffice/README.es.md) | Herramientas internas: Talent Pipeline Tracker y pruebas de funciones | Next.js, React, Tailwind CSS | 3001 |
 
+## Docker
+
+Las dos apps corren en un único contenedor `uis`: [`Dockerfile`](./Dockerfile) (Node 22 Alpine, `npm ci` por aplicación) y [`start.sh`](./start.sh), que arranca `website` en el 3000 y `backoffice` en el 3001 con `next dev --webpack`. Se levanta desde la raíz del repositorio con `docker compose up`; ver [Ejecutar con Docker](../README.es.md#ejecutar-con-docker).
+
 > _These instructions are also available in [English](./README.md)._

@@ -1,0 +1,17 @@
+# Contexto de build de services/Dockerfile (context: ./services).
+# Mínimo del briefing: __pycache__, *.pyc, .env*, tests/ y *.log.
+**/__pycache__
+**/*.pyc
+**/.env*
+**/tests/
+**/*.log
+
+# Entornos y artefactos locales: se generan dentro de la imagen o no hacen falta en ella.
+**/.venv
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+**/*.egg-info
+
+# Datos locales de TinyDB: no se copian a la imagen (en desarrollo llegan por el bind mount).
+**/storage/*.json

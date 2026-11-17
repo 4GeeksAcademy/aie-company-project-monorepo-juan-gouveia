@@ -112,7 +112,17 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Cuenta:** "Mi perfil" y "Cerrar sesión" solo con iconos en todos los tamaños, con un tooltip propio (`components/Tooltip.tsx`) al pasar el ratón o llegar con el teclado.
 - **Menú por secciones:** `lib/tools.ts` agrupa las herramientas en `toolSections` (Inventario, Proveedores, Incidencias y Herramientas). En la cabecera, las secciones con varias herramientas son desplegables (`components/NavDropdown.tsx`), y la portada muestra las mismas secciones.
 - **Menú hamburguesa** por debajo de `xl` (`components/MobileNav.tsx`): panel superpuesto bajo la cabecera, sin cambiar su altura. Ya se puede navegar desde cualquier página en móvil y tablet, así que la divergencia del menú del gestor de incidencias queda resuelta (`docs/BRIEFING_DIVERGENCES.md`).
-- **Siguiente:** abrir el PR contra `feature/inventory-frontend`.
+- **PR:** #16, abierto el 2026-11-16 contra `feature/inventory-frontend` mientras el #15 no se fusione (3 commits: `14f69ff`, `fee7215` y `64f0d68`).
+
+**Contenedorización del monorepo (ticket #infra-40) completada en la rama `feature/dockerize`**, creada desde `feature/backoffice-navigation` (`64f0d68`) el 2026-11-16 porque el PR #16 sigue abierto. El objetivo es que `docker compose up` desde la raíz levante dos servicios en la red `brasaland-net`: `uis` (website en el 3000 y backoffice en el 3001, con `next dev`) y `api` (Uvicorn con `--reload`). Ambos usan bind mounts y leen sus variables del `.env` de la raíz. El despliegue al VPS de la consigna quedó fuera de alcance: ese apartado se eliminó. Los paquetes `packages/shared` y `packages/brasa-core` entran a las imágenes con `additional_contexts` de Compose.
+
+- **Fase 0 (`20c10ce`):** `.env.example` en la raíz (con `API_BASE_URL=http://api:8000/api/v1`), `services/requirements.txt` generado desde `uv.lock` y `.gitattributes` (`*.sh` con LF). El `.env` de la raíz existe en local y no se versiona.
+- **Fase 1 (`9cdd4f5`):** `services/Dockerfile` (`python:3.12-slim`, `uv` 0.13.7 copiado de la imagen oficial de Astral, `uv pip install -r requirements.txt`, `packages/shared` editable desde el contexto adicional `shared`, Uvicorn con `--reload` y usuario sin privilegios) y `services/.dockerignore`. La imagen se construye y `app.main` se importa dentro del contenedor.
+- **Fase 2 (`f84b9c1`):** `uis/Dockerfile` (`node:22-alpine`, usuario `node`, `npm ci` por aplicación y `packages/brasa-core` desde el contexto adicional `brasa-core`), `uis/.dockerignore` y `uis/start.sh` (las dos apps con `next dev`, salida con prefijo, reenvío de señales y salida con error si una se cae). Como Turbopack no lee `WATCHPACK_POLLING` y Docker Desktop no propaga los eventos de archivos de Windows, los dos `next.config.ts` activan `watchOptions.pollIntervalMs` solo si existe `NEXT_WATCH_POLL_INTERVAL_MS` (la define Compose; fuera de Docker no cambia nada).
+- **Fase 3 (`80944a8`):** `docker-compose.yml` en la raíz (proyecto `brasaland`): servicios `api` (8000, healthcheck contra `/health`) y `uis` (3000 y 3001, arranca cuando `api` está healthy), red `brasaland-net`, bind mounts del código y de `packages/`, y volúmenes anónimos para `.venv`, `node_modules` y `.next`. Cada servicio recibe solo sus variables, interpoladas desde el `.env`; si faltan `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` o `DATABASE_URL`, Compose se detiene con un mensaje claro. Comprobado: `docker compose up -d --build` levanta los dos servicios, responden desde el host y `uis` llega a `api` por su nombre (también a través del BFF).
+- **Fase 4 (`ba3eae3` y `e780588`, verificación):** arranque desde cero (`down -v`, `build --no-cache`, `up -d`) sin pasos manuales; las páginas responden desde el host; `uis` y `api` se alcanzan por nombre en los dos sentidos; el BFF llega a la API (401 sin token, y login real con una cuenta temporal que después se borró, con lectura del inventario en Supabase); la recarga en caliente funciona en la API y en las dos apps con cambios hechos desde Windows; ningún secreto real en archivos versionados y el `.env` nunca se ha versionado; en el host pasan `uv run pytest` (916) y `npm test` (163). **Cambio:** Turbopack no detecta cambios en los bind mounts (ni con sondeo), así que en Docker las dos apps arrancan con `next dev --webpack` (`uis/start.sh`); fuera de Docker sigue Turbopack.
+- **Fase 5 (documentación):** sección "Ejecutar con Docker" en el README raíz (`.md` y `.es.md`: requisitos, `cp .env.example .env`, servicios y URL, recarga, datos y comandos útiles), notas en los README de `uis/` y `services/`, `techContext.md` y la sección "Contenedorización del monorepo" de `docs/BRIEFING_DIVERGENCES.md` (VPS fuera de alcance, contextos adicionales, `requirements.txt` desde `uv.lock`, webpack en Docker, sondeo, el `.env` como paso previo, el PR contra la rama anterior, decisiones y la tabla de los 8 criterios).
+- **Pendiente:** el commit de la Fase 5 y el PR contra `feature/backoffice-navigation`, con la captura de `docker compose ps`; los hace el desarrollador.
 
 **Pull requests (comprobados en GitHub el 2026-11-16).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -128,8 +138,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #13 AUTH-088 (pruebas, API-042 y FE-019) | `feature/auth-tests` → `feature/error-handling-audit` | ⏳ Abierto (2026-11-10) |
 | #14 Hito 5: inventario con SQLModel y Supabase | `feature/inventory-orm` → `feature/auth-tests` | ⏳ Abierto (2026-11-14) |
 | #15 Hito 5, fase frontend: inventario en el backoffice | `feature/inventory-frontend` → `feature/inventory-orm` | ⏳ Abierto (2026-11-16) |
+| #16 Navegación del backoffice | `feature/backoffice-navigation` → `feature/inventory-frontend` | ⏳ Abierto (2026-11-16) |
 
-- **Orden de merge:** #8, #9, #10, #11, #12, #13, #14 y #15, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11, #12, #13, #14, #15 y #16, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -256,6 +267,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 | Elemento | Estado |
 |---|---|
 | `infra/` — Docker, deploy | ❌ No iniciado |
+| Docker Compose de desarrollo (`docker-compose.yml`, `uis/Dockerfile`, `services/Dockerfile`; #infra-40) | ✅ Implementado en la rama `feature/dockerize` (fases 0 a 5); solo desarrollo local, sin VPS |
 | `scripts/incident-report/` — procesador de reportes de incidentes (Python, sin dependencias, 32 pruebas `unittest`) | ✅ Implementado |
 | `internal/` — CLIs internos | ❌ No iniciado |
 
@@ -265,7 +277,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`; queda abrir su PR contra `feature/inventory-frontend`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
+0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Completada: `docker compose up` desde la raíz levanta `uis` y `api` con recarga en caliente, verificado (2026-11-17). Fases 0 a 4 con commit; la Fase 5 (documentación) está pendiente de commit. Pendiente: el PR contra `feature/backoffice-navigation`, con la captura de `docker compose ps`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Contenedorización del monorepo"). Plan en `docs/_private/plan-contenedorizacion.md`.
+
+0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 abierto contra `feature/inventory-frontend`. Pendiente: fusionar la cadena en orden (#8 a #16) y, cuando no quede ninguno, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
 0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 abierto contra `feature/auth-tests` mientras el #13 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 
@@ -306,7 +320,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
    - Conexión con el Talent Pipeline Tracker (`uis/backoffice`), a través de un intermediario en Next.js.
    - Lectura de sedes y menú desde el servidor de Next.js en `uis/website`, sustituyendo `lib/locations.ts`. El formulario pasará a enviar `location_id` (UUID) y el país en ISO 3166-1 alfa-2 (`CO`, `US`).
    - Alta pública de Brasa Points (`POST /loyalty/enrollments`), llamada desde el navegador, para sustituir el envío simulado del formulario. Es solo registro, sin credenciales, con límite de peticiones, respuesta neutra, registro del consentimiento y confirmación del correo.
-   - Desplegar en entorno local con Docker.
+   - ✅ Desplegar en entorno local con Docker (#infra-40, `docker compose up` desde la raíz).
 
 5. **Migración de utilidades core** — Portar a Python, dominio por dominio, las reglas de `packages/brasa-core`. Decisión tomada: el backend es la fuente de verdad. Al terminar, retirar `/funciones` o hacer que llame a la API, y eliminar el paquete junto con su configuración en `uis/backoffice`.
 
@@ -342,4 +356,4 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ---
 
-_Actualizado: 2026-11-14_
+_Actualizado: 2026-11-17_

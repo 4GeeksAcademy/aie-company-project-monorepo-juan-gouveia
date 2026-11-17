@@ -1,0 +1,3 @@
+# Los scripts de shell se ejecutan dentro de contenedores Linux (uis/start.sh): siempre con LF,
+# aunque Git convierta los finales de línea en Windows (core.autocrlf=true).
+*.sh text eol=lf

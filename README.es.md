@@ -64,7 +64,46 @@ Este repositorio contiene el proyecto de **Brasaland**. `CONTEXT.md` (y su versi
 | IA, automatización e infraestructura | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Solo la estructura y los ejemplos de la plantilla |
 
 - Las instrucciones para agentes de código están en el [`AGENTS.md`](./AGENTS.md) raíz, con reglas y skills de desarrollo en `.agents/`.
-- Todavía no hay `docker-compose.yml` en la raíz ni runner de workspace: cada proyecto se instala y ejecuta desde su carpeta, siguiendo su README.
+- Toda la plataforma se ejecuta en Docker con un solo comando (ver [Ejecutar con Docker](#ejecutar-con-docker)). Cada proyecto también se puede instalar y ejecutar desde su carpeta, siguiendo su README. No hay runner de workspace.
+
+---
+
+## Ejecutar con Docker
+
+El entorno de desarrollo está definido en [`docker-compose.yml`](./docker-compose.yml) (ticket #infra-40): dos contenedores en la red `brasaland-net`, con recarga en caliente y el código montado desde el host.
+
+**Requisitos:** Docker Desktop, o Docker Engine con el plugin Compose v2. No hace falta tener Node ni Python en la máquina.
+
+```bash
+cp .env.example .env   # una vez: rellena los secretos (SECRET_KEY, DATABASE_URL, RESEND_API_KEY)
+docker compose up      # añade -d para dejarlo en segundo plano
+```
+
+Crear el `.env` es el único paso manual: los secretos no pueden estar en Git. Si falta `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` o `DATABASE_URL`, Compose se detiene y dice cuál. El `.env` está ignorado por Git.
+
+| Servicio | Contenido | URL desde el host |
+| --- | --- | --- |
+| `uis` | `uis/website` y `uis/backoffice` (`next dev`), lanzados por [`uis/start.sh`](./uis/start.sh) | http://localhost:3000 y http://localhost:3001 |
+| `api` | `services/brasaland-api` (Uvicorn con `--reload`) | http://localhost:8000 (documentación en `/docs`) |
+
+- **Las llamadas entre servicios usan el nombre del servicio.** El intermediario (BFF) del backoffice llama a `http://api:8000/api/v1` (`API_BASE_URL`). Las URL que usa el navegador (`NEXT_PUBLIC_API_BASE_URL`, `FRONTEND_URL`) siguen siendo de `localhost`.
+- **Recarga en caliente:** el código está montado con bind mounts, así que los cambios en el host se ven sin reconstruir. Docker Desktop no propaga los eventos de archivos de Windows ni de macOS, así que los dos servicios vigilan los cambios por sondeo (`NEXT_WATCH_POLL_INTERVAL_MS`, `WATCHFILES_FORCE_POLLING`). En Docker, Next.js corre con webpack (`next dev --webpack`) porque Turbopack no detecta los cambios en los bind mounts; fuera de Docker, `npm run dev` sigue con Turbopack.
+- **Datos:** los archivos TinyDB de `services/brasaland-api/storage/` son los mismos que usa la API fuera de Docker. El inventario está en Supabase, fuera del stack.
+- **Cada servicio recibe solo sus variables**, interpoladas desde el `.env`. Next.js también carga `uis/backoffice/.env.local` desde la carpeta montada, pero las variables de Compose tienen prioridad.
+
+Comandos útiles (desde la raíz del repositorio):
+
+| Tarea | Comando |
+| --- | --- |
+| Estado y logs | `docker compose ps` · `docker compose logs -f api` |
+| Parar | `docker compose down` (con `-v` también borra los volúmenes de los contenedores) |
+| Tras cambiar dependencias (`package-lock.json`, `requirements.txt`) | `docker compose up --build --renew-anon-volumes` |
+| Terminal en un contenedor | `docker compose exec api sh` · `docker compose exec uis sh` |
+| Sembrar el directorio de proveedores | `docker compose exec api python -m app.domains.suppliers.seed` |
+| Crear el primer administrador (interactivo) | `docker compose exec api python -c "import sys; from app.domains.users.create_admin import run; sys.exit(run())"` |
+| Sembrar el inventario (Supabase) | `docker compose exec api python -c "import sys; from app.domains.inventory.seed import main; sys.exit(main())"` |
+
+La imagen de la API instala sus dependencias desde [`services/requirements.txt`](./services/requirements.txt), generado desde `uv.lock`. Si cambian las dependencias de la API, hay que regenerarlo como indica su cabecera. Los paquetes locales `packages/shared` y `packages/brasa-core` llegan a las imágenes como `additional_contexts` de Compose. El despliegue a un servidor de producción queda fuera de alcance: ver [`docs/BRIEFING_DIVERGENCES.md`](./docs/BRIEFING_DIVERGENCES.md#contenedorización-del-monorepo).
 
 ---
 

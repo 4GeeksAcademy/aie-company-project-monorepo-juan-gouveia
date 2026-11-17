@@ -13,4 +13,8 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 |---|---|
 | [`brasaland-api/`](./brasaland-api/README.md) | Brasaland's central API (FastAPI), organized by domain. It implements the `incidents` domain (incident CSV analysis and results export), the `suppliers` domain (supplier directory in TinyDB) and the `inventory` domain (ingredient inventory in Supabase with SQLModel), plus JWT authentication (`auth`, `users` and `profiles`, in TinyDB). |
 
+## Docker
+
+The API runs in the `api` container: [`Dockerfile`](./Dockerfile) (Python 3.12 slim, `uv pip install -r requirements.txt` and Uvicorn with `--reload`). [`requirements.txt`](./requirements.txt) is generated from `brasaland-api/uv.lock`; its header explains how to regenerate it. Start it from the repository root with `docker compose up`; see [Running with Docker](../README.md#running-with-docker).
+
 > _Spanish version: [README.es.md](./README.es.md)._
