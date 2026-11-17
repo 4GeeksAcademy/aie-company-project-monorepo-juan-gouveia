@@ -1,0 +1,63 @@
+{
+  "name": "website-home",
+  "mode": "desktop",
+  "url": "http://localhost:3000/",
+  "runs": [
+    {
+      "performance": 100,
+      "accessibility": 100,
+      "bestPractices": 96,
+      "seo": 100,
+      "fcpMs": 210,
+      "lcpMs": 538,
+      "tbtMs": 0,
+      "cls": 0,
+      "siMs": 235,
+      "ttfbMs": 125,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3000/"
+    },
+    {
+      "performance": 100,
+      "accessibility": 100,
+      "bestPractices": 96,
+      "seo": 100,
+      "fcpMs": 209,
+      "lcpMs": 563,
+      "tbtMs": 0,
+      "cls": 0,
+      "siMs": 247,
+      "ttfbMs": 125,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3000/"
+    },
+    {
+      "performance": 100,
+      "accessibility": 100,
+      "bestPractices": 96,
+      "seo": 100,
+      "fcpMs": 211,
+      "lcpMs": 537,
+      "tbtMs": 0,
+      "cls": 0,
+      "siMs": 226,
+      "ttfbMs": 125,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3000/"
+    }
+  ],
+  "median": {
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 96,
+    "seo": 100,
+    "fcpMs": 209,
+    "lcpMs": 563,
+    "tbtMs": 0,
+    "cls": 0,
+    "siMs": 247,
+    "ttfbMs": 125,
+    "lighthouse": "13.5.0",
+    "finalUrl": "http://localhost:3000/"
+  }
+}

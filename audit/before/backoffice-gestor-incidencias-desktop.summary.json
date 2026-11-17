@@ -1,0 +1,63 @@
+{
+  "name": "backoffice-gestor-incidencias",
+  "mode": "desktop",
+  "url": "http://localhost:3001/gestor-incidencias",
+  "runs": [
+    {
+      "performance": 99,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 210,
+      "lcpMs": 690,
+      "tbtMs": 0,
+      "cls": 0.065,
+      "siMs": 210,
+      "ttfbMs": 125,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3001/gestor-incidencias"
+    },
+    {
+      "performance": 99,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 212,
+      "lcpMs": 653,
+      "tbtMs": 0,
+      "cls": 0.065,
+      "siMs": 212,
+      "ttfbMs": 126,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3001/gestor-incidencias"
+    },
+    {
+      "performance": 90,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 211,
+      "lcpMs": 689,
+      "tbtMs": 0,
+      "cls": 0.204,
+      "siMs": 211,
+      "ttfbMs": 125,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3001/gestor-incidencias"
+    }
+  ],
+  "median": {
+    "performance": 99,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "seo": 100,
+    "fcpMs": 210,
+    "lcpMs": 690,
+    "tbtMs": 0,
+    "cls": 0.065,
+    "siMs": 210,
+    "ttfbMs": 125,
+    "lighthouse": "13.5.0",
+    "finalUrl": "http://localhost:3001/gestor-incidencias"
+  }
+}
