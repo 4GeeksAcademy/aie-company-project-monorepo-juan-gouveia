@@ -1,48 +1,17 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { listSuppliers } from "@/lib/proveedores/api";
 import type { Supplier, SupplierFilters } from "@/types/supplier";
-import { toUserMessage } from "@/lib/error-message";
-
-type FetchState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "success" };
 
 const NO_FILTERS: SupplierFilters = { country: "", category: "" };
 
 // Carga los proveedores desde la API y vuelve a pedirlos cuando cambia un filtro,
 // sin recargar la página. Los filtros los aplica la API (GET /suppliers?country=&category=).
+// Si cambian los filtros antes de que llegue la respuesta, useAsyncData descarta la anterior.
 export function useSuppliers() {
   const [filters, setFilters] = useState<SupplierFilters>(NO_FILTERS);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [fetchState, setFetchState] = useState<FetchState>({ status: "loading" });
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    // Si cambian los filtros antes de que llegue la respuesta, se descarta la anterior.
-    let cancelled = false;
-
-    async function load() {
-      setFetchState({ status: "loading" });
-      try {
-        const data = await listSuppliers(filters);
-        if (cancelled) return;
-        setSuppliers(data);
-        setFetchState({ status: "success" });
-      } catch (err) {
-        if (cancelled) return;
-        setFetchState({
-          status: "error",
-          message: toUserMessage(err, "No se pudieron cargar los proveedores."),
-        });
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [filters, reloadKey]);
+  const load = useCallback(() => listSuppliers(filters), [filters]);
+  const { state, reload, setData } = useAsyncData(load, "No se pudieron cargar los proveedores.");
 
   function updateFilter<K extends keyof SupplierFilters>(key: K, value: SupplierFilters[K]) {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -50,11 +19,7 @@ export function useSuppliers() {
 
   // Sustituye una fila con la respuesta de la API (cambio de tarifa o de estado).
   function replaceSupplier(updated: Supplier) {
-    setSuppliers((prev) => prev.map((supplier) => (supplier.id === updated.id ? updated : supplier)));
-  }
-
-  function reload() {
-    setReloadKey((key) => key + 1);
+    setData((prev) => prev.map((supplier) => (supplier.id === updated.id ? updated : supplier)));
   }
 
   return {
@@ -62,8 +27,8 @@ export function useSuppliers() {
     updateFilter,
     clearFilters: () => setFilters(NO_FILTERS),
     hasFilters: Boolean(filters.country || filters.category),
-    suppliers,
-    fetchState,
+    suppliers: state.status === "success" ? state.data : [],
+    fetchState: state,
     replaceSupplier,
     reload,
   };

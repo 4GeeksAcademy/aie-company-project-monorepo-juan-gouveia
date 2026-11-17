@@ -1,0 +1,63 @@
+{
+  "name": "backoffice-home",
+  "mode": "desktop",
+  "url": "http://localhost:3001/",
+  "runs": [
+    {
+      "performance": 100,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 233,
+      "lcpMs": 651,
+      "tbtMs": 0,
+      "cls": 0,
+      "siMs": 233,
+      "ttfbMs": 136,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3001/"
+    },
+    {
+      "performance": 100,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 210,
+      "lcpMs": 676,
+      "tbtMs": 0,
+      "cls": 0,
+      "siMs": 210,
+      "ttfbMs": 125,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3001/"
+    },
+    {
+      "performance": 100,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 210,
+      "lcpMs": 589,
+      "tbtMs": 0,
+      "cls": 0,
+      "siMs": 210,
+      "ttfbMs": 125,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3001/"
+    }
+  ],
+  "median": {
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "seo": 100,
+    "fcpMs": 210,
+    "lcpMs": 676,
+    "tbtMs": 0,
+    "cls": 0,
+    "siMs": 210,
+    "ttfbMs": 125,
+    "lighthouse": "13.5.0",
+    "finalUrl": "http://localhost:3001/"
+  }
+}

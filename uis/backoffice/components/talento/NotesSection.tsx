@@ -3,10 +3,10 @@
 import { useState } from "react";
 import Button from "@/components/Button";
 import EmptyMessage from "@/components/EmptyMessage";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import NewNoteModal from "@/components/talento/NewNoteModal";
 import NoteItem from "@/components/talento/NoteItem";
+import RetryableError from "@/components/RetryableError";
 import { useNotes } from "@/hooks/useNotes";
 
 interface NotesSectionProps {
@@ -51,12 +51,9 @@ export default function NotesSection({ recordId }: NotesSectionProps) {
 
       {status === "loading" && <LoadingMessage compact>Cargando notas...</LoadingMessage>}
       {status === "error" && (
-        <div role="alert" className="flex flex-col items-start gap-2">
-          <ErrorMessage compact>{error}</ErrorMessage>
-          <Button variant="secondary" onClick={reload}>
-            Reintentar
-          </Button>
-        </div>
+        <RetryableError compact onRetry={reload}>
+          {error}
+        </RetryableError>
       )}
       {status === "success" && notes.length === 0 && (
         <EmptyMessage compact>Este candidato aún no tiene notas.</EmptyMessage>

@@ -1,0 +1,63 @@
+{
+  "name": "website-registro",
+  "mode": "mobile",
+  "url": "http://localhost:3000/registro",
+  "runs": [
+    {
+      "performance": 98,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 760,
+      "lcpMs": 2251,
+      "tbtMs": 91,
+      "cls": 0,
+      "siMs": 760,
+      "ttfbMs": 455,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3000/registro"
+    },
+    {
+      "performance": 98,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 758,
+      "lcpMs": 2238,
+      "tbtMs": 80,
+      "cls": 0,
+      "siMs": 758,
+      "ttfbMs": 454,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3000/registro"
+    },
+    {
+      "performance": 98,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "seo": 100,
+      "fcpMs": 758,
+      "lcpMs": 2250,
+      "tbtMs": 92,
+      "cls": 0,
+      "siMs": 758,
+      "ttfbMs": 454,
+      "lighthouse": "13.5.0",
+      "finalUrl": "http://localhost:3000/registro"
+    }
+  ],
+  "median": {
+    "performance": 98,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "seo": 100,
+    "fcpMs": 758,
+    "lcpMs": 2238,
+    "tbtMs": 80,
+    "cls": 0,
+    "siMs": 758,
+    "ttfbMs": 454,
+    "lighthouse": "13.5.0",
+    "finalUrl": "http://localhost:3000/registro"
+  }
+}

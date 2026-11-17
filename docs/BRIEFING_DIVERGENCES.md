@@ -22,6 +22,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 9. [Gestión de inventario con ORM](#gestión-de-inventario-con-orm) (Hito 5, ticket BRD-0512, rama `feature/inventory-orm`)
 10. [Inventario en el backoffice](#inventario-en-el-backoffice) (Hito 5, fase frontend, ticket BRD-0512, rama `feature/inventory-frontend`)
 11. [Contenedorización del monorepo](#contenedorización-del-monorepo) (ticket #infra-40, rama `feature/dockerize`)
+12. [Auditoría de rendimiento de ambos frontends](#auditoría-de-rendimiento-de-ambos-frontends) (consigna "Auditoría de rendimiento — ambos frontends", rama `feature/performance-audit`)
 
 ---
 
@@ -1051,3 +1052,86 @@ Ejecutado el 17 de noviembre de 2026 en Windows 11 con Docker Desktop 29.9.3 (Co
 | 7. Existen `.dockerignore` en `/uis` y `/services` | Revisión de los archivos y del contenido de las imágenes | Los dos existen con las exclusiones pedidas; las imágenes no llevan `.env`, `node_modules` ni `.next` del host, `tests/`, cobertura ni bases TinyDB |
 | 8. Contenedores en producción en el VPS | — | No aplica: el apartado se eliminó de la consigna ([apartado 1](#1-sin-despliegue-al-vps)) |
 | Sin regresiones | `uv run pytest` en `services/brasaland-api`; `npm test`, `npx tsc --noEmit` y `npx eslint next.config.ts` en las dos apps | 916 y 163 pruebas pasan; `tsc` y `eslint` sin errores |
+
+---
+
+## Auditoría de rendimiento de ambos frontends
+
+Ciclo medir → analizar → corregir → volver a medir sobre `uis/website` y `uis/backoffice`, en la rama `feature/performance-audit`. Coincide con la consigna:
+
+- Lighthouse antes y después en modo producción (`build` + `start`), con capturas en `audit/before/` y `audit/after/`;
+- website en escritorio y móvil (`/` y `/registro`) y backoffice en su vista con más datos (`/gestor-incidencias`) y su portada;
+- `AUDIT.md` con las puntuaciones iniciales, la causa raíz de cada problema y el análisis de refactorización (3 casos);
+- correcciones de una en una, cada una con su commit y su medición;
+- un hook y dos componentes extraídos e integrados;
+- `REPORT.md` con la comparativa y la valoración.
+
+Las diferencias vienen de cómo se midió y de lo que la medición demostró. Las decisiones se tomaron con el desarrollador el 17 de noviembre de 2026.
+
+> **Estado:** completado (2026-11-17), un commit por fase y por corrección, hechos por el desarrollador. Resultado y comprobación de los criterios de evaluación en [`audit/REPORT.md`](../audit/REPORT.md#9-criterios-de-evaluación).
+
+| Qué | Consigna | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Ubicación de los informes | `AUDIT.md` y `REPORT.md`, sin carpeta indicada | `audit/AUDIT.md` y `audit/REPORT.md`, junto a `audit/before/` y `audit/after/` | Toda la auditoría en una carpeta; AGENTS.md pide no llenar la raíz |
+| "Producción" | Medir el servidor de producción | `build` + `start` de cada app en local, fuera de Docker | No hay despliegue público; el contenedor de desarrollo usa `next dev`, que la consigna invalida |
+| Herramienta de medición | Lighthouse en DevTools | Capturas con DevTools y cifras con Lighthouse CLI (mediana de 3) | Una sola ejecución varía demasiado para comparar correcciones pequeñas |
+| Versión de Lighthouse | — | Fijada en 13.5.0, la de DevTools en Chrome 157 | Con 13.6.0 el LCP simulado en móvil cambiaba de 2,5 s a 0,8 s sobre el mismo código |
+| Categorías | Performance, Accessibility, Best Practices, SEO | Las cuatro; se excluye Agentic Browsing, que Lighthouse 13 añade | No mide rendimiento ni la experiencia de las personas |
+| Backoffice en móvil | La consigna solo pide los dos modos para el sitio corporativo | Backoffice solo en escritorio | Es una herramienta interna que se usa a diario en escritorio |
+| Skills | Instalar una o más de las tres propuestas | `core-web-vitals` y `performance`; no `web-perf` | `web-perf` se centra en la red de borde y la caché de Cloudflare, que aquí no aplican |
+| Correcciones "requeridas" | Aplicar las que las skills clasifiquen como requeridas | Las skills no etiquetan; se derivó un criterio de su método. Una requerida (P2) se midió y se revirtió | La medición demostró que no mejoraba y empeoraba el escritorio |
+| Next.js 16.4.6 | — | Fuera de alcance | Cambiar de versión entre el "antes" y el "después" contaminaría la comparación |
+| Pull Request | Desde la rama hacia `main` | Contra `feature/dockerize`, la rama anterior de la cadena | Los PR anteriores siguen abiertos; al fusionarlos, GitHub cambia el destino a `main` |
+
+### 1. Ubicación de los informes
+
+La consigna fija las carpetas de las capturas (`/audit/before/` y `/audit/after/`), pero no dónde van `AUDIT.md` y `REPORT.md`. Se guardan en `audit/` para tener toda la auditoría en una carpeta y no sumar archivos a la raíz del monorepo, como pide `AGENTS.md`.
+
+### 2. Medición en local y con dos herramientas
+
+**Servidor.** No existe un despliegue público de estas apps. Se mide su build de producción servido en local (`npm run build` + `npm run start`), lo más fiel posible a la consigna. El contenedor de Docker del monorepo no sirve para medir porque arranca `next dev`. Consecuencias, documentadas en `AUDIT.md`:
+
+- el TTFB observado en local (5–10 ms) no es representativo de una red real;
+- no hay datos de campo (CrUX) para `localhost`.
+
+**Herramientas.**
+
+- Las capturas, que pide la consigna, las hizo el desarrollador con DevTools.
+- Las cifras de las tablas son la mediana de 3 ejecuciones del CLI de Lighthouse, con perfil limpio en cada una, las mismas condiciones y los JSON guardados. La skill `performance` exige esa mediana para decidir sobre una métrica, y la medición lo confirmó: en el gestor, el CLS variaba entre 0,065 y 0,204 de una ejecución a otra.
+- En el backoffice, el script inyecta el token de una cuenta temporal (rol `user`) sin cargar ninguna página de la app. Esa cuenta se borró al terminar.
+
+**Versión fijada.** El CLI se fijó en Lighthouse 13.5.0, la versión que trae DevTools en Chrome 157. Con 13.6.0 el LCP simulado en móvil salía 0,76 s frente a 2,4 s en DevTools, con el mismo elemento y las mismas condiciones. Los informes exportados de DevTools están en `audit/before/devtools-*.json`.
+
+### 3. Agentic Browsing y backoffice en escritorio
+
+- **Agentic Browsing:** Lighthouse 13 añade esta quinta categoría. Se excluye porque la consigna pide cuatro puntuaciones y porque evalúa si un agente de IA puede usar la página, no el rendimiento.
+- **Backoffice:** la consigna pide escritorio y móvil solo para el sitio corporativo. El backoffice se mide en escritorio, donde se usa a diario.
+
+### 4. Skills instaladas y criterio de "requerido"
+
+- **Qué se instaló:** `core-web-vitals` y `performance`, de `addyosmani/web-quality-skills@afa8da9`, leídas completas antes de instalarlas: son solo Markdown, sin scripts.
+- **Dónde:** en `.claude/skills/` del proyecto, sin commit (excluidas en `.git/info/exclude`). La evidencia de uso está en `AUDIT.md` y `REPORT.md`.
+- **Lo que no se instaló:** `web-perf` (Cloudflare) se centra en la red de borde y la caché de ese proveedor.
+
+Las skills no etiquetan sus hallazgos como "requeridos" o "sugerencias"; separan métricas medidas de hipótesis del código. Se derivó el criterio de su método:
+
+- **requerido:** una métrica o auditoría que falla o está en el umbral, con su causa demostrada;
+- **sugerencia:** lo que sale de su checklist sin medición que lo respalde.
+
+### 5. Una corrección requerida que se revirtió (P2)
+
+P2 (LCP en móvil de 2,54 s en la home) cumplía el criterio de requerido. La corrección prevista era quitar `loading="eager"` a la foto de la fachada, que en móvil queda bajo el pliegue. Se aplicó y se midió con 5 ejecuciones por modo:
+
+- el LCP en móvil no cambió;
+- en escritorio, donde esa foto es el LCP, Lighthouse pasó a marcar "LCP resources should not use loading=lazy".
+
+Se revirtió y no lleva commit; el análisis completo está en `REPORT.md` §3.2. Aplicarla igualmente habría sido un cambio superficial, justo lo que la consigna pide evitar.
+
+### 6. Fuera de alcance
+
+- **Next.js 16.4.6:** la actualización de seguridad pendiente se aplicará cuando se fusione la cadena de PR, y conviene volver a medir entonces con la misma versión de Lighthouse.
+- **Problemas P4 y P5:** el CSS que bloquea el render y el JS del framework no se corrigen. Exigirían cambiar la arquitectura o la compilación, y la consigna prohíbe reestructurar.
+
+### 7. Pull Request contra la rama anterior
+
+La rama sale de `feature/dockerize` porque el PR #17 sigue abierto. El PR de esta auditoría apunta a esa rama y GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.

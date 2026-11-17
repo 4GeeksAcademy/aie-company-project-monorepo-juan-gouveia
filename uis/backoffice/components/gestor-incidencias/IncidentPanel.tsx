@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import Button from "@/components/Button";
 import EmptyMessage from "@/components/EmptyMessage";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import IncidentFilters from "@/components/gestor-incidencias/IncidentFilters";
 import IncidentList from "@/components/gestor-incidencias/IncidentList";
 import IncidentSummaryPanel from "@/components/gestor-incidencias/IncidentSummaryPanel";
+import RetryableError from "@/components/RetryableError";
 import { useIncidentSummary } from "@/hooks/useIncidentSummary";
 import { useIncidents } from "@/hooks/useIncidents";
 import type { Incident, IncidentStatus } from "@/types/incident-manager";
@@ -48,12 +47,9 @@ export default function IncidentPanel() {
         {fetchState.status === "loading" && <LoadingMessage>Cargando incidencias...</LoadingMessage>}
 
         {fetchState.status === "error" && (
-          <div role="alert" className="flex flex-col items-start gap-3">
-            <ErrorMessage>{fetchState.message}</ErrorMessage>
-            <Button variant="secondary" onClick={reload}>
-              Reintentar
-            </Button>
-          </div>
+          <RetryableError onRetry={reload}>
+            {fetchState.message}
+          </RetryableError>
         )}
 
         {fetchState.status === "success" && (

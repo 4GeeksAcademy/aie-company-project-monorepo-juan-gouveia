@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function RegistrationHeader() {
   return (
@@ -10,15 +10,7 @@ export default function RegistrationHeader() {
       >
         <div className="mx-auto flex h-auto items-center justify-between px-3 md:px-4 lg:max-w-6xl lg:px-8">
           <Link href="/" aria-label="Volver a la página principal">
-            <Image
-              src="/media/logo-brasaland.png"
-              alt="Logo Brasaland"
-              width={1245}
-              height={470}
-              sizes="191px"
-              loading="eager"
-              className="h-18 w-auto mt-1.5"
-            />
+            <BrandLogo />
           </Link>
         </div>
       </nav>

@@ -2,13 +2,12 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Button from "@/components/Button";
 import CandidateCard from "@/components/talento/CandidateCard";
 import FilterBar from "@/components/talento/FilterBar";
 import CandidateFormModal from "@/components/talento/CandidateFormModal";
 import EmptyMessage from "@/components/EmptyMessage";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
+import RetryableError from "@/components/RetryableError";
 import { createRecord, getRecords, PartialSaveError } from "@/lib/talento/api";
 import type { RecordCreateInput, RecordListItem, RecordStage, RecordStatus } from "@/types/record";
 import { toUserMessage } from "@/lib/error-message";
@@ -98,12 +97,9 @@ function CandidateList() {
         {status === "loading" && <LoadingMessage>Cargando candidatos...</LoadingMessage>}
 
         {status === "error" && (
-          <div role="alert" className="flex flex-col items-start gap-3">
-            <ErrorMessage>{error}</ErrorMessage>
-            <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
-              Reintentar
-            </Button>
-          </div>
+          <RetryableError onRetry={() => setReloadKey((k) => k + 1)}>
+            {error}
+          </RetryableError>
         )}
 
         {status === "success" && records.length === 0 && (

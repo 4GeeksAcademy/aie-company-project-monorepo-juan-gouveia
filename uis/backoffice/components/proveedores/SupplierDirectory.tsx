@@ -3,11 +3,11 @@
 import { useState } from "react";
 import Button from "@/components/Button";
 import EmptyMessage from "@/components/EmptyMessage";
-import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import SupplierFilters from "@/components/proveedores/SupplierFilters";
 import SupplierFormModal from "@/components/proveedores/SupplierFormModal";
 import SupplierList from "@/components/proveedores/SupplierList";
+import RetryableError from "@/components/RetryableError";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import type { Supplier } from "@/types/supplier";
 
@@ -53,12 +53,9 @@ export default function SupplierDirectory() {
       {fetchState.status === "loading" && <LoadingMessage>Cargando proveedores...</LoadingMessage>}
 
       {fetchState.status === "error" && (
-        <div role="alert" className="flex flex-col items-start gap-3">
-          <ErrorMessage>{fetchState.message}</ErrorMessage>
-          <Button variant="secondary" onClick={reload}>
-            Reintentar
-          </Button>
-        </div>
+        <RetryableError onRetry={reload}>
+          {fetchState.message}
+        </RetryableError>
       )}
 
       {fetchState.status === "success" && (

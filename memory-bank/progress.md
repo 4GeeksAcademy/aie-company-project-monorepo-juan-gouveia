@@ -122,9 +122,26 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Fase 3 (`80944a8`):** `docker-compose.yml` en la raíz (proyecto `brasaland`): servicios `api` (8000, healthcheck contra `/health`) y `uis` (3000 y 3001, arranca cuando `api` está healthy), red `brasaland-net`, bind mounts del código y de `packages/`, y volúmenes anónimos para `.venv`, `node_modules` y `.next`. Cada servicio recibe solo sus variables, interpoladas desde el `.env`; si faltan `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` o `DATABASE_URL`, Compose se detiene con un mensaje claro. Comprobado: `docker compose up -d --build` levanta los dos servicios, responden desde el host y `uis` llega a `api` por su nombre (también a través del BFF).
 - **Fase 4 (`ba3eae3` y `e780588`, verificación):** arranque desde cero (`down -v`, `build --no-cache`, `up -d`) sin pasos manuales; las páginas responden desde el host; `uis` y `api` se alcanzan por nombre en los dos sentidos; el BFF llega a la API (401 sin token, y login real con una cuenta temporal que después se borró, con lectura del inventario en Supabase); la recarga en caliente funciona en la API y en las dos apps con cambios hechos desde Windows; ningún secreto real en archivos versionados y el `.env` nunca se ha versionado; en el host pasan `uv run pytest` (916) y `npm test` (163). **Cambio:** Turbopack no detecta cambios en los bind mounts (ni con sondeo), así que en Docker las dos apps arrancan con `next dev --webpack` (`uis/start.sh`); fuera de Docker sigue Turbopack.
 - **Fase 5 (documentación):** sección "Ejecutar con Docker" en el README raíz (`.md` y `.es.md`: requisitos, `cp .env.example .env`, servicios y URL, recarga, datos y comandos útiles), notas en los README de `uis/` y `services/`, `techContext.md` y la sección "Contenedorización del monorepo" de `docs/BRIEFING_DIVERGENCES.md` (VPS fuera de alcance, contextos adicionales, `requirements.txt` desde `uv.lock`, webpack en Docker, sondeo, el `.env` como paso previo, el PR contra la rama anterior, decisiones y la tabla de los 8 criterios).
-- **Pendiente:** el commit de la Fase 5 y el PR contra `feature/backoffice-navigation`, con la captura de `docker compose ps`; los hace el desarrollador.
+- **Commit de la Fase 5:** `b1cab16`.
+- **PR:** #17, abierto el 2026-11-17 contra `feature/backoffice-navigation` mientras el #16 no se fusione (7 commits), con la captura de `docker compose ps`.
 
-**Pull requests (comprobados en GitHub el 2026-11-16).** Forman una cadena: cada PR parte de la rama del anterior.
+**Auditoría de rendimiento de ambos frontends completada en la rama `feature/performance-audit`**, creada desde `feature/dockerize` (`b1cab16`) el 2026-11-17 porque el PR #17 sigue abierto. Ciclo medir → analizar → corregir → volver a medir con Lighthouse 13.5.0 (la de DevTools en Chrome 157) sobre el build de producción (`build` + `start`) servido en local, fuera de Docker. Las cifras son la mediana de 3 ejecuciones del CLI; las capturas, de DevTools. Todo está en `audit/`.
+
+- **Medición inicial (`a499311`):** `audit/before/` (6 capturas y JSON). Páginas: website `/` y `/registro` en escritorio y móvil; backoffice `/` y `/gestor-incidencias` en escritorio, con sesión.
+- **Análisis (`64e2728`):** `audit/AUDIT.md` (5 problemas con su causa raíz y 3 refactorizaciones), guiado por las skills `core-web-vitals` y `performance` de `addyosmani/web-quality-skills`, instaladas en `.claude/skills/` sin commit.
+- **Correcciones:**
+  - P1 `48b27eb`: el resumen del gestor reserva su espacio mientras carga; CLS de hasta 0,204 → 0, y Performance 100;
+  - P3 `5c2f412`: icono del website (`app/icon.tsx`); Best Practices 96 → 100 en las 4 mediciones;
+  - P2 (fachada sin `loading="eager"`) se midió y se revirtió: no mejoraba el LCP en móvil y empeoraba el escritorio.
+- **Refactorizaciones:**
+  - R1 `8ed12c2`: hook `useAsyncData` en 5 hooks del backoffice, con 7 pruebas nuevas (Jest 170/170);
+  - R2 `448ee2b`: componente `RetryableError` en 8 archivos;
+  - R3 `ae6eb10`: componente `BrandLogo` en las dos cabeceras del website.
+- **Medición final (`6f7f0c3`):** `audit/after/`.
+- **Informe:** `audit/REPORT.md` (comparativa, valoración y criterios). Divergencias en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends").
+- **PR:** pendiente de abrir contra `feature/dockerize`.
+
+**Pull requests (comprobados en GitHub el 2026-11-17).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
 |---|---|---|
@@ -139,8 +156,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #14 Hito 5: inventario con SQLModel y Supabase | `feature/inventory-orm` → `feature/auth-tests` | ⏳ Abierto (2026-11-14) |
 | #15 Hito 5, fase frontend: inventario en el backoffice | `feature/inventory-frontend` → `feature/inventory-orm` | ⏳ Abierto (2026-11-16) |
 | #16 Navegación del backoffice | `feature/backoffice-navigation` → `feature/inventory-frontend` | ⏳ Abierto (2026-11-16) |
+| #17 Contenedorización del monorepo (#infra-40) | `feature/dockerize` → `feature/backoffice-navigation` | ⏳ Abierto (2026-11-17) |
 
-- **Orden de merge:** #8, #9, #10, #11, #12, #13, #14, #15 y #16, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11, #12, #13, #14, #15, #16 y #17, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -164,6 +182,7 @@ Aplicación interna Next.js 16 con App Router, en el puerto 3001. Reúne las her
 |---|---|
 | **Portada** (`app/page.tsx`) — una tarjeta por herramienta, generada desde `lib/tools.ts` | ✅ Implementado |
 | **Header** global con navegación entre herramientas | ✅ Implementado |
+| **Carga de datos compartida** (`hooks/useAsyncData.ts` y `components/RetryableError.tsx`) — estados de carga, error y reintento de los bloques que piden datos a la API | ✅ Implementado (auditoría de rendimiento, R1 y R2) |
 | **Análisis de incidencias** (`app/incidencias/`) — carga del CSV con `FileDropzone`, resumen, registros inválidos y descarga de `results.csv` | ✅ Implementado; último análisis en la memoria de la API |
 | **Directorio de proveedores** (`app/proveedores/`) — listado con badges de estado, filtros por país y categoría sin recargar, formulario de alta con validación y errores de la API, edición de tarifa y activar/suspender | ✅ Implementado; datos en el TinyDB de la API |
 | **Pruebas de funciones** (`app/funciones/`) — filtros, búsquedas, reportes y validaciones con `@repo/brasa-core` | ✅ Implementado |
@@ -244,6 +263,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 | `lib/locations.ts` — Países, ciudades y sedes (datos de ejemplo) | ✅ Implementado |
 | `lib/registration-validation.ts` — Reglas de validación | ✅ Implementado |
 | `public/media/` — Recursos multimedia | ✅ Con contenido |
+| `app/icon.tsx` — Icono del sitio, generado en el build | ✅ Implementado (auditoría de rendimiento, P3) |
+| `components/BrandLogo.tsx` — Logo de las cabeceras | ✅ Implementado (auditoría de rendimiento, R3) |
 
 ### 7. Paquetes Compartidos
 
@@ -277,7 +298,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Completada: `docker compose up` desde la raíz levanta `uis` y `api` con recarga en caliente, verificado (2026-11-17). Fases 0 a 4 con commit; la Fase 5 (documentación) está pendiente de commit. Pendiente: el PR contra `feature/backoffice-navigation`, con la captura de `docker compose ps`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Contenedorización del monorepo"). Plan en `docs/_private/plan-contenedorizacion.md`.
+0. **Auditoría de rendimiento (rama `feature/performance-audit`)** — Completada (2026-11-17): `audit/AUDIT.md`, `audit/REPORT.md` y las capturas de `audit/before/` y `audit/after/`. Mejoras medidas: CLS del gestor de incidencias 0,204 → 0 y Best Practices del website 96 → 100. Pendiente: abrir el PR contra `feature/dockerize`. Cuando se fusione la cadena y se actualice Next, repetir las mediciones con la misma versión de Lighthouse. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends"). Plan en `docs/_private/plan-auditoria-rendimiento.md`.
+
+0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Completada: `docker compose up` desde la raíz levanta `uis` y `api` con recarga en caliente, verificado (2026-11-17). Un commit por fase (la última, `b1cab16`). PR #17 abierto contra `feature/backoffice-navigation` mientras el #16 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Contenedorización del monorepo"). Plan en `docs/_private/plan-contenedorizacion.md`.
 
 0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 abierto contra `feature/inventory-frontend`. Pendiente: fusionar la cadena en orden (#8 a #16) y, cuando no quede ninguno, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
