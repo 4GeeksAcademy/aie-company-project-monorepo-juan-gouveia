@@ -1,0 +1,4357 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:brasaland:telemetry:event-schemas:1.0.0",
+  "title": "Brasaland — esquemas de eventos de telemetría",
+  "description": "Un evento válido cumple exactamente uno de los esquemas de `definitions/events` (por su `event_type`). Cada evento comparte el envelope de `definitions/envelope`, y su `properties` solo admite las claves de su allowlist (`additionalProperties: false`). Las claves `x-*` son anotaciones documentales (clasificación, categoría, emisor, disparo, datos sensibles, entrega): los validadores de draft-07 las ignoran. Documentación: telemetry-plan.md.",
+  "definitions": {
+    "envelope": {
+      "type": "object",
+      "description": "Event Envelope: los campos que lleva todo evento, con los nombres del enunciado.",
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties",
+        "source",
+        "environment"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "Identificador único del evento (UUID v4), generado por el emisor. Sirve para descartar duplicados."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+          "description": "Momento del hecho en ISO 8601, en UTC y con milisegundos (`2026-11-18T17:36:46.123Z`)."
+        },
+        "sessionId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sesión del navegador: UUID v4 creado al abrir el backoffice (`sessionStorage`) y enviado en la cabecera `X-Session-Id`. `null` en procesos y en peticiones que no vienen del backoffice."
+        },
+        "userId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "UUID de la cuenta (`sub` del token; `User.id` en TinyDB). Seudónimo: nunca el email ni el nombre. `null` si no hay usuario autenticado."
+        },
+        "event_type": {
+          "type": "string",
+          "pattern": "^[a-z]+(_[a-z]+)+$",
+          "description": "Tipo de evento, `entidad_acción` en snake_case con la acción en participio."
+        },
+        "schemaVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "Versión del esquema de este evento (SemVer). La mayor cambia si se quita o renombra una propiedad, o cambia su tipo."
+        },
+        "requestId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Correlación frontend–backend–logs: UUID v4 de la petición HTTP (`X-Request-Id`), creado por el navegador y propagado por el BFF y la API (que lo crea si falta y lo devuelve en la respuesta). `null` si el evento no nace de una petición."
+        },
+        "properties": {
+          "type": "object",
+          "description": "Payload específico del evento; solo las claves de su allowlist."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "api",
+            "bff",
+            "browser",
+            "process"
+          ],
+          "description": "Emisor del evento."
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "development",
+            "staging",
+            "production"
+          ],
+          "description": "Entorno de origen, para no mezclar datos de prueba con los de producción."
+        }
+      },
+      "additionalProperties": false
+    },
+    "properties": {
+      "location_id": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 14,
+        "description": "Local (1–14) donde ocurre el hecho."
+      },
+      "country": {
+        "type": "string",
+        "enum": [
+          "CO",
+          "US"
+        ],
+        "description": "País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz."
+      },
+      "product_id": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Id del producto (hoy `Ingredient.id`)."
+      },
+      "product_category": {
+        "type": "string",
+        "enum": [
+          "proteína",
+          "vegetal",
+          "salsa",
+          "bebida",
+          "empaque",
+          "limpieza"
+        ],
+        "description": "Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`)."
+      },
+      "quantity": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": "Cantidad de la orden, en `unit`."
+      },
+      "unit": {
+        "type": "string",
+        "enum": [
+          "kg",
+          "unidad",
+          "litro"
+        ],
+        "description": "Unidad de medida del producto."
+      },
+      "currency": {
+        "type": "string",
+        "enum": [
+          "COP",
+          "USD"
+        ],
+        "description": "Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión."
+      },
+      "order_id": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Id de la orden registrada."
+      },
+      "supplier_id": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Id del proveedor en el directorio."
+      },
+      "unit_cost": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": "Coste por unidad de la entrega, en `currency`."
+      },
+      "route": {
+        "type": "string",
+        "pattern": "^/[A-Za-z0-9_\\-/{}\\[\\]]*$",
+        "maxLength": 120,
+        "description": "Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string."
+      },
+      "method": {
+        "type": "string",
+        "enum": [
+          "GET",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE"
+        ],
+        "description": "Método HTTP."
+      },
+      "status_code": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 599,
+        "description": "Código HTTP de la respuesta."
+      },
+      "duration_ms": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Duración en milisegundos."
+      },
+      "user_role": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "manager",
+          "user"
+        ],
+        "description": "Rol de la cuenta."
+      },
+      "account_fingerprint": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{16}$",
+        "description": "HMAC-SHA256 del email normalizado (minúsculas, sin espacios) con la clave `TELEMETRY_HASH_KEY`, truncado a 16 caracteres hexadecimales. Permite agrupar intentos por cuenta sin guardar el email."
+      },
+      "client_network": {
+        "type": "string",
+        "maxLength": 43,
+        "description": "IP de origen truncada: /24 en IPv4 (`203.0.113.0/24`) o /48 en IPv6. Nunca la IP completa."
+      },
+      "form_id": {
+        "type": "string",
+        "enum": [
+          "login",
+          "register",
+          "forgot_password",
+          "reset_password",
+          "change_password",
+          "profile",
+          "inbound_order",
+          "outbound_order",
+          "supplier",
+          "supplier_rate",
+          "incident",
+          "incident_upload",
+          "candidate",
+          "candidate_note"
+        ],
+        "description": "Formulario del backoffice."
+      },
+      "field_names": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[a-z_]+$",
+          "maxLength": 40
+        },
+        "maxItems": 20,
+        "uniqueItems": true,
+        "description": "Nombres de campo (nunca sus valores)."
+      },
+      "list_id": {
+        "type": "string",
+        "enum": [
+          "order_history",
+          "incident_manager",
+          "supplier_directory"
+        ],
+        "description": "Lista del backoffice."
+      },
+      "incident_category": {
+        "type": "string",
+        "enum": [
+          "equipment_failure",
+          "supply_issue",
+          "customer_complaint",
+          "staff_issue",
+          "facility_issue",
+          "pos_system",
+          "delivery_issue",
+          "other"
+        ],
+        "description": "Categoría de la incidencia."
+      },
+      "incident_status": {
+        "type": "string",
+        "enum": [
+          "open",
+          "in_progress",
+          "resolved",
+          "discarded"
+        ],
+        "description": "Estado de la incidencia."
+      },
+      "incident_origin": {
+        "type": "string",
+        "enum": [
+          "customer",
+          "branch",
+          "internal"
+        ],
+        "description": "Origen del reporte."
+      },
+      "branch": {
+        "type": "string",
+        "enum": [
+          "central",
+          "medellin_centro",
+          "medellin_laureles",
+          "medellin_envigado",
+          "medellin_bello",
+          "medellin_itagui",
+          "bogota_chapinero",
+          "bogota_usaquen",
+          "cali_granada",
+          "barranquilla_norte",
+          "miami_doral",
+          "miami_hialeah",
+          "miami_kendall",
+          "orlando_international",
+          "fort_lauderdale"
+        ],
+        "description": "Sede del gestor de incidencias (`central` si no es un local)."
+      },
+      "supplier_categories": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "carne",
+            "verduras_y_hortalizas",
+            "salsas_y_condimentos",
+            "bebidas",
+            "packaging",
+            "productos_limpieza",
+            "lacteos",
+            "carbon_y_combustible"
+          ]
+        },
+        "minItems": 1,
+        "uniqueItems": true,
+        "description": "Categorías del proveedor en el directorio."
+      },
+      "supplier_status": {
+        "type": "string",
+        "enum": [
+          "active",
+          "suspended"
+        ],
+        "description": "Estado del proveedor."
+      },
+      "error_fingerprint": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{16}$",
+        "description": "SHA-256 truncado del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo."
+      }
+    },
+    "events": {
+      "inbound_order_created": {
+        "title": "inbound_order_created",
+        "description": "Un local registra la llegada de mercancía de un proveedor.",
+        "x-classification": "obligatorio",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/orders/inbound`.",
+        "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Consolidar compras y negociar precios son decisiones semanales o mensuales de Lucía; nadie actúa sobre una entrega concreta en minutos."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "inbound_order_created"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "order_id",
+              "location_id",
+              "country",
+              "product_id",
+              "product_category",
+              "quantity",
+              "unit",
+              "currency",
+              "supplier_id",
+              "unit_cost"
+            ],
+            "properties": {
+              "order_id": {
+                "$ref": "#/definitions/properties/order_id"
+              },
+              "location_id": {
+                "$ref": "#/definitions/properties/location_id"
+              },
+              "country": {
+                "$ref": "#/definitions/properties/country"
+              },
+              "product_id": {
+                "$ref": "#/definitions/properties/product_id"
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "quantity": {
+                "$ref": "#/definitions/properties/quantity"
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "supplier_id": {
+                "$ref": "#/definitions/properties/supplier_id"
+              },
+              "unit_cost": {
+                "$ref": "#/definitions/properties/unit_cost"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "inbound_order_created",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "order_id": 7824,
+              "location_id": 3,
+              "country": "CO",
+              "product_id": 12,
+              "product_category": "proteína",
+              "quantity": 18.5,
+              "unit": "kg",
+              "currency": "COP",
+              "supplier_id": 2,
+              "unit_cost": 38500
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "outbound_order_created": {
+        "title": "outbound_order_created",
+        "description": "Un local registra consumo de ingredientes en la preparación de un plato.",
+        "x-classification": "obligatorio",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de consumo. Una salida de merma emite `stock_waste_registered` en su lugar.",
+        "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "La sugerencia automática de pedidos se recalcula con el consumo acumulado del día; un consumo concreto no cambia la decisión en minutos."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "outbound_order_created"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "order_id",
+              "location_id",
+              "country",
+              "product_id",
+              "product_category",
+              "quantity",
+              "unit",
+              "currency"
+            ],
+            "properties": {
+              "order_id": {
+                "$ref": "#/definitions/properties/order_id"
+              },
+              "location_id": {
+                "$ref": "#/definitions/properties/location_id"
+              },
+              "country": {
+                "$ref": "#/definitions/properties/country"
+              },
+              "product_id": {
+                "$ref": "#/definitions/properties/product_id"
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "quantity": {
+                "$ref": "#/definitions/properties/quantity"
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "stock_after": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Stock del producto tras la salida, en `unit`."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "outbound_order_created",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "order_id": 13318,
+              "location_id": 3,
+              "country": "CO",
+              "product_id": 12,
+              "product_category": "proteína",
+              "quantity": 4.2,
+              "unit": "kg",
+              "currency": "COP",
+              "stock_after": 31.6
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "stock_waste_registered": {
+        "title": "stock_waste_registered",
+        "description": "Un local registra merma (producto vencido, error de cocina, o pérdida/robo).",
+        "x-classification": "obligatorio",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de merma.",
+        "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Priorizar auditorías de merma es una decisión semanal por local; la merma de hoy ya ocurrió y no se corrige en minutos."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "stock_waste_registered"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "order_id",
+              "location_id",
+              "country",
+              "product_id",
+              "product_category",
+              "quantity",
+              "unit",
+              "currency",
+              "reason"
+            ],
+            "properties": {
+              "order_id": {
+                "$ref": "#/definitions/properties/order_id"
+              },
+              "location_id": {
+                "$ref": "#/definitions/properties/location_id"
+              },
+              "country": {
+                "$ref": "#/definitions/properties/country"
+              },
+              "product_id": {
+                "$ref": "#/definitions/properties/product_id"
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "quantity": {
+                "$ref": "#/definitions/properties/quantity"
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "expired",
+                  "kitchen_error",
+                  "theft_suspected"
+                ],
+                "description": "Motivo de la merma, con los valores del briefing."
+              },
+              "stock_after": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Stock del producto tras la merma, en `unit`."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "stock_waste_registered",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "order_id": 13319,
+              "location_id": 3,
+              "country": "CO",
+              "product_id": 12,
+              "product_category": "proteína",
+              "quantity": 1.2,
+              "unit": "kg",
+              "currency": "COP",
+              "reason": "expired",
+              "stock_after": 30.4
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "stock_threshold_triggered": {
+        "title": "stock_threshold_triggered",
+        "description": "El stock de un producto cae por debajo del mínimo configurado para ese local.",
+        "x-classification": "obligatorio",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Tras el `commit` de una salida que hace cruzar el mínimo: stock antes ≥ `threshold_quantity` y después < `threshold_quantity`.",
+        "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un local que se queda corto de un ingrediente clave necesita reponer **ese mismo día**: el supervisor debe enterarse en minutos, no al día siguiente. Además alimenta en batch el ajuste del mínimo.",
+          "throttle": "Natural: solo se emite al **cruzar** el mínimo (§3.2), así que un producto bajo no repite la alerta en cada consumo."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "stock_threshold_triggered"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "location_id",
+              "country",
+              "product_id",
+              "product_category",
+              "quantity",
+              "unit",
+              "currency",
+              "threshold_quantity",
+              "trigger_order_id"
+            ],
+            "properties": {
+              "location_id": {
+                "$ref": "#/definitions/properties/location_id"
+              },
+              "country": {
+                "$ref": "#/definitions/properties/country"
+              },
+              "product_id": {
+                "$ref": "#/definitions/properties/product_id"
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "quantity": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Stock resultante tras la salida que cruzó el mínimo, en `unit`."
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "threshold_quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Mínimo configurado para ese producto y local, en `unit`."
+              },
+              "trigger_order_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Id de la salida que provocó el cruce."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "stock_threshold_triggered",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "location_id": 3,
+              "country": "CO",
+              "product_id": 12,
+              "product_category": "proteína",
+              "quantity": 4.0,
+              "unit": "kg",
+              "currency": "COP",
+              "threshold_quantity": 5.0,
+              "trigger_order_id": 13320
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "direct_stock_edit_rejected": {
+        "title": "direct_stock_edit_rejected",
+        "description": "Un usuario intenta modificar el stock directamente (fuera de una orden) y el sistema lo rechaza.",
+        "x-classification": "obligatorio",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Al responder 405 a un `PUT`/`PATCH`/`DELETE` sobre una ruta del inventario, o 422 a un `POST` del inventario cuyo cuerpo incluye `current_stock` o `stock`.",
+        "x-pii": "Ninguno. No se guarda el cuerpo de la petición ni el valor de stock que se intentó escribir.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Reforzar capacitación o permisos es una decisión semanal de Jake; el sistema ya rechazó el intento, no hay daño que contener en minutos."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "direct_stock_edit_rejected"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "method",
+              "route",
+              "rejection_type",
+              "status_code",
+              "user_role"
+            ],
+            "properties": {
+              "location_id": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/location_id"
+                  }
+                ],
+                "description": "Local, si la petición lo indica (cuerpo de una orden). Una edición sobre `/products/{id}` no lleva local."
+              },
+              "country": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/country"
+                  }
+                ],
+                "description": "País del producto, si se identifica uno."
+              },
+              "product_id": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/product_id"
+                  }
+                ],
+                "description": "Producto, si la ruta o el cuerpo lo identifican."
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "quantity": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/quantity"
+                  }
+                ],
+                "description": "Cantidad de la orden, si la petición era una orden."
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "currency": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/currency"
+                  }
+                ],
+                "description": "Moneda del local, si se conoce el local."
+              },
+              "method": {
+                "$ref": "#/definitions/properties/method"
+              },
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "rejection_type": {
+                "type": "string",
+                "enum": [
+                  "method_not_allowed",
+                  "forbidden_field"
+                ],
+                "description": "`method_not_allowed` (405) o `forbidden_field` (422 por un campo de stock en el cuerpo)."
+              },
+              "status_code": {
+                "type": "integer",
+                "enum": [
+                  405,
+                  422
+                ],
+                "description": "405 o 422."
+              },
+              "user_role": {
+                "$ref": "#/definitions/properties/user_role"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "direct_stock_edit_rejected",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "product_id": 12,
+              "country": "CO",
+              "product_category": "proteína",
+              "unit": "kg",
+              "method": "PATCH",
+              "route": "/api/v1/inventory/products/{ingredient_id}",
+              "rejection_type": "method_not_allowed",
+              "status_code": 405,
+              "user_role": "manager"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "ingredient_price_variance_detected": {
+        "title": "ingredient_price_variance_detected",
+        "description": "El costo unitario de una orden de entrada varía más de un umbral (ej. 10%) respecto al histórico del mismo producto/proveedor.",
+        "x-classification": "obligatorio",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Tras el `commit` de una entrada cuyo `unit_cost` se desvía más de `threshold_pct` de la media de los últimos `history_window_days` días del mismo producto y proveedor, con al menos 3 entradas en esa ventana.",
+        "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Es una alerta para Lucía y Mariana: renegociar o cambiar de proveedor **antes** de aceptar más entregas al precio nuevo. Un día de retraso son más compras al precio anómalo."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "ingredient_price_variance_detected"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "order_id",
+              "location_id",
+              "country",
+              "product_id",
+              "product_category",
+              "quantity",
+              "unit",
+              "currency",
+              "supplier_id",
+              "unit_cost",
+              "historical_avg_unit_cost",
+              "variance_pct",
+              "threshold_pct",
+              "history_window_days",
+              "history_sample_size"
+            ],
+            "properties": {
+              "order_id": {
+                "$ref": "#/definitions/properties/order_id"
+              },
+              "location_id": {
+                "$ref": "#/definitions/properties/location_id"
+              },
+              "country": {
+                "$ref": "#/definitions/properties/country"
+              },
+              "product_id": {
+                "$ref": "#/definitions/properties/product_id"
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "quantity": {
+                "$ref": "#/definitions/properties/quantity"
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "supplier_id": {
+                "$ref": "#/definitions/properties/supplier_id"
+              },
+              "unit_cost": {
+                "$ref": "#/definitions/properties/unit_cost"
+              },
+              "historical_avg_unit_cost": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Media del coste unitario en la ventana, en `currency`."
+              },
+              "variance_pct": {
+                "type": "number",
+                "description": "Desviación en porcentaje: (unit_cost − media) / media × 100. Positiva si sube."
+              },
+              "threshold_pct": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Umbral configurado, en porcentaje (10 por defecto)."
+              },
+              "history_window_days": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Días de histórico usados (90 por defecto)."
+              },
+              "history_sample_size": {
+                "type": "integer",
+                "minimum": 3,
+                "description": "Entradas del histórico usadas para la media (≥ 3)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "ingredient_price_variance_detected",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "order_id": 7825,
+              "location_id": 3,
+              "country": "CO",
+              "product_id": 12,
+              "product_category": "proteína",
+              "quantity": 18.5,
+              "unit": "kg",
+              "currency": "COP",
+              "supplier_id": 2,
+              "unit_cost": 44000,
+              "historical_avg_unit_cost": 38200,
+              "variance_pct": 15.18,
+              "threshold_pct": 10,
+              "history_window_days": 90,
+              "history_sample_size": 12
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "order_validation_failed": {
+        "title": "order_validation_failed",
+        "description": "La API rechaza una orden de entrada o de salida por datos inválidos.",
+        "x-classification": "oportunidad",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Al responder 422 `invalid_request` o 404 `ingredient_not_found` a `POST /api/v1/inventory/orders/inbound` u `/outbound`.",
+        "x-pii": "Ninguno. Solo nombres de campo, nunca los valores enviados.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Corregir datos de catálogo y capacitar se decide con el acumulado de la semana."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "order_validation_failed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "order_type",
+              "error_code",
+              "invalid_fields",
+              "status_code"
+            ],
+            "properties": {
+              "order_type": {
+                "type": "string",
+                "enum": [
+                  "inbound",
+                  "outbound"
+                ],
+                "description": "Tipo de orden."
+              },
+              "product_id": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/product_id"
+                  }
+                ],
+                "description": "Producto, si el cuerpo trae un `ingredient_id` legible."
+              },
+              "location_id": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/location_id"
+                  }
+                ],
+                "description": "Local, si el cuerpo trae un `location_id` válido."
+              },
+              "error_code": {
+                "type": "string",
+                "enum": [
+                  "invalid_request",
+                  "ingredient_not_found"
+                ],
+                "description": "Código de la respuesta."
+              },
+              "invalid_fields": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z_]+$",
+                  "maxLength": 40
+                },
+                "maxItems": 20,
+                "uniqueItems": true,
+                "description": "Campos señalados en `details` (vacío en un 404)."
+              },
+              "status_code": {
+                "type": "integer",
+                "enum": [
+                  404,
+                  422
+                ],
+                "description": "422 o 404."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "order_validation_failed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "order_type": "outbound",
+              "product_id": 12,
+              "location_id": 3,
+              "error_code": "invalid_request",
+              "invalid_fields": [
+                "quantity"
+              ],
+              "status_code": 422
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "outbound_order_rejected": {
+        "title": "outbound_order_rejected",
+        "description": "La API rechaza una salida porque supera el stock disponible.",
+        "x-classification": "oportunidad",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Al responder 400 `insufficient_stock` a `POST /api/v1/inventory/orders/outbound` (no se escribe nada).",
+        "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "El conteo físico se programa con el acumulado del día por producto y local; el rechazo ya protegió el stock."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "outbound_order_rejected"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "location_id",
+              "country",
+              "product_id",
+              "product_category",
+              "quantity",
+              "unit",
+              "currency",
+              "available_quantity",
+              "outbound_type"
+            ],
+            "properties": {
+              "location_id": {
+                "$ref": "#/definitions/properties/location_id"
+              },
+              "country": {
+                "$ref": "#/definitions/properties/country"
+              },
+              "product_id": {
+                "$ref": "#/definitions/properties/product_id"
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "quantity": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/quantity"
+                  }
+                ],
+                "description": "Cantidad que se intentó sacar, en `unit`."
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "available_quantity": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Stock disponible en ese momento, en `unit`."
+              },
+              "outbound_type": {
+                "type": "string",
+                "enum": [
+                  "consumption",
+                  "waste"
+                ],
+                "description": "Tipo de salida intentada."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "outbound_order_rejected",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "location_id": 3,
+              "country": "CO",
+              "product_id": 12,
+              "product_category": "proteína",
+              "quantity": 60,
+              "unit": "kg",
+              "currency": "COP",
+              "available_quantity": 52,
+              "outbound_type": "consumption"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "product_created": {
+        "title": "product_created",
+        "description": "Se da de alta un producto en el catálogo de inventario.",
+        "x-classification": "oportunidad",
+        "x-category": "inventario",
+        "x-emitter": "api",
+        "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/products`.",
+        "x-pii": "Ninguno. El nombre de un ingrediente no es un dato personal.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Revisar duplicados del catálogo es una tarea periódica de Compras."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "product_created"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "product_id",
+              "product_category",
+              "country",
+              "unit",
+              "product_name"
+            ],
+            "properties": {
+              "product_id": {
+                "$ref": "#/definitions/properties/product_id"
+              },
+              "product_category": {
+                "$ref": "#/definitions/properties/product_category"
+              },
+              "country": {
+                "$ref": "#/definitions/properties/country"
+              },
+              "unit": {
+                "$ref": "#/definitions/properties/unit"
+              },
+              "product_name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "description": "Nombre del producto, para detectar duplicados."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "product_created",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "product_id": 157,
+              "product_category": "salsa",
+              "country": "US",
+              "unit": "litro",
+              "product_name": "House chimichurri"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "login_succeeded": {
+        "title": "login_succeeded",
+        "description": "Un usuario inicia sesión.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Cuando `POST /api/v1/auth/login` emite un token.",
+        "x-pii": "`userId` es un identificador seudónimo (UUID). No se guarda el email.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Planificar capacitación y ventanas de mantenimiento usa patrones de semanas."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "login_succeeded"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "user_role"
+            ],
+            "properties": {
+              "user_role": {
+                "$ref": "#/definitions/properties/user_role"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "login_succeeded",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "user_role": "manager"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "login_failed": {
+        "title": "login_failed",
+        "description": "Un intento de inicio de sesión falla.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Cuando `POST /api/v1/auth/login` responde 401 `invalid_credentials` o 403 `inactive_user`.",
+        "x-pii": "**Sí (sanitizado).** El email nunca se emite: va como `account_fingerprint` (HMAC truncado). La IP va truncada (`client_network`). `userId` es `null` aunque la cuenta exista, para no revelar qué emails tienen cuenta.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un ataque de fuerza bruta se detiene en minutos o no se detiene: la decisión (bloqueo temporal) solo sirve si llega a tiempo.",
+          "throttle": "Sin muestreo: cada intento cuenta para detectar la ráfaga. Si un mismo `client_network` supera 60 eventos por minuto, el emisor los sigue enviando todos, agrupados en lotes de 1 segundo."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "login_failed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "failure_reason",
+              "account_fingerprint",
+              "client_network"
+            ],
+            "properties": {
+              "failure_reason": {
+                "type": "string",
+                "enum": [
+                  "invalid_credentials",
+                  "inactive_user"
+                ],
+                "description": "Motivo del rechazo."
+              },
+              "account_fingerprint": {
+                "$ref": "#/definitions/properties/account_fingerprint"
+              },
+              "client_network": {
+                "$ref": "#/definitions/properties/client_network"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": null,
+            "event_type": "login_failed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "failure_reason": "invalid_credentials",
+              "account_fingerprint": "9f86d081884c7d65",
+              "client_network": "203.0.113.0/24"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "session_expired": {
+        "title": "session_expired",
+        "description": "Una petición llega con una sesión caducada.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Cuando la dependencia de autenticación responde 401 `token_expired`.",
+        "x-pii": "`userId` sale del `sub` del token caducado (la firma es válida). No se guarda el token.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Ajustar la duración del token es una decisión de configuración que se toma con semanas de datos.",
+          "throttle": "Uno por token: varias peticiones en paralelo con el mismo token caducado (resumen y listado) emiten un solo evento por (`userId`, `iat`) en 60 s."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "session_expired"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "route",
+              "token_age_minutes"
+            ],
+            "properties": {
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "token_age_minutes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Minutos desde la emisión del token (`iat`)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "session_expired",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "route": "/api/v1/inventory/orders",
+              "token_age_minutes": 61
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "auth_token_rejected": {
+        "title": "auth_token_rejected",
+        "description": "Una petición llega con un token inválido o revocado.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Cuando la dependencia de autenticación responde 401 `invalid_token` o `session_revoked`.",
+        "x-pii": "`userId` es el `sub` solo si el token está revocado (firma válida); con `invalid_token` es `null`. No se guarda el token.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Tokens manipulados o sesiones revocadas que insisten son un posible incidente de seguridad: investigar y rotar `SECRET_KEY` no puede esperar al día siguiente.",
+          "throttle": "Uno por token y motivo cada 60 s (las peticiones en paralelo comparten token)."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "auth_token_rejected"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "rejection_reason",
+              "route"
+            ],
+            "properties": {
+              "rejection_reason": {
+                "type": "string",
+                "enum": [
+                  "invalid_token",
+                  "session_revoked"
+                ],
+                "description": "Motivo del rechazo."
+              },
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "auth_token_rejected",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "rejection_reason": "session_revoked",
+              "route": "/api/v1/auth/me"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "logout_completed": {
+        "title": "logout_completed",
+        "description": "El usuario cierra sesión.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "browser",
+        "x-trigger": "Al pulsar \"Cerrar sesión\" en el menú de la cuenta, antes de borrar el token.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "El cierre automático por inactividad se decide con el patrón de semanas."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "logout_completed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "route",
+              "session_duration_seconds"
+            ],
+            "properties": {
+              "route": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/route"
+                  }
+                ],
+                "description": "Vista desde la que se cerró la sesión."
+              },
+              "session_duration_seconds": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Segundos desde el inicio de la sesión del navegador."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "logout_completed",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "route": "/inventario/ordenes",
+              "session_duration_seconds": 5420
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "user_registered": {
+        "title": "user_registered",
+        "description": "Se crea una cuenta por autorregistro.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Tras crear la cuenta con `POST /api/v1/users`.",
+        "x-pii": "`userId` es `null` (la petición no está autenticada); la cuenta nueva va como `new_user_id` (seudónimo). No se guarda el email.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Con el registro abierto, una cuenta creada por alguien ajeno ya puede leer el inventario: hay que poder revisarla y desactivarla en minutos."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "user_registered"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "new_user_id",
+              "user_role"
+            ],
+            "properties": {
+              "new_user_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "description": "UUID de la cuenta creada."
+              },
+              "user_role": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/user_role"
+                  }
+                ],
+                "description": "Rol asignado (siempre `user` en el autorregistro)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": null,
+            "event_type": "user_registered",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "new_user_id": "3f1c2a9e-8b7d-4c6e-9a1b-2d3e4f5a6b7c",
+              "user_role": "user"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "user_access_changed": {
+        "title": "user_access_changed",
+        "description": "Cambia el acceso de una cuenta.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Tras `PUT /api/v1/users/{id}` que cambia `role` o `is_active`, o tras `DELETE /api/v1/users/{id}`.",
+        "x-pii": "`target_user_id` es seudónimo (UUID). No se guardan emails.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Una concesión de administrador fuera de proceso es una escalada de privilegios: se revisa en el momento."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "user_access_changed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "target_user_id",
+              "change",
+              "actor_role",
+              "self_change"
+            ],
+            "properties": {
+              "target_user_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "description": "UUID de la cuenta afectada."
+              },
+              "change": {
+                "type": "string",
+                "enum": [
+                  "role_changed",
+                  "activated",
+                  "deactivated",
+                  "deleted"
+                ],
+                "description": "Qué cambió."
+              },
+              "previous_role": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/user_role"
+                  }
+                ],
+                "description": "Rol anterior (en `role_changed`)."
+              },
+              "new_role": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/user_role"
+                  }
+                ],
+                "description": "Rol nuevo (en `role_changed`)."
+              },
+              "actor_role": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/user_role"
+                  }
+                ],
+                "description": "Rol de quien hace el cambio."
+              },
+              "self_change": {
+                "type": "boolean",
+                "description": "`true` si la cuenta afectada es la del propio actor."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "user_access_changed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "target_user_id": "3f1c2a9e-8b7d-4c6e-9a1b-2d3e4f5a6b7c",
+              "change": "role_changed",
+              "previous_role": "user",
+              "new_role": "manager",
+              "actor_role": "admin",
+              "self_change": false
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "password_reset_requested": {
+        "title": "password_reset_requested",
+        "description": "Se solicita un enlace de recuperación de contraseña.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Al recibir `POST /api/v1/auth/forgot-password`, exista o no la cuenta (la respuesta al usuario es neutra).",
+        "x-pii": "**Sí (sanitizado).** El email va como `account_fingerprint`; la IP, truncada. `account_found` solo se usa internamente y nunca llega al usuario.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Una ráfaga contra cuentas inexistentes (enumeración) solo se frena si se detecta mientras ocurre."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "password_reset_requested"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "account_fingerprint",
+              "account_found",
+              "client_network"
+            ],
+            "properties": {
+              "account_fingerprint": {
+                "$ref": "#/definitions/properties/account_fingerprint"
+              },
+              "account_found": {
+                "type": "boolean",
+                "description": "`true` si el email tiene cuenta activa."
+              },
+              "client_network": {
+                "$ref": "#/definitions/properties/client_network"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": null,
+            "event_type": "password_reset_requested",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "account_fingerprint": "9f86d081884c7d65",
+              "account_found": true,
+              "client_network": "203.0.113.0/24"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "password_reset_completed": {
+        "title": "password_reset_completed",
+        "description": "Una contraseña se restablece con un enlace de recuperación.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Tras el cambio de contraseña de `POST /api/v1/auth/reset-password`.",
+        "x-pii": "`userId` es el dueño del enlace. No se guarda el enlace ni el token.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Simplificar el flujo de recuperación se decide con la tasa semanal."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "password_reset_completed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "link_age_minutes"
+            ],
+            "properties": {
+              "link_age_minutes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Minutos desde que se emitió el enlace."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "password_reset_completed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "link_age_minutes": 7
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "password_reset_link_rejected": {
+        "title": "password_reset_link_rejected",
+        "description": "Un enlace de recuperación se rechaza.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Cuando `POST /api/v1/auth/reset-password/validate` o `/reset-password` responde con `invalid_reset_token`, `reset_token_expired` o `reset_token_used`.",
+        "x-pii": "Ninguno. No se guarda el token ni el email.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Ajustar la caducidad del enlace o el texto del correo es una decisión de configuración."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "password_reset_link_rejected"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "rejection_reason",
+              "stage"
+            ],
+            "properties": {
+              "rejection_reason": {
+                "type": "string",
+                "enum": [
+                  "invalid_reset_token",
+                  "reset_token_expired",
+                  "reset_token_used"
+                ],
+                "description": "Motivo del rechazo."
+              },
+              "stage": {
+                "type": "string",
+                "enum": [
+                  "validate",
+                  "reset"
+                ],
+                "description": "`validate` (al abrir el enlace) o `reset` (al enviar la contraseña)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": null,
+            "event_type": "password_reset_link_rejected",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "rejection_reason": "reset_token_expired",
+              "stage": "validate"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "password_changed": {
+        "title": "password_changed",
+        "description": "Un usuario cambia su propia contraseña.",
+        "x-classification": "oportunidad",
+        "x-category": "autenticacion",
+        "x-emitter": "api",
+        "x-trigger": "Tras `POST /api/v1/auth/change-password` (también al editar `password` con `PUT /api/v1/users/{id}`).",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Exigir o no la renovación periódica es una política, no una reacción."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "password_changed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "channel"
+            ],
+            "properties": {
+              "days_since_last_change": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Días desde el cambio anterior (`password_changed_at`); ausente si nunca cambió."
+              },
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "change_password",
+                  "user_update"
+                ],
+                "description": "Ruta usada."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "password_changed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "days_since_last_change": 94,
+              "channel": "change_password"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "page_viewed": {
+        "title": "page_viewed",
+        "description": "El backoffice muestra una vista.",
+        "x-classification": "oportunidad",
+        "x-category": "navegacion",
+        "x-emitter": "browser",
+        "x-trigger": "Al mostrar una ruta del backoffice, en la carga inicial y en cada navegación sin recarga.",
+        "x-pii": "Ninguno. La ruta va como plantilla (`/talento/candidates/[id]`), sin ids reales ni query string. `userId` es `null` en las vistas públicas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Reordenar el menú o retirar secciones se decide con semanas de uso.",
+          "throttle": "Se ignora una segunda vista de la misma ruta en menos de 1 s (doble montaje de React en desarrollo, recargas dobles)."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "page_viewed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "route",
+              "navigation_type"
+            ],
+            "properties": {
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "previous_route": {
+                "type": "string",
+                "pattern": "^/[A-Za-z0-9_\\-/\\[\\]]*$",
+                "maxLength": 120,
+                "description": "Ruta anterior (plantilla); ausente en la carga inicial."
+              },
+              "navigation_type": {
+                "type": "string",
+                "enum": [
+                  "initial",
+                  "client"
+                ],
+                "description": "`initial` (carga completa) o `client` (sin recarga)."
+              },
+              "user_role": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/user_role"
+                  }
+                ],
+                "description": "Rol del usuario en las vistas protegidas."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "page_viewed",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "route": "/inventario/ordenes",
+              "previous_route": "/inventario/ingredientes",
+              "navigation_type": "client",
+              "user_role": "manager"
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "form_validation_failed": {
+        "title": "form_validation_failed",
+        "description": "Un formulario bloquea el envío por errores de validación.",
+        "x-classification": "oportunidad",
+        "x-category": "navegacion",
+        "x-emitter": "browser",
+        "x-trigger": "Al pulsar enviar con campos inválidos según la validación del navegador.",
+        "x-pii": "Ninguno. Solo nombres de campo, nunca los valores escritos.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Rediseñar campos se decide con el acumulado.",
+          "throttle": "Uno por formulario cada 2 s (doble clic en enviar)."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "form_validation_failed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "form_id",
+              "invalid_fields",
+              "error_count"
+            ],
+            "properties": {
+              "form_id": {
+                "$ref": "#/definitions/properties/form_id"
+              },
+              "invalid_fields": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/field_names"
+                  }
+                ],
+                "description": "Campos con error."
+              },
+              "error_count": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Número de campos con error."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "form_validation_failed",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "form_id": "outbound_order",
+              "invalid_fields": [
+                "quantity",
+                "location_id"
+              ],
+              "error_count": 2
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "form_abandoned": {
+        "title": "form_abandoned",
+        "description": "Un formulario empezado se abandona sin enviar.",
+        "x-classification": "oportunidad",
+        "x-category": "navegacion",
+        "x-emitter": "browser",
+        "x-trigger": "Al salir de la vista, cerrar el modal o cerrar la pestaña con al menos un campo modificado y sin envío correcto.",
+        "x-pii": "Ninguno. Solo nombres de campo.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Simplificar formularios se decide con el acumulado.",
+          "throttle": "Uno por formulario abierto: se emite una sola vez, al salir."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "form_abandoned"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "form_id",
+              "last_field",
+              "filled_field_count",
+              "time_in_form_seconds",
+              "exit"
+            ],
+            "properties": {
+              "form_id": {
+                "$ref": "#/definitions/properties/form_id"
+              },
+              "last_field": {
+                "type": "string",
+                "pattern": "^[a-z_]+$",
+                "maxLength": 40,
+                "description": "Último campo modificado."
+              },
+              "filled_field_count": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Campos modificados."
+              },
+              "time_in_form_seconds": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Segundos desde el primer cambio."
+              },
+              "exit": {
+                "type": "string",
+                "enum": [
+                  "navigation",
+                  "modal_closed",
+                  "tab_closed"
+                ],
+                "description": "Cómo se salió."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "form_abandoned",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "form_id": "inbound_order",
+              "last_field": "supplier_name",
+              "filled_field_count": 3,
+              "time_in_form_seconds": 48,
+              "exit": "navigation"
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "list_filter_applied": {
+        "title": "list_filter_applied",
+        "description": "Se cambia un filtro de una lista.",
+        "x-classification": "oportunidad",
+        "x-category": "navegacion",
+        "x-emitter": "browser",
+        "x-trigger": "Al aplicarse un filtro (en el texto, cuando deja de escribirse durante 500 ms).",
+        "x-pii": "Ninguno. El texto de búsqueda no se emite: solo su longitud.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Mover filtros a la API se decide con el uso de semanas.",
+          "throttle": "Debounce de 500 ms en los filtros de texto: solo se emite cuando se deja de escribir."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "list_filter_applied"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "list_id",
+              "filter_name",
+              "result_count"
+            ],
+            "properties": {
+              "list_id": {
+                "$ref": "#/definitions/properties/list_id"
+              },
+              "filter_name": {
+                "type": "string",
+                "enum": [
+                  "kind",
+                  "ingredient",
+                  "status",
+                  "origin",
+                  "branch",
+                  "country",
+                  "category"
+                ],
+                "description": "Filtro cambiado."
+              },
+              "filter_value": {
+                "type": "string",
+                "pattern": "^[a-z_A-Z]+$",
+                "maxLength": 40,
+                "description": "Valor elegido en los filtros de lista cerrada (p. ej. `exit`, `open`); ausente en los de texto y al quitar el filtro."
+              },
+              "query_length": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Longitud del texto en los filtros de texto."
+              },
+              "result_count": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Filas que quedan con los filtros activos."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "list_filter_applied",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "list_id": "order_history",
+              "filter_name": "kind",
+              "filter_value": "exit",
+              "result_count": 13317
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "list_page_extended": {
+        "title": "list_page_extended",
+        "description": "Se piden más filas de una lista larga.",
+        "x-classification": "oportunidad",
+        "x-category": "navegacion",
+        "x-emitter": "browser",
+        "x-trigger": "Al pulsar \"Mostrar más\".",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Fijar las filas iniciales o añadir paginación se decide con el acumulado."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "list_page_extended"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "list_id",
+              "visible_rows",
+              "total_rows",
+              "filters_active"
+            ],
+            "properties": {
+              "list_id": {
+                "$ref": "#/definitions/properties/list_id"
+              },
+              "visible_rows": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Filas visibles tras el clic."
+              },
+              "total_rows": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Filas de la lista con los filtros activos."
+              },
+              "filters_active": {
+                "type": "boolean",
+                "description": "`true` si hay algún filtro aplicado."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "list_page_extended",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "list_id": "incident_manager",
+              "visible_rows": 100,
+              "total_rows": 10097,
+              "filters_active": false
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "api_latency_recorded": {
+        "title": "api_latency_recorded",
+        "description": "Duración de una petición a la API.",
+        "x-classification": "oportunidad",
+        "x-category": "rendimiento",
+        "x-emitter": "api",
+        "x-trigger": "Al terminar cada petición, en el middleware de timing (`app/core/timing.py`), con el muestreo de la estrategia de entrega.",
+        "x-pii": "Ninguno. La ruta va como plantilla. `userId` es `null` en las rutas públicas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "Decidir dónde cachear o fijar objetivos de latencia usa percentiles por hora y por día. Las caídas, que sí son urgentes, las detectan `server_error_occurred` y `api_connection_failed` en stream.",
+          "throttle": "**Muestreo:** se emite siempre si `duration_ms` ≥ 300 o `status_code` ≥ 400; el resto, 1 de cada 10 peticiones, elegidas por el `requestId` (determinista). `sample_rate` indica la tasa aplicada (1 o 0,1) para reconstruir los recuentos."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "api_latency_recorded"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "method",
+              "route",
+              "status_code",
+              "duration_ms",
+              "sample_rate"
+            ],
+            "properties": {
+              "method": {
+                "$ref": "#/definitions/properties/method"
+              },
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "status_code": {
+                "$ref": "#/definitions/properties/status_code"
+              },
+              "duration_ms": {
+                "$ref": "#/definitions/properties/duration_ms"
+              },
+              "cache": {
+                "type": "string",
+                "enum": [
+                  "HIT",
+                  "MISS"
+                ],
+                "description": "Resultado de la caché en las rutas cacheadas (`X-Cache`)."
+              },
+              "sample_rate": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "description": "Tasa de muestreo aplicada a esta medición: 1 (siempre: lenta o con error) o 0.1 (1 de cada 10)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "api_latency_recorded",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "method": "GET",
+              "route": "/api/v1/inventory/orders",
+              "status_code": 200,
+              "duration_ms": 1.4,
+              "cache": "HIT",
+              "sample_rate": 0.1
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "page_performance_recorded": {
+        "title": "page_performance_recorded",
+        "description": "Métricas de carga de una vista.",
+        "x-classification": "oportunidad",
+        "x-category": "rendimiento",
+        "x-emitter": "browser",
+        "x-trigger": "Al ocultarse la vista o salir de ella (cuando las métricas son definitivas).",
+        "x-pii": "Ninguno. No se emite el user agent completo: solo la clase de dispositivo.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Priorizar optimizaciones y fijar presupuestos de rendimiento usa la distribución de días.",
+          "throttle": "Uno por vista mostrada."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "page_performance_recorded"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "route",
+              "device_class"
+            ],
+            "properties": {
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "lcp_ms": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Largest Contentful Paint, en ms."
+              },
+              "cls": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Cumulative Layout Shift."
+              },
+              "inp_ms": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Interaction to Next Paint, en ms (si hubo interacción)."
+              },
+              "data_ready_ms": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Ms desde la navegación hasta que la vista muestra sus datos (fin de la carga de `useAsyncData`)."
+              },
+              "device_class": {
+                "type": "string",
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop"
+                ],
+                "description": "Clase por ancho de pantalla: `mobile` (< 768 px), `tablet` (768–1023 px) o `desktop`."
+              },
+              "effective_connection": {
+                "type": "string",
+                "enum": [
+                  "slow-2g",
+                  "2g",
+                  "3g",
+                  "4g"
+                ],
+                "description": "`navigator.connection.effectiveType`, si el navegador lo ofrece."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "page_performance_recorded",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "route": "/inventario/ordenes",
+              "lcp_ms": 820,
+              "cls": 0,
+              "inp_ms": 40,
+              "data_ready_ms": 172,
+              "device_class": "tablet",
+              "effective_connection": "4g"
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "cache_stats_recorded": {
+        "title": "cache_stats_recorded",
+        "description": "Resumen de aciertos y fallos de una caché.",
+        "x-classification": "oportunidad",
+        "x-category": "rendimiento",
+        "x-emitter": "api",
+        "x-trigger": "Cada 5 minutos por cada caché del inventario, con los contadores de esa ventana.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "Ajustar TTL es una decisión de configuración con tendencias de horas.",
+          "throttle": "Ya es un agregado: uno por caché cada 5 minutos."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "cache_stats_recorded"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "cache_name",
+              "hits",
+              "misses",
+              "invalidations",
+              "window_seconds"
+            ],
+            "properties": {
+              "cache_name": {
+                "type": "string",
+                "enum": [
+                  "inventory_products",
+                  "inventory_orders"
+                ],
+                "description": "Caché."
+              },
+              "hits": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Aciertos en la ventana."
+              },
+              "misses": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Fallos en la ventana."
+              },
+              "invalidations": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Invalidaciones en la ventana."
+              },
+              "window_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Duración de la ventana."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": null,
+            "userId": null,
+            "event_type": "cache_stats_recorded",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "cache_name": "inventory_orders",
+              "hits": 412,
+              "misses": 9,
+              "invalidations": 7,
+              "window_seconds": 300
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "api_error_returned": {
+        "title": "api_error_returned",
+        "description": "La API responde con un error 4xx.",
+        "x-classification": "oportunidad",
+        "x-category": "errores",
+        "x-emitter": "api",
+        "x-trigger": "Al responder cualquier 4xx con el formato `{\"error\": {\"code\", \"message\"}}`.",
+        "x-pii": "Ninguno. No se guarda el `message` ni el cuerpo; solo el código. `userId` es `null` si la petición no estaba autenticada.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "Corregir flujos que provocan errores evitables se decide con el acumulado; los errores graves (500) van por su propio evento en stream.",
+          "throttle": "Un mismo (`route`, `error_code`, `userId`) se emite como máximo una vez cada 10 s: un script que repite la misma petición fallida no multiplica el volumen."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "api_error_returned"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "method",
+              "route",
+              "status_code",
+              "error_code"
+            ],
+            "properties": {
+              "method": {
+                "$ref": "#/definitions/properties/method"
+              },
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "status_code": {
+                "type": "integer",
+                "minimum": 400,
+                "maximum": 499,
+                "description": "Código 4xx."
+              },
+              "error_code": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]+$",
+                "maxLength": 40,
+                "description": "`error.code` de la respuesta (p. ej. `duplicate_sku`, `http_405`)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "api_error_returned",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "method": "POST",
+              "route": "/api/v1/inventory/products",
+              "status_code": 409,
+              "error_code": "duplicate_sku"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "server_error_occurred": {
+        "title": "server_error_occurred",
+        "description": "Una excepción no controlada produce un 500.",
+        "x-classification": "oportunidad",
+        "x-category": "errores",
+        "x-emitter": "api",
+        "x-trigger": "Al responder 500 `internal_error`.",
+        "x-pii": "Ninguno. No se emite el mensaje de la excepción (puede contener datos): solo su tipo y una huella.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un 500 es un fallo de la API que hay que atender ya: puede estar impidiendo registrar órdenes en todos los locales.",
+          "throttle": "Una vez por `error_fingerprint` cada 60 s, con el recuento en el log del emisor."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "server_error_occurred"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "method",
+              "route",
+              "exception_type",
+              "error_fingerprint"
+            ],
+            "properties": {
+              "method": {
+                "$ref": "#/definitions/properties/method"
+              },
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "exception_type": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$",
+                "maxLength": 80,
+                "description": "Clase de la excepción (p. ej. `OperationalError`)."
+              },
+              "error_fingerprint": {
+                "$ref": "#/definitions/properties/error_fingerprint"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "server_error_occurred",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "method": "GET",
+              "route": "/api/v1/inventory/orders",
+              "exception_type": "OperationalError",
+              "error_fingerprint": "4b227777d4dd1fc6"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "frontend_error_captured": {
+        "title": "frontend_error_captured",
+        "description": "Un error de JavaScript no controlado en el backoffice.",
+        "x-classification": "oportunidad",
+        "x-category": "errores",
+        "x-emitter": "browser",
+        "x-trigger": "En `window.onerror`, en `unhandledrejection` y al mostrarse la pantalla de error de una vista (`error.tsx`).",
+        "x-pii": "**Posible (sanitizado).** El mensaje se recorta a 200 caracteres y se le sustituyen emails, números de 4 o más cifras y UUID por `[redacted]` antes de emitirlo.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "La decisión es priorizar correcciones por número de sesiones afectadas, con datos de horas. Un despliegue roto se ve también en `api_error_returned` y en las consultas de soporte.",
+          "throttle": "Una vez por `error_fingerprint` y sesión cada 60 s, y como máximo 20 por sesión (un error en bucle no inunda la telemetría)."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "frontend_error_captured"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "browser"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "route",
+              "error_name",
+              "message_sanitized",
+              "error_fingerprint",
+              "source"
+            ],
+            "properties": {
+              "route": {
+                "$ref": "#/definitions/properties/route"
+              },
+              "error_name": {
+                "type": "string",
+                "maxLength": 60,
+                "description": "Tipo de error (p. ej. `TypeError`)."
+              },
+              "message_sanitized": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Mensaje recortado y saneado."
+              },
+              "error_fingerprint": {
+                "$ref": "#/definitions/properties/error_fingerprint"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "window_error",
+                  "unhandled_rejection",
+                  "error_boundary"
+                ],
+                "description": "Dónde se capturó."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "frontend_error_captured",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "route": "/gestor-incidencias",
+              "error_name": "TypeError",
+              "message_sanitized": "Cannot read properties of undefined (reading 'status')",
+              "error_fingerprint": "e7f6c011776e8db7",
+              "source": "error_boundary"
+            },
+            "source": "browser",
+            "environment": "production"
+          }
+        ]
+      },
+      "api_connection_failed": {
+        "title": "api_connection_failed",
+        "description": "El backoffice no llega a la API.",
+        "x-classification": "oportunidad",
+        "x-category": "errores",
+        "x-emitter": "bff",
+        "x-trigger": "Cuando el intermediario `app/api/[...path]/route.ts` responde 502 `api_unavailable` o 500 `api_not_configured`.",
+        "x-pii": "Ninguno. `userId` es `null`: el BFF no decodifica el token.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Sin API, ningún local puede registrar órdenes: es un incidente de disponibilidad que se abre en minutos.",
+          "throttle": "Una vez por sesión cada 30 s mientras la API no responde."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "api_connection_failed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "bff"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "method",
+              "route",
+              "failure",
+              "status_code",
+              "duration_ms"
+            ],
+            "properties": {
+              "method": {
+                "$ref": "#/definitions/properties/method"
+              },
+              "route": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/route"
+                  }
+                ],
+                "description": "Plantilla de la ruta de la API que se intentó."
+              },
+              "failure": {
+                "type": "string",
+                "enum": [
+                  "api_unavailable",
+                  "api_not_configured"
+                ],
+                "description": "Motivo."
+              },
+              "status_code": {
+                "type": "integer",
+                "enum": [
+                  500,
+                  502
+                ],
+                "description": "502 o 500."
+              },
+              "duration_ms": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/duration_ms"
+                  }
+                ],
+                "description": "Ms hasta el fallo."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "api_connection_failed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "method": "GET",
+              "route": "/api/v1/inventory/products",
+              "failure": "api_unavailable",
+              "status_code": 502,
+              "duration_ms": 3012
+            },
+            "source": "bff",
+            "environment": "production"
+          }
+        ]
+      },
+      "email_delivery_failed": {
+        "title": "email_delivery_failed",
+        "description": "Un correo no sale.",
+        "x-classification": "oportunidad",
+        "x-category": "errores",
+        "x-emitter": "process",
+        "x-trigger": "En la tarea en segundo plano de envío (`send_safely`) cuando el proveedor falla o el envío está desactivado (falta `RESEND_API_KEY`).",
+        "x-pii": "Ninguno. Nunca se emiten el destinatario, el asunto ni el enlace.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Hay un usuario esperando su enlace de recuperación ahora mismo; una configuración rota afecta a todos los siguientes."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "email_delivery_failed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "process"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "email_kind",
+              "failure"
+            ],
+            "properties": {
+              "email_kind": {
+                "type": "string",
+                "enum": [
+                  "password_reset"
+                ],
+                "description": "Tipo de correo."
+              },
+              "failure": {
+                "type": "string",
+                "enum": [
+                  "provider_error",
+                  "disabled"
+                ],
+                "description": "`provider_error` (Resend respondió con error) o `disabled` (sin clave)."
+              },
+              "provider_status": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 599,
+                "description": "Código HTTP del proveedor, si respondió."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": null,
+            "userId": null,
+            "event_type": "email_delivery_failed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "email_kind": "password_reset",
+              "failure": "provider_error",
+              "provider_status": 403
+            },
+            "source": "process",
+            "environment": "production"
+          }
+        ]
+      },
+      "supplier_created": {
+        "title": "supplier_created",
+        "description": "Se da de alta un proveedor.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras `POST /api/v1/suppliers`.",
+        "x-pii": "Ninguno. No se emiten los datos de contacto del proveedor.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Consolidar categorías de proveedores es una decisión trimestral."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "supplier_created"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "supplier_id",
+              "country",
+              "categories",
+              "currency",
+              "status"
+            ],
+            "properties": {
+              "supplier_id": {
+                "$ref": "#/definitions/properties/supplier_id"
+              },
+              "country": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/country"
+                  }
+                ],
+                "description": "País del proveedor (`Colombia`→`CO`, `USA`→`US`)."
+              },
+              "categories": {
+                "$ref": "#/definitions/properties/supplier_categories"
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "status": {
+                "$ref": "#/definitions/properties/supplier_status"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "supplier_created",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "supplier_id": 9,
+              "country": "US",
+              "categories": [
+                "carne"
+              ],
+              "currency": "USD",
+              "status": "active"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "supplier_rate_updated": {
+        "title": "supplier_rate_updated",
+        "description": "Cambia la tarifa de un proveedor.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras `PATCH /api/v1/suppliers/{id}/rate`.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Renegociar se planifica con el histórico de cambios; la tarifa ya está registrada."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "supplier_rate_updated"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "supplier_id",
+              "country",
+              "currency",
+              "previous_rate",
+              "new_rate",
+              "change_pct"
+            ],
+            "properties": {
+              "supplier_id": {
+                "$ref": "#/definitions/properties/supplier_id"
+              },
+              "country": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/country"
+                  }
+                ],
+                "description": "País del proveedor."
+              },
+              "currency": {
+                "$ref": "#/definitions/properties/currency"
+              },
+              "previous_rate": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Tarifa anterior por unidad, en `currency`."
+              },
+              "new_rate": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Tarifa nueva por unidad, en `currency`."
+              },
+              "change_pct": {
+                "type": "number",
+                "description": "(new_rate − previous_rate) / previous_rate × 100."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "supplier_rate_updated",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "supplier_id": 9,
+              "country": "US",
+              "currency": "USD",
+              "previous_rate": 8.5,
+              "new_rate": 9.35,
+              "change_pct": 10.0
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "supplier_status_changed": {
+        "title": "supplier_status_changed",
+        "description": "Un proveedor se suspende o se reactiva.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras `PATCH /api/v1/suppliers/{id}/status` que cambia el estado.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Buscar proveedores alternativos se decide con la cobertura por categoría, revisada a diario."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "supplier_status_changed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "supplier_id",
+              "country",
+              "categories",
+              "previous_status",
+              "new_status"
+            ],
+            "properties": {
+              "supplier_id": {
+                "$ref": "#/definitions/properties/supplier_id"
+              },
+              "country": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/country"
+                  }
+                ],
+                "description": "País del proveedor."
+              },
+              "categories": {
+                "$ref": "#/definitions/properties/supplier_categories"
+              },
+              "previous_status": {
+                "$ref": "#/definitions/properties/supplier_status"
+              },
+              "new_status": {
+                "$ref": "#/definitions/properties/supplier_status"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "supplier_status_changed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "supplier_id": 9,
+              "country": "US",
+              "categories": [
+                "carne"
+              ],
+              "previous_status": "active",
+              "new_status": "suspended"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "supplier_deleted": {
+        "title": "supplier_deleted",
+        "description": "Se borra un proveedor.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras `DELETE /api/v1/suppliers/{id}`.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Revisar si el borrado debió ser suspensión es una tarea periódica."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "supplier_deleted"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "supplier_id",
+              "country",
+              "categories",
+              "status_at_deletion"
+            ],
+            "properties": {
+              "supplier_id": {
+                "$ref": "#/definitions/properties/supplier_id"
+              },
+              "country": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/properties/country"
+                  }
+                ],
+                "description": "País del proveedor."
+              },
+              "categories": {
+                "$ref": "#/definitions/properties/supplier_categories"
+              },
+              "status_at_deletion": {
+                "$ref": "#/definitions/properties/supplier_status"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "supplier_deleted",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "supplier_id": 9,
+              "country": "US",
+              "categories": [
+                "carne"
+              ],
+              "status_at_deletion": "suspended"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "incident_created": {
+        "title": "incident_created",
+        "description": "Se registra una incidencia.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras `POST /api/v1/incidents`.",
+        "x-pii": "Ninguno. No se emiten el título ni la descripción (texto libre).",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Planificar visitas y mantenimiento usa el acumulado por sede. La atención de cada incidencia ya ocurre en el gestor, no en la telemetría."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "incident_created"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "incident_id",
+              "category",
+              "origin",
+              "branch",
+              "status"
+            ],
+            "properties": {
+              "incident_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Id de la incidencia."
+              },
+              "category": {
+                "$ref": "#/definitions/properties/incident_category"
+              },
+              "origin": {
+                "$ref": "#/definitions/properties/incident_origin"
+              },
+              "branch": {
+                "$ref": "#/definitions/properties/branch"
+              },
+              "status": {
+                "$ref": "#/definitions/properties/incident_status"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "incident_created",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "incident_id": 10098,
+              "category": "equipment_failure",
+              "branch": "medellin_centro",
+              "origin": "branch",
+              "status": "open"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "incident_status_changed": {
+        "title": "incident_status_changed",
+        "description": "Cambia el estado de una incidencia.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras `PATCH /api/v1/incidents/{id}/status`.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Los tiempos objetivo de respuesta se fijan y revisan con datos de semanas."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "incident_status_changed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "incident_id",
+              "category",
+              "branch",
+              "previous_status",
+              "new_status",
+              "minutes_since_created",
+              "minutes_in_previous_status"
+            ],
+            "properties": {
+              "incident_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Id de la incidencia."
+              },
+              "category": {
+                "$ref": "#/definitions/properties/incident_category"
+              },
+              "branch": {
+                "$ref": "#/definitions/properties/branch"
+              },
+              "previous_status": {
+                "$ref": "#/definitions/properties/incident_status"
+              },
+              "new_status": {
+                "$ref": "#/definitions/properties/incident_status"
+              },
+              "minutes_since_created": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Minutos desde `created_at`."
+              },
+              "minutes_in_previous_status": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Minutos desde el cambio de estado anterior (`updated_at`)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "incident_status_changed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "incident_id": 10098,
+              "category": "equipment_failure",
+              "branch": "medellin_centro",
+              "previous_status": "open",
+              "new_status": "in_progress",
+              "minutes_since_created": 95,
+              "minutes_in_previous_status": 95
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "incident_transition_rejected": {
+        "title": "incident_transition_rejected",
+        "description": "Se rechaza un cambio de estado no permitido.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Cuando `PATCH /api/v1/incidents/{id}/status` responde 400 `invalid_transition`.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Revisar el ciclo de vida o la interfaz se decide con el acumulado."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "incident_transition_rejected"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "incident_id",
+              "current_status",
+              "requested_status"
+            ],
+            "properties": {
+              "incident_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Id de la incidencia."
+              },
+              "current_status": {
+                "$ref": "#/definitions/properties/incident_status"
+              },
+              "requested_status": {
+                "$ref": "#/definitions/properties/incident_status"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "incident_transition_rejected",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "incident_id": 812,
+              "current_status": "resolved",
+              "requested_status": "in_progress"
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "incident_report_analyzed": {
+        "title": "incident_report_analyzed",
+        "description": "Se analiza un CSV de incidentes.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras un análisis correcto de `POST /api/v1/incidents/analyze`.",
+        "x-pii": "Ninguno. No se emite el contenido del archivo ni su nombre.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "La capacitación por calidad de los reportes es periódica."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "incident_report_analyzed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "total_rows",
+              "valid_rows",
+              "invalid_rows",
+              "invalid_by_rule",
+              "file_size_bytes"
+            ],
+            "properties": {
+              "total_rows": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Filas del CSV."
+              },
+              "valid_rows": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Filas válidas."
+              },
+              "invalid_rows": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Filas inválidas."
+              },
+              "invalid_by_rule": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "missing_location": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "invalid_category": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "empty_description": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "missing_reporter": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "invalid_status": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "closed_without_score": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "score_out_of_range": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "description": "Filas inválidas por regla del analizador."
+              },
+              "file_size_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5242880,
+                "description": "Tamaño del archivo."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "incident_report_analyzed",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "total_rows": 100,
+              "valid_rows": 96,
+              "invalid_rows": 4,
+              "invalid_by_rule": {
+                "missing_location": 1,
+                "invalid_category": 2,
+                "score_out_of_range": 1
+              },
+              "file_size_bytes": 18430
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "incident_report_exported": {
+        "title": "incident_report_exported",
+        "description": "Se descarga el resumen del último análisis.",
+        "x-classification": "oportunidad",
+        "x-category": "negocio",
+        "x-emitter": "api",
+        "x-trigger": "Tras `GET /api/v1/incidents/results/export`.",
+        "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Mantener o sustituir la exportación se decide con meses de uso."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "incident_report_exported"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "api"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "analysis_age_minutes"
+            ],
+            "properties": {
+              "analysis_age_minutes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Minutos desde el análisis que se exporta."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+            "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+            "event_type": "incident_report_exported",
+            "schemaVersion": "1.0.0",
+            "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "properties": {
+              "analysis_age_minutes": 3
+            },
+            "source": "api",
+            "environment": "production"
+          }
+        ]
+      },
+      "api_instance_started": {
+        "title": "api_instance_started",
+        "description": "La API termina de arrancar.",
+        "x-classification": "oportunidad",
+        "x-category": "procesos",
+        "x-emitter": "process",
+        "x-trigger": "Al final del `lifespan` de `app/main.py`.",
+        "x-pii": "Ninguno. No se emite ningún valor de configuración, solo si cada función está activa.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un reinicio inesperado o un arranque con el correo desactivado en producción hay que verlo en el momento, antes de que lo noten los usuarios."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "api_instance_started"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "process"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "app_version",
+              "email_enabled",
+              "suppliers_seeded"
+            ],
+            "properties": {
+              "app_version": {
+                "type": "string",
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+                "description": "Versión de la API (`FastAPI.version`)."
+              },
+              "email_enabled": {
+                "type": "boolean",
+                "description": "`true` si hay `RESEND_API_KEY`."
+              },
+              "suppliers_seeded": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Proveedores sembrados al arrancar (0 si la tabla ya tenía datos)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": null,
+            "userId": null,
+            "event_type": "api_instance_started",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "app_version": "0.1.0",
+              "email_enabled": false,
+              "suppliers_seeded": 0
+            },
+            "source": "process",
+            "environment": "production"
+          }
+        ]
+      },
+      "data_seed_executed": {
+        "title": "data_seed_executed",
+        "description": "Un script carga o retira datos fuera de la API.",
+        "x-classification": "oportunidad",
+        "x-category": "procesos",
+        "x-emitter": "process",
+        "x-trigger": "Al terminar `uv run seed`, `uv run seed-inventory`, `scripts/seed_incidents.py` o `scripts/seed_volume.py`.",
+        "x-pii": "Ninguno. No se emiten las filas cargadas.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un script de carga ejecutado contra producción mete datos sin trazabilidad en los indicadores de negocio: hay que detectarlo y retirarlos antes del batch diario."
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/envelope"
+          }
+        ],
+        "properties": {
+          "event_type": {
+            "const": "data_seed_executed"
+          },
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "source": {
+            "const": "process"
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "script",
+              "mode",
+              "target",
+              "affected_rows",
+              "succeeded"
+            ],
+            "properties": {
+              "script": {
+                "type": "string",
+                "enum": [
+                  "seed_suppliers",
+                  "seed_inventory",
+                  "seed_incidents",
+                  "seed_volume"
+                ],
+                "description": "Script ejecutado."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "load",
+                  "clear"
+                ],
+                "description": "`load` o `clear` (`--clear`)."
+              },
+              "target": {
+                "type": "string",
+                "enum": [
+                  "tinydb",
+                  "supabase",
+                  "tinydb_and_supabase"
+                ],
+                "description": "Almacenamiento afectado."
+              },
+              "affected_rows": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Filas insertadas o borradas."
+              },
+              "succeeded": {
+                "type": "boolean",
+                "description": "`false` si terminó con error."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": [
+          {
+            "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+            "timestamp": "2026-11-18T17:36:46.123Z",
+            "sessionId": null,
+            "userId": null,
+            "event_type": "data_seed_executed",
+            "schemaVersion": "1.0.0",
+            "requestId": null,
+            "properties": {
+              "script": "seed_volume",
+              "mode": "load",
+              "target": "tinydb_and_supabase",
+              "affected_rows": 31133,
+              "succeeded": true
+            },
+            "source": "process",
+            "environment": "production"
+          }
+        ]
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/definitions/events/inbound_order_created"
+    },
+    {
+      "$ref": "#/definitions/events/outbound_order_created"
+    },
+    {
+      "$ref": "#/definitions/events/stock_waste_registered"
+    },
+    {
+      "$ref": "#/definitions/events/stock_threshold_triggered"
+    },
+    {
+      "$ref": "#/definitions/events/direct_stock_edit_rejected"
+    },
+    {
+      "$ref": "#/definitions/events/ingredient_price_variance_detected"
+    },
+    {
+      "$ref": "#/definitions/events/order_validation_failed"
+    },
+    {
+      "$ref": "#/definitions/events/outbound_order_rejected"
+    },
+    {
+      "$ref": "#/definitions/events/product_created"
+    },
+    {
+      "$ref": "#/definitions/events/login_succeeded"
+    },
+    {
+      "$ref": "#/definitions/events/login_failed"
+    },
+    {
+      "$ref": "#/definitions/events/session_expired"
+    },
+    {
+      "$ref": "#/definitions/events/auth_token_rejected"
+    },
+    {
+      "$ref": "#/definitions/events/logout_completed"
+    },
+    {
+      "$ref": "#/definitions/events/user_registered"
+    },
+    {
+      "$ref": "#/definitions/events/user_access_changed"
+    },
+    {
+      "$ref": "#/definitions/events/password_reset_requested"
+    },
+    {
+      "$ref": "#/definitions/events/password_reset_completed"
+    },
+    {
+      "$ref": "#/definitions/events/password_reset_link_rejected"
+    },
+    {
+      "$ref": "#/definitions/events/password_changed"
+    },
+    {
+      "$ref": "#/definitions/events/page_viewed"
+    },
+    {
+      "$ref": "#/definitions/events/form_validation_failed"
+    },
+    {
+      "$ref": "#/definitions/events/form_abandoned"
+    },
+    {
+      "$ref": "#/definitions/events/list_filter_applied"
+    },
+    {
+      "$ref": "#/definitions/events/list_page_extended"
+    },
+    {
+      "$ref": "#/definitions/events/api_latency_recorded"
+    },
+    {
+      "$ref": "#/definitions/events/page_performance_recorded"
+    },
+    {
+      "$ref": "#/definitions/events/cache_stats_recorded"
+    },
+    {
+      "$ref": "#/definitions/events/api_error_returned"
+    },
+    {
+      "$ref": "#/definitions/events/server_error_occurred"
+    },
+    {
+      "$ref": "#/definitions/events/frontend_error_captured"
+    },
+    {
+      "$ref": "#/definitions/events/api_connection_failed"
+    },
+    {
+      "$ref": "#/definitions/events/email_delivery_failed"
+    },
+    {
+      "$ref": "#/definitions/events/supplier_created"
+    },
+    {
+      "$ref": "#/definitions/events/supplier_rate_updated"
+    },
+    {
+      "$ref": "#/definitions/events/supplier_status_changed"
+    },
+    {
+      "$ref": "#/definitions/events/supplier_deleted"
+    },
+    {
+      "$ref": "#/definitions/events/incident_created"
+    },
+    {
+      "$ref": "#/definitions/events/incident_status_changed"
+    },
+    {
+      "$ref": "#/definitions/events/incident_transition_rejected"
+    },
+    {
+      "$ref": "#/definitions/events/incident_report_analyzed"
+    },
+    {
+      "$ref": "#/definitions/events/incident_report_exported"
+    },
+    {
+      "$ref": "#/definitions/events/api_instance_started"
+    },
+    {
+      "$ref": "#/definitions/events/data_seed_executed"
+    }
+  ]
+}

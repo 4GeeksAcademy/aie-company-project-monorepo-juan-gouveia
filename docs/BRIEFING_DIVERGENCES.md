@@ -25,6 +25,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 12. [Auditoría de rendimiento de ambos frontends](#auditoría-de-rendimiento-de-ambos-frontends) (consigna "Auditoría de rendimiento — ambos frontends", rama `feature/performance-audit`)
 13. [Auditoría de serialización del backend](#auditoría-de-serialización-del-backend) (briefing "Auditoría de serialización", rama `feature/serialization-audit`)
 14. [Estrategia de caching](#estrategia-de-caching) (briefing "Caching", rama `feature/caching-optimisation`)
+15. [Plan de Telemetría](#plan-de-telemetría) (briefing de Brasaland "Proyectos de Telemetría" y enunciado del RFI, rama `feature/telemetry-plan`)
 
 ---
 
@@ -1222,3 +1223,42 @@ Se descartaron los cálculos triviales, como el recuento por tipo (0,26 ms). El 
 ### 3. Pull Request contra la rama anterior
 
 La rama sale de `feature/serialization-audit` porque los PR #17, #18 y #19 siguen abiertos. El PR de esta tarea apunta a esa rama, y GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.
+
+## Plan de Telemetría
+
+Plan de diseño de la telemetría de la plataforma, en la rama `feature/telemetry-plan`: `docs/telemetry/telemetry-plan.md` y `docs/telemetry/event-schemas.json` (JSON Schema draft-07), sin código de instrumentación. Coincide con el briefing y con el enunciado en lo siguiente:
+
+- las 6 métricas obligatorias, con sus `event_type`, hipótesis, decisiones y propiedades mínimas;
+- el envelope con los nombres literales del enunciado (`eventId`, `timestamp`, `sessionId`, `userId`, `event_type`, `schemaVersion`, `requestId`, `properties`);
+- la taxonomía `entidad_acción`, el allowlist por evento, los datos sensibles con su tratamiento, la decisión stream/batch, el throttle y los riesgos y exclusiones;
+- las restricciones de negocio: moneda del local sin conversión, stock solo por órdenes, idioma de la interfaz separado de `country`, sin nombres de empleados ni datos de clientes.
+
+Las decisiones se tomaron con el desarrollador el 18 de noviembre de 2026.
+
+> **Estado:** completado (2026-11-18), un commit por fase, hechos por el desarrollador.
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Instrumentación de las métricas obligatorias | "Impleméntalas sin falta" (mensaje del tech lead) | Diseñadas en el plan, sin código; la sección 12 lista los cambios de modelo que necesitan | El mismo mensaje dice "no escribas código todavía", y el briefing pide que estén instrumentadas "al final de la serie" |
+| Propiedades mínimas en `direct_stock_edit_rejected` | Campos mínimos de los eventos de inventario: `location_id`, `country`, `product_id`, `product_category`, `quantity`, `unit`, `currency` | Opcionales en este evento; obligatorias en los otros 5 | Un intento sobre `/products/{id}` no tiene local, cantidad ni moneda |
+| Destino del PR | Rama oculta en la captura; "PR aprobado → merge a `main`" | `feature/caching-optimisation`, la rama anterior de la cadena | Los PR #17 a #20 siguen abiertos |
+
+### 1. Las métricas obligatorias se diseñan, no se instrumentan todavía
+
+El mensaje del tech lead dice "impleméntalas sin falta" y, a continuación, "no escribas código todavía — escribe el plan que el equipo va a implementar mañana". El briefing sitúa la instrumentación "al final de la serie de proyectos" (captura → almacenamiento). Por eso las 6 métricas están en el plan con su disparo exacto en la API, su esquema y su estrategia de entrega, pero sin código.
+
+Además, 4 de ellas no se pueden emitir con el modelo actual: faltan el coste unitario de las entradas, el motivo de la merma, los mínimos por local y la entidad de locales. El plan lo dice en la sección 12 (brechas B3 a B8) en lugar de rellenar esos campos con valores inventados.
+
+**Coste:** ninguno para esta fase; la instrumentación es la tarea de la siguiente.
+
+### 2. Propiedades mínimas opcionales en `direct_stock_edit_rejected`
+
+El briefing pide `location_id`, `country`, `product_id`, `product_category`, `quantity`, `unit` y `currency` en los eventos de inventario. En `direct_stock_edit_rejected` el intento puede no tener esos datos: un `PATCH /api/v1/inventory/products/{id}` no indica local ni cantidad, y la moneda depende del local. Hacerlas obligatorias obligaría a inventarlas o a no emitir el evento.
+
+Son obligatorias en los otros 5 eventos obligatorios. En este son opcionales y se rellenan cuando la petición los trae. La brecha B10 propone asignar un local a cada cuenta para atribuir siempre el intento al local de quien lo hace, que es la decisión que pide el briefing.
+
+**Coste:** hasta cerrar B10, los intentos sobre `/products/{id}` no se pueden agregar por local.
+
+### 3. Pull Request contra la rama anterior
+
+El enunciado oculta la rama destino y recuerda hacer merge a `main` antes de empezar la rama siguiente. Los PR #17 a #20 siguen abiertos, así que esta rama sale de `feature/caching-optimisation` y el PR apunta a ella, con el título exacto `docs: telemetry design plan`. GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.

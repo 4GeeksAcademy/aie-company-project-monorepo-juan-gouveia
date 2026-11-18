@@ -163,7 +163,14 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Backend (Fase 3):** `core/cache.py` (`TTLCache`, con contador de generación) y `inventory/cache.py`: `GET /products` 60 s y `GET /orders` 5 min, JSON ya serializado y `X-Cache`. Las tres escrituras del inventario invalidan tras el `commit`. Un acierto tarda 1,4 ms. No se cachean la sesión, los perfiles, `products/{id}` ni TinyDB (la solución es migrar).
 - **Frontend (Fase 4):** `next/dynamic` para `SupplierFormModal` y `CandidateFormModal`; historial y gestor pintados de 50 en 50 (`useShowMore`): el historial pasa de 4,7 s a 0,17 s, y un cambio de estado en el gestor, de 740 ms a 11 ms. El filtro del historial usa `useMemo` (~30 ms en móvil).
 - **Verificación:** API 952 pruebas, Jest 180, `tsc`, lint y build sin errores, y prueba funcional en Chrome. Las divergencias están en `docs/BRIEFING_DIVERGENCES.md` (sección 14).
+- **PR:** #20, abierto el 2026-11-18 contra `feature/serialization-audit` mientras el #19 no se fusione (5 commits, head `95538a6`).
 - **Datos de volumen:** siguen cargados (`VOL-`) en Supabase y en `brasaland-db.json` local, con 4 incidencias en `in_progress` por la medición; se retiran con `scripts/seed_volume.py --clear`.
+
+**Plan de Telemetría completado en la rama `feature/telemetry-plan`**, creada desde `feature/caching-optimisation` (`95538a6`) el 2026-11-18 porque los PR #17 a #20 siguen abiertos. Responde al RFI del equipo de gestión sin escribir código. Un commit por fase.
+
+- **Catálogo (Fase 1):** 44 eventos, entre ellos las 6 métricas obligatorias del briefing con su disparo exacto en la API y 38 oportunidades en 7 categorías (inventario, autenticación, navegación, rendimiento, errores, otras áreas del negocio y procesos internos). Cada evento tiene la frase de la regla de oro y su responsable. El flujo de inventario tiene 9 puntos de instrumentación.
+- **Diseño (Fase 2):** envelope con los nombres literales del enunciado, más `source` y `environment`; datos sensibles (seudónimos, HMAC del email, IP truncada); una ficha y un allowlist por evento. `docs/telemetry/event-schemas.json` es JSON Schema draft-07 validado (44 ejemplos y 220 casos negativos).
+- **Entrega (Fase 3):** 12 eventos en stream y 32 en batch, según la urgencia de la decisión; throttle en 15; riesgos y exclusiones; y 11 brechas con el modelo actual, que son la primera tarea de la fase de captura.
 
 **Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -183,9 +190,10 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #17 Contenedorización del monorepo (#infra-40) | `feature/dockerize` → `main` | ⏳ Abierto (2026-11-17) |
 | #18 Auditoría de rendimiento de ambos frontends | `feature/performance-audit` → `feature/dockerize` | ⏳ Abierto (2026-11-17) |
 | #19 Auditoría de serialización del backend | `feature/serialization-audit` → `feature/performance-audit` | ⏳ Abierto (2026-11-18) |
+| #20 Estrategia de caching de la API y el backoffice | `feature/caching-optimisation` → `feature/serialization-audit` | ⏳ Abierto (2026-11-18) |
 
-- **Orden de merge:** del #6 al #16 ya están fusionados (el #8 a #16, el 2026-11-18). Quedan el #17, el #18 y el #19, en ese orden, con "Create a merge commit" (sin squash ni rebase), para que el PR siguiente no repita commits ni dé conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
-- **Ramas (2026-11-18):** las ramas fusionadas, incluida `directorio-prov`, están borradas en local y en GitHub. Quedan `main` (al día con `origin/main`), `feature/dockerize`, `feature/performance-audit` y `feature/serialization-audit`.
+- **Orden de merge:** del #6 al #16 ya están fusionados (el #8 a #16, el 2026-11-18). Quedan el #17, el #18, el #19 y el #20, en ese orden, con "Create a merge commit" (sin squash ni rebase), para que el PR siguiente no repita commits ni dé conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Ramas (2026-11-18):** las ramas fusionadas, incluida `directorio-prov`, están borradas en local y en GitHub. Quedan `main` (al día con `origin/main`), `feature/dockerize`, `feature/performance-audit`, `feature/serialization-audit` y `feature/caching-optimisation`.
 
 ### 1. Contexto y Configuración Inicial
 
@@ -324,7 +332,9 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Estrategia de caching (rama `feature/caching-optimisation`)** — Completada (2026-11-18): `docs/CACHING_REPORT.md` recoge la medición, los 35 endpoints evaluados, las decisiones (caché de 60 s y 5 min en el inventario, modales diferidos, listas de 50 en 50 y `useMemo`), los intercambios y lo que no se cacheó. Pendiente: abrir el PR contra `feature/serialization-audit`. Los datos `VOL-` se mantienen hasta que se revise el PR, por si hay que repetir las mediciones; después se retiran con `scripts/seed_volume.py --clear`. Trabajo futuro: paginar `GET /inventory/orders` y `GET /incidents` en la API, y Redis si la API pasa a varios workers. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Estrategia de caching"). Plan en `docs/_private/plan-caching.md`.
+0. **Plan de Telemetría (rama `feature/telemetry-plan`)** — Completado (2026-11-18). La rama sale de `feature/caching-optimisation` y el PR irá contra ella con el título `docs: telemetry design plan`. `docs/telemetry/telemetry-plan.md` y `docs/telemetry/event-schemas.json` (JSON Schema draft-07, validado): 44 eventos (6 obligatorios del briefing y 38 oportunidades en 7 categorías), envelope con los nombres del enunciado, allowlist y datos sensibles por evento, 12 en stream y 32 en batch, throttle en 15, riesgos y exclusiones, y 11 brechas con el modelo actual (precio en las entradas, motivo de merma, mínimos y stock por local, entidad de locales, id de proveedor, cabeceras de correlación…), que son la primera tarea de la fase de captura. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Plan de Telemetría"). Plan en `docs/_private/plan-telemetria.md`.
+
+0. **Estrategia de caching (rama `feature/caching-optimisation`)** — Completada (2026-11-18): `docs/CACHING_REPORT.md` recoge la medición, los 35 endpoints evaluados, las decisiones (caché de 60 s y 5 min en el inventario, modales diferidos, listas de 50 en 50 y `useMemo`), los intercambios y lo que no se cacheó. PR #20 abierto contra `feature/serialization-audit`. Los datos `VOL-` se mantienen hasta que se revise el PR, por si hay que repetir las mediciones; después se retiran con `scripts/seed_volume.py --clear`. Trabajo futuro: paginar `GET /inventory/orders` y `GET /incidents` en la API, y Redis si la API pasa a varios workers. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Estrategia de caching"). Plan en `docs/_private/plan-caching.md`.
 
 0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. PR #19 abierto contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
 
