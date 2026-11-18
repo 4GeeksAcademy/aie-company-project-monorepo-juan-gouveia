@@ -2,12 +2,12 @@
 
 import { useId, useState } from "react";
 import { STATUS_TRANSITIONS } from "@/lib/gestor-incidencias/labels";
-import type { Incident, IncidentStatus } from "@/types/incident-manager";
+import type { IncidentListItem, IncidentStatus } from "@/types/incident-manager";
 
 interface IncidentStatusControlProps {
-  incident: Incident;
+  incident: IncidentListItem;
   // Cambio optimista: devuelve null si la API lo aceptó, o el mensaje de error (la fila ya volvió atrás).
-  onChange: (incident: Incident, next: IncidentStatus) => Promise<string | null>;
+  onChange: (incident: IncidentListItem, next: IncidentStatus) => Promise<string | null>;
 }
 
 // Cambio de estado desde el listado. Solo ofrece las transiciones válidas del ciclo de vida;

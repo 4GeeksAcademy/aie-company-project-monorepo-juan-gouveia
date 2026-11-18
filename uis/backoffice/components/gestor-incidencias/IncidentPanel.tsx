@@ -9,7 +9,7 @@ import IncidentSummaryPanel from "@/components/gestor-incidencias/IncidentSummar
 import RetryableError from "@/components/RetryableError";
 import { useIncidentSummary } from "@/hooks/useIncidentSummary";
 import { useIncidents } from "@/hooks/useIncidents";
-import type { Incident, IncidentStatus } from "@/types/incident-manager";
+import type { IncidentListItem, IncidentStatus } from "@/types/incident-manager";
 
 // Panel del gestor de incidencias: el resumen arriba y el listado con filtros debajo.
 // Cada bloque carga por su cuenta y muestra su propio error, así que un fallo no rompe la página.
@@ -18,7 +18,7 @@ export default function IncidentPanel() {
     useIncidents();
   const summary = useIncidentSummary();
 
-  async function handleStatusChange(incident: Incident, next: IncidentStatus): Promise<string | null> {
+  async function handleStatusChange(incident: IncidentListItem, next: IncidentStatus): Promise<string | null> {
     const failure = await changeStatus(incident, next);
     // Las cifras del resumen cambian con cada transición aceptada.
     if (!failure) summary.refresh();

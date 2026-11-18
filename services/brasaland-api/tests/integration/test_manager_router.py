@@ -111,6 +111,15 @@ def test_list_filters_by_status_origin_branch_and_category(api):
     assert ids(origin="internal", branch="miami_doral") == []
 
 
+def test_list_rows_carry_only_the_listing_fields(api):
+    created = create(api)
+
+    # El listado usa IncidentListItem: el detalle sin `updated_at` (docs/serialization-audit.md, I4).
+    [row] = api.get(URL).json()
+    assert row == {key: value for key, value in created.items() if key != "updated_at"}
+    assert "updated_at" in api.get(f"{URL}/1").json()  # el detalle sí lo trae
+
+
 def test_invalid_filter_is_400(api):
     response = api.get(URL, params={"status": "closed"})
     assert response.status_code == 400

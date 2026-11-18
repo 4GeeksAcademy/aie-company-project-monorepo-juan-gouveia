@@ -178,6 +178,8 @@ La respuesta (200) incluye:
 
 Descarga el último análisis como `results.csv`, con `Content-Disposition: attachment`. Tiene una fila por métrica, con las columnas `metric`, `value` y `percentage`, igual que la exportación del script.
 
+Es la única ruta sin esquema de respuesta Pydantic: la respuesta es un archivo, no JSON. La ruta declara `response_model=None` de forma explícita y documenta el contenido `text/csv` en OpenAPI (ver [`docs/serialization-audit.md`](../../docs/serialization-audit.md), I2).
+
 ## Gestor de incidencias centralizado
 
 Registro y seguimiento de incidencias desde el backoffice (rama `feature/incident-manager`). Comparte el prefijo `/incidents` con el analizador del CSV, pero son piezas distintas: el analizador no guarda incidencias.
@@ -206,7 +208,7 @@ Registro y seguimiento de incidencias desde el backoffice (rama `feature/inciden
 | Método y ruta | Respuesta | Errores |
 |---|---|---|
 | `POST /api/v1/incidents` | 201 con la incidencia | 400 `invalid_request` (con `details`) |
-| `GET /api/v1/incidents` | 200 con la lista, de la más reciente a la más antigua. Filtros opcionales `status`, `origin`, `branch` y `category`, combinables | 400 si un filtro no es válido |
+| `GET /api/v1/incidents` | 200 con la lista, de la más reciente a la más antigua. Cada fila (`IncidentListItem`) trae todos los campos salvo `updated_at`, que solo devuelve el detalle. Filtros opcionales `status`, `origin`, `branch` y `category`, combinables | 400 si un filtro no es válido |
 | `GET /api/v1/incidents/summary` | 200 con `total`, `by_status`, `by_category`, `by_origin` y `by_branch`; cada desglose incluye todos los valores, también en 0 | — |
 | `GET /api/v1/incidents/{id}` | 200 con la incidencia | 404 `incident_not_found` |
 | `PATCH /api/v1/incidents/{id}/status` | 200 con la incidencia; cambia solo `status` y `updated_at` | 400 `invalid_transition` (el mensaje dice a qué estados se puede pasar) o `invalid_request`; 404 |
@@ -381,7 +383,7 @@ Ticket AUTH-03. El correo se envía con [Resend](https://resend.com), elegido fr
 
 ## `GET /health`
 
-Devuelve `{"status": "ok"}`. Está fuera de `/api/v1` y no lleva autenticación.
+Devuelve `{"status": "ok"}` (`HealthResponse`). Está fuera de `/api/v1` y no lleva autenticación.
 
 ## Errores
 

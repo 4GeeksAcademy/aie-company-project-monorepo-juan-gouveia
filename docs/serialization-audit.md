@@ -378,6 +378,46 @@ Los endpoints ✅ no se tocan. La revisión de proveedores (S1–S6) no encontr�
 
 **Documentación:** los README de la API (en y es) describen la forma de las órdenes.
 
+### 2c — Listado de incidencias, `/health` y exportación CSV (I4, H1, I2)
+
+| Endpoint | Antes | Después |
+|---|---|---|
+| I4 `GET /incidents` | `list[Incident]`: `id`, `title`, `description`, `category`, `status`, `origin`, `branch`, `created_at`, `updated_at` | `list[IncidentListItem]`: los mismos campos sin `updated_at` |
+| H1 `GET /health` | Sin `response_model`; `dict[str, str]` | `HealthResponse`: `status: "ok"` |
+| I2 `GET /incidents/results/export` | Sin `response_model`; `response_class=Response` | `response_model=None` explícito; OpenAPI documenta `text/csv` con un ejemplo de cabecera. Excepción registrada en `docs/BRIEFING_DIVERGENCES.md` (sección 13) |
+
+**API:**
+
+- `incidents/models.py`:
+  - nuevo esquema de salida `IncidentListItem`, con sus ocho atributos nombrados de forma explícita;
+  - `Incident` (el detalle) gana `to_list_item()`.
+- `incidents/manager_router.py`: `list_incidents` declara `response_model=list[IncidentListItem]` y convierte cada incidencia.
+- Los endpoints de alta (I3), detalle (I6) y cambio de estado (I7) siguen devolviendo `Incident`, con `updated_at`.
+- `main.py`: `HealthResponse` con `status: Literal["ok"]`. El cuerpo no cambia (`{"status": "ok"}`), así que el healthcheck de `docker-compose.yml` sigue igual.
+- `incidents/router.py`: la exportación declara `response_model=None` con un comentario que remite a esta auditoría.
+
+**Backoffice:**
+
+- `types/incident-manager.ts`: nuevo tipo `IncidentListItem`. `Incident` pasa a extenderlo con `updated_at`.
+- `lib/gestor-incidencias/api.ts`: `listIncidents` devuelve `IncidentListItem[]`.
+- `useIncidents`, `IncidentPanel`, `IncidentList` e `IncidentStatusControl` trabajan con `IncidentListItem`.
+- El `PATCH` sigue devolviendo `Incident`, que es un superconjunto, así que sustituir la fila tras cambiar el estado no cambia.
+
+**Pruebas:**
+
+- Nuevas:
+  - `test_list_rows_carry_only_the_listing_fields` compara la fila del listado con la incidencia creada sin `updated_at`, y comprueba que el detalle sí lo trae;
+  - `test_export_is_documented_as_csv_in_openapi` comprueba que la exportación se publica como `text/csv`.
+- Sin cambios: `test_health_stays_public` ya comparaba el cuerpo exacto de `/health`.
+- Resultados:
+  - suites de incidencias, rutas protegidas y `core`: 326 superadas; batería completa de la API: 920;
+  - backoffice: `tsc --noEmit` sin errores, Jest 170/170 y lint sin errores.
+
+**Documentación:**
+
+- README de la API (en y es): filas del listado y de `/health`, y la nota de la exportación.
+- `docs/BRIEFING_DIVERGENCES.md`: sección 13, con la excepción del CSV y el destino del PR.
+
 ## 8. Verificación
 
 **Línea base** (2026-11-18, antes de cualquier cambio):

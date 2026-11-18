@@ -178,6 +178,8 @@ The response (200) includes:
 
 Downloads the latest analysis as `results.csv`, with `Content-Disposition: attachment`. It has one row per metric, with the `metric`, `value` and `percentage` columns, the same as the script's export.
 
+It is the only route without a Pydantic response schema: the response is a file, not JSON. The route declares `response_model=None` explicitly and documents the `text/csv` content in OpenAPI (see [`docs/serialization-audit.md`](../../docs/serialization-audit.md), I2).
+
 ## Centralized incident manager
 
 Incident registration and tracking from the backoffice (branch `feature/incident-manager`). It shares the `/incidents` prefix with the CSV analyzer, but they are separate pieces: the analyzer does not store incidents.
@@ -206,7 +208,7 @@ Incident registration and tracking from the backoffice (branch `feature/incident
 | Method and route | Response | Errors |
 |---|---|---|
 | `POST /api/v1/incidents` | 201 with the incident | 400 `invalid_request` (with `details`) |
-| `GET /api/v1/incidents` | 200 with the list, newest first. Optional `status`, `origin`, `branch` and `category` filters, which can be combined | 400 if a filter is not valid |
+| `GET /api/v1/incidents` | 200 with the list, newest first. Each row (`IncidentListItem`) has every field except `updated_at`, which only the detail returns. Optional `status`, `origin`, `branch` and `category` filters, which can be combined | 400 if a filter is not valid |
 | `GET /api/v1/incidents/summary` | 200 with `total`, `by_status`, `by_category`, `by_origin` and `by_branch`; each breakdown includes every value, also at 0 | — |
 | `GET /api/v1/incidents/{id}` | 200 with the incident | 404 `incident_not_found` |
 | `PATCH /api/v1/incidents/{id}/status` | 200 with the incident; only changes `status` and `updated_at` | 400 `invalid_transition` (the message says which states are allowed) or `invalid_request`; 404 |
@@ -381,7 +383,7 @@ Ticket AUTH-03. Emails are sent with [Resend](https://resend.com), chosen over S
 
 ## `GET /health`
 
-Returns `{"status": "ok"}`. It is outside `/api/v1` and has no authentication.
+Returns `{"status": "ok"}` (`HealthResponse`). It is outside `/api/v1` and has no authentication.
 
 ## Errors
 

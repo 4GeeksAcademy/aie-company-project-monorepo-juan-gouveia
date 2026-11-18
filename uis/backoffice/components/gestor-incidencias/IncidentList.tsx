@@ -2,11 +2,11 @@ import IncidentStatusBadge from "@/components/gestor-incidencias/IncidentStatusB
 import IncidentStatusControl from "@/components/gestor-incidencias/IncidentStatusControl";
 import { formatDateTimeUtc } from "@/lib/format";
 import { BRANCH_LABELS, CATEGORY_DESCRIPTIONS, ORIGIN_DESCRIPTIONS } from "@/lib/gestor-incidencias/labels";
-import type { Incident, IncidentStatus } from "@/types/incident-manager";
+import type { IncidentListItem, IncidentStatus } from "@/types/incident-manager";
 
 interface IncidentListProps {
-  incidents: Incident[];
-  onStatusChange: (incident: Incident, next: IncidentStatus) => Promise<string | null>;
+  incidents: IncidentListItem[];
+  onStatusChange: (incident: IncidentListItem, next: IncidentStatus) => Promise<string | null>;
 }
 
 // Tarjetas apiladas en móvil y columnas alineadas desde lg, como el directorio de proveedores.

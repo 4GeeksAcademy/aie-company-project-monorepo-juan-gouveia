@@ -32,7 +32,8 @@ export type Branch =
   | "orlando_international"
   | "fort_lauderdale";
 
-export interface Incident {
+// Fila de GET /incidents: lo que muestra el listado, sin `updated_at` (docs/serialization-audit.md, I4).
+export interface IncidentListItem {
   id: number;
   title: string;
   description: string;
@@ -41,6 +42,10 @@ export interface Incident {
   origin: IncidentOrigin;
   branch: Branch;
   created_at: string;
+}
+
+// Incidencia completa: respuesta del alta, del detalle y del cambio de estado.
+export interface Incident extends IncidentListItem {
   updated_at: string;
 }
 

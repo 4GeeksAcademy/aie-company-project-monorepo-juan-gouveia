@@ -118,13 +118,42 @@ class StatusUpdate(BaseModel):
     status: IncidentStatus
 
 
+class IncidentListItem(BaseModel):
+    """Fila de GET /incidents: los campos que muestra el listado del gestor, sin `updated_at`.
+
+    El esquema de detalle (`Incident`) añade `updated_at`, un timestamp de auditoría que ninguna
+    pantalla del listado lee. Ver docs/serialization-audit.md (4.5, I4).
+    """
+
+    id: int = Field(description="Identificador generado automáticamente")
+    title: str = Field(description="Título breve de la incidencia")
+    description: str = Field(description="Descripción detallada")
+    category: IncidentCategory = Field(description="Categoría del briefing")
+    status: IncidentStatus = Field(description="Estado actual en el ciclo de vida")
+    origin: IncidentOrigin = Field(description="Origen del reporte: customer, branch o internal")
+    branch: Branch = Field(description="Sede que gestiona o reporta la incidencia; `central` si no es un local")
+    created_at: datetime = Field(description="Fecha y hora de creación (UTC)")
+
+
 class Incident(IncidentFields):
-    """Incidencia tal como la devuelve la API."""
+    """Incidencia tal como la devuelven el alta, el detalle y el cambio de estado."""
 
     id: int = Field(description="Identificador generado automáticamente")
     status: IncidentStatus
     created_at: datetime = Field(description="Fecha y hora de creación (UTC)")
     updated_at: datetime = Field(description="Fecha y hora de la última modificación (UTC)")
+
+    def to_list_item(self) -> IncidentListItem:
+        return IncidentListItem(
+            id=self.id,
+            title=self.title,
+            description=self.description,
+            category=self.category,
+            status=self.status,
+            origin=self.origin,
+            branch=self.branch,
+            created_at=self.created_at,
+        )
 
 
 class IncidentSummary(BaseModel):
