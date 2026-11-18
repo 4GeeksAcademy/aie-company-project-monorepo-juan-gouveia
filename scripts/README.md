@@ -11,6 +11,7 @@ This folder contains **helper scripts** for the monorepo: development automation
 |---|---|
 | [`incident-report/`](./incident-report/README.md) | Validates and summarizes the operational incidents CSV, and exports the metrics to `data/process/results.csv` (Python, no dependencies; the rules live in `packages/shared`). |
 | [`seed_incidents.py`](./seed_incidents.py) | Loads the historical incidents CSV into the API's incident manager: validates each row with the `packages/shared` rules, transforms it to the manager's model (status, category, title, date and location) with origin `customer`, and inserts only the rows that were not loaded before. It needs the API environment (TinyDB). |
+| [`seed_volume.py`](./seed_volume.py) | Loads realistic volume to measure API performance (caching task): 150 ingredients and about 21,000 orders in Supabase, and 10,000 incidents in TinyDB. Everything is marked (`VOL-`) and `--clear` removes it without touching real data. It needs the API environment and its `.env`. |
 
 ## `seed_incidents.py`
 
@@ -35,3 +36,25 @@ uv run --project services/brasaland-api python -m unittest scripts/test_seed_inc
 ```
 
 > _Spanish version: [README.es.md](./README.es.md)._
+
+## `seed_volume.py`
+
+From the repository root, **with the API stopped** (it writes to `brasaland-db.json` in bulk):
+
+```bash
+uv run --project services/brasaland-api --env-file services/brasaland-api/.env python scripts/seed_volume.py          # load
+uv run --project services/brasaland-api --env-file services/brasaland-api/.env python scripts/seed_volume.py --clear  # remove
+```
+
+- **Inventory (Supabase):** 150 ingredients (75 from Colombia with Spanish names and 75 from the United States in English, across the 6 categories) and about 21,000 orders from the last 12 months: one weekly delivery from a real directory supplier (same country and equivalent category) and consumption or waste exits (more waste for perishables). They are simulated in chronological order: no exit leaves stock negative. They are inserted in a single transaction.
+- **Incidents (TinyDB):** 10,000 incidents from the last 12 months across the 15 locations (more in Medellín), with consistent category, origin, title and description. Status depends on age: recent ones are open or in progress; old ones are mostly resolved.
+- **Markers and cleanup:** ingredients have the SKU `VOL-…` (their orders are deleted through it) and each incident is recorded in `incident_seed_log` with a `VOL-…` `source_id` (the historical CSV uses `BRS-…`). `--clear` deletes only that.
+- **Idempotent and deterministic:** fixed random seed; if `VOL-` data already exists, it inserts nothing.
+- **Seed convention:** locations 1–9 are in Colombia and 10–14 in the United States (9 and 5 locations, as in the incident manager). Inventory does not yet associate locations with countries.
+- **Orders** carry the `user_uuid` of the first active admin, like `seed-inventory`.
+
+Tests (10, with temporary SQLite and TinyDB; they do not touch Supabase):
+
+```bash
+uv run --project services/brasaland-api python -m unittest scripts/test_seed_volume.py
+```
