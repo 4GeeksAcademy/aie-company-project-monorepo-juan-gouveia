@@ -17,25 +17,20 @@ export interface Ingredient {
   current_stock: number;
 }
 
-// Datos del ingrediente que acompañan a cada orden en GET /inventory/orders.
-export interface IngredientSummary {
-  id: number;
-  name: string;
-  sku: string;
-  unit: Unit;
-  country: Country;
-}
-
+// Cada orden lleva una proyección plana de su ingrediente (id, nombre, SKU y unidad), sin objeto
+// anidado (docs/serialization-audit.md, decisión D4).
 interface OrderBase {
   id: number;
   ingredient_id: number;
+  ingredient_name: string;
+  ingredient_sku: string;
+  ingredient_unit: Unit;
   quantity: number;
   location_id: number;
   // ISO 8601 en UTC.
   created_at: string;
   // UUID (TinyDB) del usuario que registró la orden; lo pone la API a partir del token.
   user_uuid: string;
-  ingredient: IngredientSummary;
 }
 
 // Orden de entrada: entrega de un proveedor.

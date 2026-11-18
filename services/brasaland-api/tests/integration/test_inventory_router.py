@@ -168,10 +168,38 @@ def test_orders_list_has_ingredient_data_and_only_schema_fields(api, headers, be
 
     orders = api.get(f"{BASE}/orders", headers=headers).json()
     entry, exit_ = orders["inbound"][0], orders["outbound"][0]
-    common = {"id", "ingredient_id", "quantity", "location_id", "created_at", "user_uuid", "ingredient"}
-    # Sin campos del modelo ORM (como la relación inversa `entries`): solo los del schema.
+    common = {
+        "id", "ingredient_id", "ingredient_name", "ingredient_sku", "ingredient_unit",
+        "quantity", "location_id", "created_at", "user_uuid",
+    }
+    # Sin campos del modelo ORM (como la relación inversa `entries`) ni el ingrediente anidado:
+    # solo la proyección plana del schema (docs/serialization-audit.md, D4).
     assert set(entry) == common | {"supplier_name"}
     assert set(exit_) == common | {"reason"}
-    assert entry["ingredient"] == {"id": 1, "name": "Falda de ternera", "sku": "BRS-BEEF-001", "unit": "kg", "country": "CO"}
+    assert (entry["ingredient_id"], entry["ingredient_name"], entry["ingredient_sku"], entry["ingredient_unit"]) == (
+        1, "Falda de ternera", "BRS-BEEF-001", "kg",
+    )
     assert exit_["created_at"].endswith("Z")
     assert api.get(f"{BASE}/products/1", headers=headers).json()["current_stock"] == 47.0
+
+
+def test_order_creation_returns_the_flat_projection(api, make_user, beef):
+    user, user_headers = make_user("cocina@brasaland.com")
+
+    response = api.post(f"{BASE}/orders/outbound", json=exit_data(quantity=2.0, reason="waste"), headers=user_headers)
+
+    assert response.status_code == 201
+    body = response.json()
+    # Forma exacta de la confirmación (docs/serialization-audit.md, N5): sin objeto `ingredient` anidado.
+    assert body == {
+        "id": body["id"],
+        "ingredient_id": 1,
+        "ingredient_name": "Falda de ternera",
+        "ingredient_sku": "BRS-BEEF-001",
+        "ingredient_unit": "kg",
+        "quantity": 2.0,
+        "reason": "waste",
+        "location_id": exit_data()["location_id"],
+        "created_at": body["created_at"],
+        "user_uuid": user.id,
+    }

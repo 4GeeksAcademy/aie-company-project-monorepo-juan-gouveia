@@ -62,7 +62,7 @@ def test_orders_list_is_two_queries_for_any_number_of_orders(populate, session, 
 
     assert orders_count == 2
     assert (len(orders.inbound), len(orders.outbound)) == (2 * size, size)
-    assert {item.ingredient.sku for item in orders.inbound} == {f"BRS-TEST-{n:03d}" for n in range(1, size + 1)}
+    assert {item.ingredient_sku for item in orders.inbound} == {f"BRS-TEST-{n:03d}" for n in range(1, size + 1)}
 
 
 def test_single_product_is_a_single_query(populate, session, query_counter):

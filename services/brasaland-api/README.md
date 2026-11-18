@@ -287,7 +287,7 @@ All of them require a token. The router has the `/inventory` prefix and is mount
 | `GET /api/v1/inventory/products/{id}` | One ingredient with its current stock | 200, 404 `ingredient_not_found` |
 | `POST /api/v1/inventory/orders/inbound` | Records a supplier delivery (`IngredientEntry`) | 201, 404, 422 |
 | `POST /api/v1/inventory/orders/outbound` | Records consumption or waste (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
-| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` with the ingredient data and `user_uuid`, newest first | 200 |
+| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` newest first. Each order carries a flat projection of its ingredient (`ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`) and `user_uuid`, with no nested object; the two `POST` routes return the same shape | 200 |
 
 An exit that would leave stock negative is rejected **before anything is written**. The message is in Spanish, like the rest of the API:
 

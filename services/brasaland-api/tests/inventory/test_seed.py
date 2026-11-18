@@ -47,9 +47,9 @@ def test_seed_orders_meet_the_briefing_minimums(session):
     seed(session, USER_UUID)
     orders = list_orders(session=session)
 
-    beef_entries = sorted(item.quantity for item in orders.inbound if item.ingredient.sku == "BRS-BEEF-001")
+    beef_entries = sorted(item.quantity for item in orders.inbound if item.ingredient_sku == "BRS-BEEF-001")
     assert beef_entries == [30.0, 50.0]
-    assert len({item.ingredient.sku for item in orders.inbound}) == 3
+    assert len({item.ingredient_sku for item in orders.inbound}) == 3
     assert {item.supplier_name for item in orders.inbound} == {
         "Carnes del Valle S.A.", "MiamiMeat Co.", "Salsas Artesanales Ltda.",
     }

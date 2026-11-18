@@ -287,7 +287,7 @@ Todos exigen token. El router tiene el prefijo `/inventory` y se monta bajo `/ap
 | `GET /api/v1/inventory/products/{id}` | Un ingrediente con su stock actual | 200, 404 `ingredient_not_found` |
 | `POST /api/v1/inventory/orders/inbound` | Registra una entrega de proveedor (`IngredientEntry`) | 201, 404, 422 |
 | `POST /api/v1/inventory/orders/outbound` | Registra un consumo o una merma (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
-| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` con los datos del ingrediente y el `user_uuid`, de la más reciente a la más antigua | 200 |
+| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` de la más reciente a la más antigua. Cada orden lleva una proyección plana de su ingrediente (`ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`) y el `user_uuid`, sin objeto anidado; los dos `POST` devuelven la misma forma | 200 |
 
 Una salida que dejaría el stock en negativo se rechaza **antes de escribir nada**:
 

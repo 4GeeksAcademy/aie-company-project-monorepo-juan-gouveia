@@ -338,6 +338,46 @@ Los endpoints ✅ no se tocan. La revisión de proveedores (S1–S6) no encontr�
 
 **Documentación:** los README y los TESTING de la API (en y es) ya describen las respuestas nuevas y el caso REG-F2.
 
+### 2b — Órdenes del inventario (N4–N6)
+
+| Endpoint | Antes | Después |
+|---|---|---|
+| N4 `POST /inventory/orders/inbound` | `IngredientEntryRead`: `id`, `ingredient_id`, `quantity`, `supplier_name`, `location_id`, `created_at`, `user_uuid`, `ingredient{id, name, sku, unit, country}` | `IngredientEntryRead`: `id`, `ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`, `quantity`, `location_id`, `created_at`, `user_uuid`, `supplier_name` |
+| N5 `POST /inventory/orders/outbound` | `IngredientExitRead`: lo mismo, con `reason` en lugar de `supplier_name` | `IngredientExitRead`: la misma proyección plana, con `reason` |
+| N6 `GET /inventory/orders` | `OrdersRead` con listas de los dos esquemas anteriores | `OrdersRead` con listas de los dos esquemas nuevos |
+
+**API:**
+
+- `inventory/schemas.py`:
+  - desaparece `IngredientSummary`, el objeto anidado;
+  - `OrderReadBase` nombra de forma explícita los nueve campos comunes, cada uno con su descripción en OpenAPI;
+  - `ingredient_unit` mantiene el tipo `Unit`.
+- `inventory/service.py`:
+  - `_ingredient_fields` sustituye a `_summary` y añade a cada orden los tres datos del ingrediente;
+  - las consultas no cambian: siguen siendo dos `join` en total en `GET /orders`, haya las órdenes que haya;
+  - el payload pierde por orden un objeto anidado, el `id` duplicado y el `country` que nadie leía.
+- **Entradas:** `IngredientEntryCreate` e `IngredientExitCreate` no cambian. Siguen sin aceptar `user_uuid` ni `created_at`.
+
+**Backoffice:**
+
+- `types/inventory.ts`: `OrderBase` sustituye `ingredient: IngredientSummary` por `ingredient_name`, `ingredient_sku` e `ingredient_unit`, y el tipo `IngredientSummary` desaparece.
+- `OrderHistory`, `EntryForm` y `ExitForm` leen los campos planos.
+- `lib/inventory-orders.ts` no cambia, porque solo usa `id` y `created_at`.
+
+**Pruebas:**
+
+- Nueva: `test_order_creation_returns_the_flat_projection` compara el cuerpo completo de un `POST /orders/outbound`.
+- Adaptadas:
+  - `test_orders_list_has_ingredient_data_and_only_schema_fields` exige exactamente los campos planos y que no aparezca `ingredient`;
+  - las unitarias de `test_orders.py`, `test_queries.py`, `test_seed.py` y `test_schemas.py` leen `ingredient_sku`, `ingredient_name`, etc.;
+  - en Jest, `__tests__/inventory/orders.test.ts` usa la proyección plana.
+- Resultados:
+  - `tests/inventory` e integración del inventario: 102 superadas (101 + 1 nueva); batería completa de la API: 918;
+  - backoffice: `tsc --noEmit` sin errores, Jest 170/170 y lint sin errores.
+- **Nota:** Jest no comprueba tipos. La prueba de `orders.test.ts` seguía pasando con el campo antiguo, y fue `tsc` quien lo detectó.
+
+**Documentación:** los README de la API (en y es) describen la forma de las órdenes.
+
 ## 8. Verificación
 
 **Línea base** (2026-11-18, antes de cualquier cambio):

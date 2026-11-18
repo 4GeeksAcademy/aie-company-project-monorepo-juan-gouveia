@@ -93,16 +93,6 @@ class IngredientRead(BaseModel):
     )
 
 
-class IngredientSummary(BaseModel):
-    """Datos del ingrediente que acompañan a cada orden en GET /inventory/orders."""
-
-    id: int
-    name: str
-    sku: str
-    unit: Unit
-    country: Country
-
-
 # --- Órdenes ---------------------------------------------------------------------------------
 
 
@@ -129,13 +119,21 @@ class IngredientExitCreate(BaseModel):
 
 
 class OrderReadBase(BaseModel):
-    id: int
-    ingredient_id: int
-    quantity: float
-    location_id: int
+    """Campos comunes de una orden en la respuesta: proyección plana del ingrediente.
+
+    El ingrediente no va anidado: la orden lleva su `ingredient_id` y solo los tres datos que muestra
+    el backoffice (nombre, SKU y unidad). Ver docs/serialization-audit.md (4.7 y sección 5).
+    """
+
+    id: int = Field(description="Identificador de la orden")
+    ingredient_id: int = Field(description="ID del ingrediente (referencia a GET /inventory/products/{id})")
+    ingredient_name: str = Field(description="Nombre del ingrediente")
+    ingredient_sku: str = Field(description="SKU del ingrediente")
+    ingredient_unit: Unit = Field(description="Unidad en la que se expresa `quantity`")
+    quantity: float = Field(description="Cantidad de la orden, en la unidad del ingrediente")
+    location_id: int = Field(description="Local de la orden (1–14)")
     created_at: datetime = Field(description="Momento del registro, en UTC")
     user_uuid: str = Field(description="UUID (TinyDB) del usuario autenticado que registró la orden")
-    ingredient: IngredientSummary
 
     @field_validator("created_at")
     @classmethod
@@ -144,11 +142,15 @@ class OrderReadBase(BaseModel):
 
 
 class IngredientEntryRead(OrderReadBase):
-    supplier_name: str
+    """Salida de POST /inventory/orders/inbound y de cada entrada en GET /inventory/orders."""
+
+    supplier_name: str = Field(description="Proveedor de la entrega")
 
 
 class IngredientExitRead(OrderReadBase):
-    reason: ExitReason
+    """Salida de POST /inventory/orders/outbound y de cada salida en GET /inventory/orders."""
+
+    reason: ExitReason = Field(description='"consumption" (consumo) o "waste" (merma)')
 
 
 class OrdersRead(BaseModel):

@@ -89,7 +89,7 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
       setAttempted(false);
       show({
         tone: "success",
-        text: `Entrada #${entry.id} registrada: ${formatQuantity(entry.quantity, entry.ingredient.unit)} de ${entry.ingredient.name}.`,
+        text: `Entrada #${entry.id} registrada: ${formatQuantity(entry.quantity, entry.ingredient_unit)} de ${entry.ingredient_name}.`,
       });
     } catch (err) {
       const result = formErrorsFromApi(err, ENTRY_FORM_FIELDS, "No se pudo registrar la entrada.");
