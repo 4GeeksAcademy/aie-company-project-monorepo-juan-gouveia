@@ -24,6 +24,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 11. [Contenedorización del monorepo](#contenedorización-del-monorepo) (ticket #infra-40, rama `feature/dockerize`)
 12. [Auditoría de rendimiento de ambos frontends](#auditoría-de-rendimiento-de-ambos-frontends) (consigna "Auditoría de rendimiento — ambos frontends", rama `feature/performance-audit`)
 13. [Auditoría de serialización del backend](#auditoría-de-serialización-del-backend) (briefing "Auditoría de serialización", rama `feature/serialization-audit`)
+14. [Estrategia de caching](#estrategia-de-caching) (briefing "Caching", rama `feature/caching-optimisation`)
 
 ---
 
@@ -1172,3 +1173,52 @@ Para que la excepción sea explícita y no un olvido:
 ### 2. Pull Request contra la rama anterior
 
 La rama sale de `feature/performance-audit` porque los PR #17 y #18 siguen abiertos. El PR de esta auditoría apunta a esa rama, y GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.
+
+## Estrategia de caching
+
+Análisis y optimización de caching de la API y del backoffice, en la rama `feature/caching-optimisation`. Coincide con el briefing en lo siguiente:
+
+- middleware de timing con el formato del enunciado;
+- seeder de volumen realista, con las filas de antes y después;
+- dos endpoints cacheados con TTL e invalidación en las escrituras;
+- ningún dato privado en una clave compartida;
+- dos componentes con `next/dynamic` y un `useMemo` sobre un cálculo no trivial;
+- `CACHING_REPORT.md` con las cuatro secciones pedidas.
+
+El informe está en [`docs/CACHING_REPORT.md`](CACHING_REPORT.md). Las decisiones se tomaron con el desarrollador el 18 de noviembre de 2026.
+
+> **Estado:** completada (2026-11-18), un commit por fase, hechos por el desarrollador.
+
+| Qué | Briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Middleware de timing | "Añade esto a tu `main.py`" | `app/core/timing.py` (`register_timing_middleware`), registrado en `main.py` | Mismo patrón que `register_error_handlers`, y se puede probar aparte |
+| Evidencia del `useMemo` | "Aplícalo solo cuando el perfilado muestra que el cálculo es genuinamente costoso" | Coste del cálculo medido con `performance.now()` en Chrome, a CPU x1 y x4; beneficio estimado, no medido con el Profiler de React | El build de producción no expone el Profiler; se midió el cálculo que se evita |
+| Destino del PR | No lo indica | `feature/serialization-audit`, la rama anterior de la cadena | Los PR #17, #18 y #19 siguen abiertos |
+
+### 1. Middleware de timing en `app/core/timing.py`
+
+El enunciado pega el middleware directamente en `main.py`. Aquí vive en `app/core/timing.py`, y `main.py` solo lo registra con `register_timing_middleware(app)`, igual que los manejadores de errores (`register_error_handlers`).
+
+El formato de la línea y el logger (`api.timing`) son los del briefing. Hay dos añadidos:
+
+- **un handler de consola:** uvicorn solo configura sus propios loggers, así que sin él las líneas de INFO no salen;
+- **los errores no controlados se registran como 500:** sin este añadido, esas peticiones no aparecerían en la medición.
+
+Las 5 pruebas de `tests/core/test_timing.py` montan el middleware sobre una app mínima, cosa que no sería posible si estuviera definido dentro de `main.py`.
+
+**Coste:** ninguno. Quien busque el middleware en `main.py` encuentra allí la llamada que lo registra.
+
+### 2. El `useMemo` se justifica midiendo el cálculo, no con el Profiler
+
+El briefing pide aplicar `useMemo` cuando el perfilado demuestra que el cálculo es costoso, y menciona el Profiler de React DevTools. La medición se hizo con Chrome sin cabeza contra el build de producción, que no expone el Profiler. Se midió directamente el cálculo que el `useMemo` evita repetir:
+
+- filtrar y contar 21 140 órdenes cuesta 4,9 ms en escritorio;
+- con la CPU ralentizada 4 veces cuesta 31,8 ms, más de un fotograma.
+
+Se descartaron los cálculos triviales, como el recuento por tipo (0,26 ms). El beneficio por clic en "Mostrar más" (~30 ms en un móvil) es una estimación a partir de ese coste. El informe lo dice así (`CACHING_REPORT.md`, §4.4 y §7).
+
+**Coste:** el beneficio del `useMemo` está estimado, no medido como tiempo de render en React.
+
+### 3. Pull Request contra la rama anterior
+
+La rama sale de `feature/serialization-audit` porque los PR #17, #18 y #19 siguen abiertos. El PR de esta tarea apunta a esa rama, y GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.

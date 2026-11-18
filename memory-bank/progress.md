@@ -157,6 +157,14 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
   Los 35 endpoints quedan ✅. La excepción del CSV está en `docs/BRIEFING_DIVERGENCES.md` (sección 13).
 - **PR:** #19, abierto el 2026-11-18 contra `feature/performance-audit` mientras el #18 no se fusione (6 commits, head `9f0da00`).
 
+**Estrategia de caching completada en la rama `feature/caching-optimisation`**, creada desde `feature/serialization-audit` (`9f0da00`) el 2026-11-18 porque los PR #17, #18 y #19 siguen abiertos. Un commit por fase, hechos por el desarrollador. Informe: `docs/CACHING_REPORT.md`.
+
+- **Medición (Fases 1 y 2):** middleware de timing `app/core/timing.py` (logger `api.timing`) y seeder `scripts/seed_volume.py` (150 ingredientes y ~21 000 órdenes en Supabase, 10 000 incidencias en TinyDB, marca `VOL-`). Con volumen, `GET /inventory/orders` tarda 1,3 s y `/inventory/products` ~100 ms (ida y vuelta a Supabase); las lecturas de TinyDB, 30–230 ms por releer el archivo entero.
+- **Backend (Fase 3):** `core/cache.py` (`TTLCache`, con contador de generación) y `inventory/cache.py`: `GET /products` 60 s y `GET /orders` 5 min, JSON ya serializado y `X-Cache`. Las tres escrituras del inventario invalidan tras el `commit`. Un acierto tarda 1,4 ms. No se cachean la sesión, los perfiles, `products/{id}` ni TinyDB (la solución es migrar).
+- **Frontend (Fase 4):** `next/dynamic` para `SupplierFormModal` y `CandidateFormModal`; historial y gestor pintados de 50 en 50 (`useShowMore`): el historial pasa de 4,7 s a 0,17 s, y un cambio de estado en el gestor, de 740 ms a 11 ms. El filtro del historial usa `useMemo` (~30 ms en móvil).
+- **Verificación:** API 952 pruebas, Jest 180, `tsc`, lint y build sin errores, y prueba funcional en Chrome. Las divergencias están en `docs/BRIEFING_DIVERGENCES.md` (sección 14).
+- **Datos de volumen:** siguen cargados (`VOL-`) en Supabase y en `brasaland-db.json` local, con 4 incidencias en `in_progress` por la medición; se retiran con `scripts/seed_volume.py --clear`.
+
 **Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
@@ -316,7 +324,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Estrategia de caching (rama `feature/caching-optimisation`)** — En curso (desde 2026-11-18). La rama sale de `feature/serialization-audit` y el PR irá contra ella. Hecho: middleware de timing (`app/core/timing.py`, logger `api.timing`), seeder de volumen (`scripts/seed_volume.py`, cargado en Supabase y TinyDB; se retira con `--clear`) y caché con TTL e invalidación en `GET /inventory/products` (60 s) y `GET /inventory/orders` (5 min). En el backoffice: `next/dynamic` para los modales de proveedor y candidato, historial de órdenes y gestor de incidencias pintados de 50 en 50 (`useShowMore`; el historial pasa de 4,7 s a 0,17 s) y filtro del historial con `useMemo`. Pendiente: `CACHING_REPORT.md`.
+0. **Estrategia de caching (rama `feature/caching-optimisation`)** — Completada (2026-11-18): `docs/CACHING_REPORT.md` recoge la medición, los 35 endpoints evaluados, las decisiones (caché de 60 s y 5 min en el inventario, modales diferidos, listas de 50 en 50 y `useMemo`), los intercambios y lo que no se cacheó. Pendiente: abrir el PR contra `feature/serialization-audit`. Los datos `VOL-` se mantienen hasta que se revise el PR, por si hay que repetir las mediciones; después se retiran con `scripts/seed_volume.py --clear`. Trabajo futuro: paginar `GET /inventory/orders` y `GET /incidents` en la API, y Redis si la API pasa a varios workers. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Estrategia de caching"). Plan en `docs/_private/plan-caching.md`.
 
 0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. PR #19 abierto contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
 
