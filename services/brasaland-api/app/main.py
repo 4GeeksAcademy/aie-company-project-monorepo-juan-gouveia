@@ -3,8 +3,10 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import Depends, FastAPI
+from pydantic import BaseModel, Field
 
 from app.core.config import API_PREFIX, get_settings
 from app.core.database import get_engine, init_db
@@ -62,7 +64,13 @@ app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(profiles_router, prefix=API_PREFIX)
 
 
-@app.get("/health", tags=["health"])
-def health() -> dict[str, str]:
+class HealthResponse(BaseModel):
+    """Respuesta de GET /health. Solo el estado: ni versión, ni dependencias, ni datos de la base."""
+
+    status: Literal["ok"] = Field(description='Siempre "ok" si el servicio responde')
+
+
+@app.get("/health", tags=["health"], response_model=HealthResponse)
+def health() -> HealthResponse:
     """Comprueba que el servicio responde. Fuera de /api/v1 y pública: no expone datos (propuesta 3.4)."""
-    return {"status": "ok"}
+    return HealthResponse(status="ok")

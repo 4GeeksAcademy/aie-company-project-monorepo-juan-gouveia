@@ -40,7 +40,7 @@ export default function AccountProfile() {
         </h2>
         {user.profile ? (
           // La key reinicia el formulario si la sesión pasa a otra cuenta (por ejemplo, desde otra pestaña).
-          <ProfileForm key={user.profile.id} profile={user.profile} onSaved={handleSaved} />
+          <ProfileForm key={user.id} profile={user.profile} onSaved={handleSaved} />
         ) : (
           <FormAlert tone="info">Esta cuenta no tiene perfil. Contacta con un administrador.</FormAlert>
         )}

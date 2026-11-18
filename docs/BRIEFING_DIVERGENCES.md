@@ -23,6 +23,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 10. [Inventario en el backoffice](#inventario-en-el-backoffice) (Hito 5, fase frontend, ticket BRD-0512, rama `feature/inventory-frontend`)
 11. [Contenedorización del monorepo](#contenedorización-del-monorepo) (ticket #infra-40, rama `feature/dockerize`)
 12. [Auditoría de rendimiento de ambos frontends](#auditoría-de-rendimiento-de-ambos-frontends) (consigna "Auditoría de rendimiento — ambos frontends", rama `feature/performance-audit`)
+13. [Auditoría de serialización del backend](#auditoría-de-serialización-del-backend) (briefing "Auditoría de serialización", rama `feature/serialization-audit`)
 
 ---
 
@@ -1135,3 +1136,39 @@ Se revirtió y no lleva commit; el análisis completo está en `REPORT.md` §3.2
 ### 7. Pull Request contra la rama anterior
 
 La rama sale de `feature/dockerize` porque el PR #17 sigue abierto. El PR de esta auditoría apunta a esa rama y GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.
+
+## Auditoría de serialización del backend
+
+Revisión de los 35 endpoints de `services/brasaland-api` para que cada uno tenga un esquema de respuesta explícito, ajustado a su consumidor y sin campos sensibles, en la rama `feature/serialization-audit`. Coincide con el briefing en lo siguiente:
+
+- auditoría escrita en `docs/serialization-audit.md`, con la clasificación ✅/⚠️/❌, el estado original y los cambios;
+- las rutas de auth al principio;
+- esquemas de salida con atributos nombrados y esquemas de entrada separados;
+- listados ligeros;
+- el registro no reenvía el email, y `GET /auth/me` sí devuelve el del propio usuario;
+- decisiones sobre relaciones documentadas.
+
+Las decisiones se tomaron con el desarrollador el 18 de noviembre de 2026.
+
+> **Estado:** completada (2026-11-18), un commit por fase y subfase, hechos por el desarrollador. Los 35 endpoints quedan ✅. La verificación (pruebas, comparación del OpenAPI y prueba manual en `/docs`) está en [`docs/serialization-audit.md`](serialization-audit.md#8-verificación).
+
+| Qué | Briefing | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Exportación CSV | "Cada endpoint de la API debe tener un serializer de respuesta explícito" | `GET /api/v1/incidents/results/export` declara `response_model=None` y documenta `text/csv` en OpenAPI | La respuesta es un archivo, no JSON |
+| Destino del PR | No lo indica | `feature/performance-audit`, la rama anterior de la cadena | Los PR #17 y #18 siguen abiertos |
+
+### 1. La exportación CSV no tiene esquema Pydantic
+
+El briefing pide un serializer de respuesta explícito en cada endpoint. `GET /incidents/results/export` devuelve el archivo `results.csv` que exige el briefing del analizador de incidentes (Fase 2), con `Content-Disposition: attachment`. Un modelo Pydantic describe JSON, no un archivo, así que no hay esquema que declarar sin romper esa descarga.
+
+Para que la excepción sea explícita y no un olvido:
+
+- el decorador declara `response_model=None` con un comentario que remite a la auditoría;
+- OpenAPI documenta la respuesta 200 como `text/csv`, con las columnas `metric`, `value` y `percentage`, y una prueba lo comprueba;
+- la prueba de guarda de la subfase 2d acepta esta ruta como única excepción, con nombre propio.
+
+**Coste:** el contrato de esta ruta lo fija la prueba de las columnas del CSV, no un esquema. Es el mismo contrato que ya tenía.
+
+### 2. Pull Request contra la rama anterior
+
+La rama sale de `feature/performance-audit` porque los PR #17 y #18 siguen abiertos. El PR de esta auditoría apunta a esa rama, y GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.

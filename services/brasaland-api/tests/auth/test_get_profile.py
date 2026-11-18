@@ -5,12 +5,16 @@ from app.domains.users.models import Role
 from tests.auth.helpers import raises_api_error
 
 
-def test_gpr_f1_owner_reads_own_profile(auth_store, active_user):
-    assert read_profile_by_user(active_user.id, current=active_user, store=auth_store).user_id == active_user.id
+def test_gpr_f1_owner_reads_own_profile(auth_store, user_factory):
+    ana = user_factory("ana@brasaland.com", name="Ana")
+
+    assert read_profile_by_user(ana.id, current=ana, store=auth_store).name == "Ana"
 
 
-def test_gpr_f1_admin_reads_another_profile(auth_store, admin_user, active_user):
-    assert read_profile_by_user(active_user.id, current=admin_user, store=auth_store).user_id == active_user.id
+def test_gpr_f1_admin_reads_another_profile(auth_store, admin_user, user_factory):
+    ana = user_factory("ana@brasaland.com", name="Ana")
+
+    assert read_profile_by_user(ana.id, current=admin_user, store=auth_store).name == "Ana"
 
 
 def test_gpr_l1_manager_is_not_admin_and_cannot_read_another_profile(auth_store, user_factory, active_user):

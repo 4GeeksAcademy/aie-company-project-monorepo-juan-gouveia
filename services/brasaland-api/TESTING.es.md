@@ -8,9 +8,9 @@
 
 | Suite | Carpeta | Qué comprueba |
 |---|---|---|
-| **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. **16 módulos y 146 casos**: `test_token.py` y uno por cada uno de los 15 endpoints. |
+| **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. **16 módulos y 147 casos**: `test_token.py` y uno por cada uno de los 15 endpoints. |
 | **Unitarias de proveedores e incidencias** (API-042) | `tests/suppliers/` y `tests/incidents/` | La lógica de los 6 endpoints del directorio de proveedores y los 5 del gestor de incidencias, sin HTTP. **11 módulos y 101 casos**. Ver "API-042: proveedores y gestor de incidencias". |
-| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 de autenticación (214 casos con la parametrización), más las de proveedores, el gestor y el analizador de incidencias (60 pruebas y 90 casos, movidas en API-042). En total, 304 casos. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
+| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 de autenticación (214 casos con la parametrización), más las de proveedores, el gestor y el analizador de incidencias (60 pruebas y 90 casos, movidas en API-042). En total, 304 casos en su momento; el inventario (Hito 5) y la auditoría de serialización, que añade la guarda `test_response_models.py`, llevan la carpeta a 334. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
 | **Resto de la API** | `tests/core/` y `tests/domains/` | Configuración, seguridad, correo, errores, `create-admin`, y los modelos, repositorios y seeds de cada dominio. |
 | **Jest del backoffice** (AUTH-088) | `uis/backoffice/__tests__/auth/` | La lógica TypeScript de autenticación del backoffice: validación de formularios, destino tras el login, token en `localStorage` y reparto de los errores de la API. 55 pruebas. Ver "Pruebas del backoffice (Jest)". |
 | **Jest de utilidades** (FE-019) | `uis/backoffice/__tests__/utils/` | Formateadores de fechas y métricas, el mensaje de error para el usuario y la lectura de respuestas JSON. 35 pruebas. Ver "FE-019: utilidades del frontend". |
@@ -23,8 +23,8 @@ Desde `services/brasaland-api/`:
 
 ```bash
 uv sync --extra dev                      # instala pytest, pytest-cov y httpx
-uv run pytest                            # toda la batería (916 pruebas desde el Hito 5, unos 4,5 min por bcrypt)
-uv run pytest tests/auth                 # solo las unitarias de autenticación (146, unos 45 s)
+uv run pytest                            # toda la batería (926 pruebas desde la auditoría de serialización, unos 4,5 min por bcrypt)
+uv run pytest tests/auth                 # solo las unitarias de autenticación (147, unos 45 s)
 uv run pytest tests/suppliers tests/incidents   # solo las de API-042 (101, unos 2 s)
 uv run pytest -m integration             # solo las pruebas de integración HTTP
 uv run pytest -m "not integration"       # todo menos las pruebas HTTP
@@ -105,7 +105,7 @@ Cubre `core/security.py` (crear y decodificar) y `get_current_user`, la dependen
 
 | ID | Caso | Decisión esperada |
 |---|---|---|
-| ME-F1 | Usuario con perfil | ID, email, rol y perfil del usuario del token |
+| ME-F1 | Usuario con perfil | ID, email, rol y perfil del usuario del token; el perfil solo lleva `name`, `phone` y `address` |
 | ME-L1 | Usuario sin perfil | `profile` vacío, sin error |
 | ME-X1 | Token de un usuario borrado | No llega a la ruta: 401 `invalid_token` |
 
@@ -152,6 +152,7 @@ Cubre `core/security.py` (crear y decodificar) y `get_current_user`, la dependen
 | ID | Caso | Decisión esperada | Por qué |
 |---|---|---|---|
 | REG-F1 | Datos válidos con perfil | Usuario `user`, activo, email en minúsculas, contraseña solo como hash bcrypt verificable; perfil con los datos enviados | |
+| REG-F2 | Respuesta de un registro correcto | Exactamente `{id, message}`: sin email, credenciales ni perfil | Auditoría de serialización (U1): las rutas de auth no autenticadas no reenvían el email |
 | REG-L1 | Sin datos de perfil | Perfil creado con los campos vacíos | Siempre hay un perfil por usuario |
 | REG-L2 | Contraseña de 8 caracteres y de 72 bytes; de 7 y de 73 bytes | Las primeras valen; las otras, no | |
 | REG-L3 | Email ya registrado con otra capitalización o con espacios | 409 `duplicate_email` y no se crea nada | "Usuario duplicado" del ticket |

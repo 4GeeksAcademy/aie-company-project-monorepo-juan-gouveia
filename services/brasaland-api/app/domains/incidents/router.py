@@ -80,8 +80,16 @@ async def analyze_incidents(
 
 @router.get(
     "/results/export",
+    # Excepción documentada (docs/serialization-audit.md, I2): la respuesta es un archivo CSV, no JSON,
+    # así que no tiene esquema Pydantic. `response_model=None` deja esa decisión explícita.
+    response_model=None,
     response_class=Response,
-    responses={200: {"content": {"text/csv": {}}, "description": "CSV con una fila por métrica"}},
+    responses={
+        200: {
+            "content": {"text/csv": {"schema": {"type": "string"}, "example": "metric,value,percentage\n"}},
+            "description": "Archivo results.csv con una fila por métrica (columnas metric, value y percentage)",
+        }
+    },
 )
 def export_results(repository: LastAnalysisRepository = Depends(get_repository)) -> Response:
     """Descarga el último análisis como results.csv (columnas metric, value y percentage)."""

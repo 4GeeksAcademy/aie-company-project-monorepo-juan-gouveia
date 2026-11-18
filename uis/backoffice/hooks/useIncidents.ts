@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { listIncidents, updateIncidentStatus } from "@/lib/gestor-incidencias/api";
-import type { Incident, IncidentFilters, IncidentStatus } from "@/types/incident-manager";
+import type { IncidentFilters, IncidentListItem, IncidentStatus } from "@/types/incident-manager";
 import { toUserMessage } from "@/lib/error-message";
 
 const NO_FILTERS: IncidentFilters = { status: "", origin: "", branch: "" };
@@ -18,13 +18,13 @@ export function useIncidents() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
-  function replaceIncident(updated: Incident) {
+  function replaceIncident(updated: IncidentListItem) {
     setData((prev) => prev.map((incident) => (incident.id === updated.id ? updated : incident)));
   }
 
   // Cambio de estado optimista: la fila muestra el estado nuevo al momento. Si la API lo rechaza o
   // falla, la fila vuelve a ser exactamente la de antes y se devuelve el mensaje para avisar.
-  async function changeStatus(incident: Incident, next: IncidentStatus): Promise<string | null> {
+  async function changeStatus(incident: IncidentListItem, next: IncidentStatus): Promise<string | null> {
     replaceIncident({ ...incident, status: next });
     try {
       replaceIncident(await updateIncidentStatus(incident.id, next));

@@ -8,9 +8,9 @@
 
 | Suite | Folder | What it checks |
 |---|---|---|
-| **Authentication unit tests** (AUTH-088) | `tests/auth/` | The logic of each authentication endpoint: what it decides, not how it responds. They call each route's functions and their services directly, without an HTTP client. **16 modules and 146 cases**: `test_token.py` and one per each of the 15 endpoints. |
+| **Authentication unit tests** (AUTH-088) | `tests/auth/` | The logic of each authentication endpoint: what it decides, not how it responds. They call each route's functions and their services directly, without an HTTP client. **16 modules and 147 cases**: `test_token.py` and one per each of the 15 endpoints. |
 | **Supplier and incident unit tests** (API-042) | `tests/suppliers/` and `tests/incidents/` | The logic of the 6 supplier directory endpoints and the 5 incident manager endpoints, without HTTP. **11 modules and 101 cases**. See "API-042: suppliers and incident manager". |
-| **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed: 99 for authentication (214 cases with parametrization), plus the supplier, incident manager and CSV analyzer ones (60 tests and 90 cases, moved in API-042). 304 cases in all. They carry the `integration` marker, applied to the whole folder by `tests/integration/conftest.py`. |
+| **HTTP integration** | `tests/integration/` | The HTTP contract with the backoffice: protected routes, status codes, the `{"error": {...}}` format and headers. These are the router tests that already existed: 99 for authentication (214 cases with parametrization), plus the supplier, incident manager and CSV analyzer ones (60 tests and 90 cases, moved in API-042). 304 cases in all at the time; inventory (Milestone 5) and the serialization audit, which adds the `test_response_models.py` guard, bring the folder to 334. They carry the `integration` marker, applied to the whole folder by `tests/integration/conftest.py`. |
 | **Rest of the API** | `tests/core/` and `tests/domains/` | Configuration, security, email, errors, `create-admin`, and each domain's models, repositories and seeds. |
 | **Backoffice Jest** (AUTH-088) | `uis/backoffice/__tests__/auth/` | The backoffice's TypeScript authentication logic: form validation, post-login destination, the token in `localStorage`, and how API errors are split across fields. 55 tests. See "Backoffice tests (Jest)". |
 | **Utility Jest** (FE-019) | `uis/backoffice/__tests__/utils/` | Date and metric formatters, the user-facing error message, and reading JSON responses. 35 tests. See "FE-019: frontend utilities". |
@@ -23,8 +23,8 @@ From `services/brasaland-api/`:
 
 ```bash
 uv sync --extra dev                      # installs pytest, pytest-cov and httpx
-uv run pytest                            # the whole suite (916 tests since Milestone 5, about 4.5 min because of bcrypt)
-uv run pytest tests/auth                 # authentication unit tests only (146, about 45 s)
+uv run pytest                            # the whole suite (926 tests since the serialization audit, about 4.5 min because of bcrypt)
+uv run pytest tests/auth                 # authentication unit tests only (147, about 45 s)
 uv run pytest tests/suppliers tests/incidents   # API-042 tests only (101, about 2 s)
 uv run pytest -m integration             # HTTP integration tests only
 uv run pytest -m "not integration"       # everything except the HTTP tests
@@ -105,7 +105,7 @@ Covers `core/security.py` (create and decode) and `get_current_user`, the depend
 
 | ID | Case | Expected decision |
 |---|---|---|
-| ME-F1 | User with a profile | ID, email, role and profile of the token's user |
+| ME-F1 | User with a profile | ID, email, role and profile of the token's user; the profile carries only `name`, `phone` and `address` |
 | ME-L1 | User without a profile | Empty `profile`, no error |
 | ME-X1 | Token of a deleted user | Never reaches the route: 401 `invalid_token` |
 
@@ -152,6 +152,7 @@ Covers `core/security.py` (create and decode) and `get_current_user`, the depend
 | ID | Case | Expected decision | Why |
 |---|---|---|---|
 | REG-F1 | Valid data with a profile | An active `user`, lowercase email, password stored only as a verifiable bcrypt hash; profile with the data sent | |
+| REG-F2 | Response of a successful sign-up | Exactly `{id, message}`: no email, credentials or profile | The serialization audit (U1): unauthenticated auth routes don't echo the email |
 | REG-L1 | No profile data | Profile created with empty fields | Every user always has a profile |
 | REG-L2 | Password of 8 characters and of 72 bytes; of 7 and of 73 bytes | The first are accepted; the others aren't | |
 | REG-L3 | Email already registered, with different case or with spaces | 409 `duplicate_email` and nothing is created | The ticket's "duplicate user" |

@@ -24,7 +24,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Rutas protegidas:** todas salvo `POST /auth/login`, `POST /users` y `GET /health`, incluidas las 8 de `incidents` y `suppliers`. `/incidencias` y `/proveedores` del backoffice reciben 401 hasta que el BFF envíe el token, como prevé el briefing.
 - **Verificación:** 361 pruebas pytest pasan; flujo y rutas protegidas probados en vivo con bases temporales.
 - **Documentación:** los README del servicio, de `services/` y del backoffice, `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas", con la tabla de verificación) y `docs/ARCHITECTURE_PROPOSAL.md` (2.3, 2.5, 2.7, 3.2, 3.3 y 7).
-- **PR:** #8, abierto. Sigue apuntando a `directorio-prov`, ya fusionada; hay que cambiar su destino a `main` antes de borrar esa rama.
+- **PR:** #8, fusionado en `main` el 2026-11-18.
 
 **Autenticación en el frontend (ticket AUTH-02) completada en la rama `feature/auth-frontend`**, creada desde `feature/auth-api` porque su PR sigue abierto. Las 6 fases (0 a 5) están hechas y revisadas por el desarrollador (2026-11-06):
 
@@ -35,7 +35,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Verificación:** `tsc`, `lint` y `build` pasan; 361 pruebas de la API pasan; el website no cambia. Los flujos del BFF se probaron en vivo con bases temporales, y los del navegador los revisó el desarrollador.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend", con la tabla de verificación), `docs/ARCHITECTURE_PROPOSAL.md` (5.2: token en `localStorage` reenviado por el BFF) y los README.
 - **Commit:** `fb35b8d`, hecho por el desarrollador.
-- **PR:** #9, abierto, contra `feature/auth-api` mientras el #8 no se fusione.
+- **PR:** #9, fusionado en `main` el 2026-11-18.
 
 **Recuperación y cambio de contraseña (ticket AUTH-03) completada en la rama `feature/password-reset`**, creada desde `feature/auth-frontend` (`fb35b8d`). Las 6 fases (0 a 5) están hechas y revisadas por el desarrollador (2026-11-06 y 2026-11-08):
 
@@ -49,9 +49,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Verificación:** 433 pruebas de la API; `tsc`, `lint` y `build` del backoffice; flujo completo con correo real revisado por el desarrollador. El cambio de contraseña se probó en vivo por el BFF (400, 422, 401, token nuevo y `session_revoked` del anterior) y lo revisó el desarrollador en el navegador. Sin claves en el código ni en el historial de Git.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Recuperación y cambio de contraseña": rutas `/api/v1`, Resend, endpoint `validate`, `password_changed_at`, 422 ante un email mal formado, opcionales, correcciones de `doc_id` (AUTH-01) y `mergeFieldErrors` (AUTH-02), y la tabla de los 12 criterios. README de la API y del backoffice.
 - **Commits:** `e87121c` (fases 0-3) y `2906225` (fases 4 y 5), hechos por el desarrollador.
-- **PR:** #10, abierto, contra `feature/auth-frontend` mientras el #9 no se fusione.
+- **PR:** #10, fusionado en `main` el 2026-11-18.
 
-**Gestor de incidencias centralizado completado en la rama `feature/incident-manager`**, creada desde `feature/password-reset` (`2906225`) porque los PR de AUTH siguen abiertos. Commit `ccd09cc`; PR #11 abierto contra esa rama. Decisiones G-1 a G-13 aprobadas y las 5 fases hechas (2026-11-08); el formulario y el panel, revisados por el desarrollador en el navegador:
+**Gestor de incidencias centralizado completado en la rama `feature/incident-manager`**, creada desde `feature/password-reset` (`2906225`) porque los PR de AUTH siguen abiertos. Commit `ccd09cc`; PR #11 fusionado en `main` (2026-11-18). Decisiones G-1 a G-13 aprobadas y las 5 fases hechas (2026-11-08); el formulario y el panel, revisados por el desarrollador en el navegador:
 
 - **API:** `POST`, `GET` (filtros `status`, `origin`, `branch` y `category`), `GET /summary`, `GET /{id}` y `PATCH /{id}/status` bajo `/api/v1/incidents`, junto al analizador del CSV, que no cambia. Valores exactos del briefing, ciclo de vida `open → in_progress | discarded → …`, errores de validación con 400 en estas rutas (el resto de la API sigue con 422) y un 500 genérico para cualquier excepción no controlada en toda la API.
 - **Datos:** tabla `incidents` en `storage/brasaland-db.json`, con un bloqueo por archivo compartido con proveedores, y `incident_seed_log` para que el seed no duplique registros.
@@ -64,7 +64,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestor de incidencias centralizado" (rutas `/api/v1`, `incident_seed_log`, 400 solo en el gestor, `status` fijo, menú en móvil y tablet, decisiones y la tabla de los 21 criterios), y la divergencia 3 del analizador marcada como resuelta. `ARCHITECTURE_PROPOSAL.md` (cuarto bloque en 2.7 y `packages/shared` en 6.2) y los README.
 - **Pendiente:** fusionar el PR #11 (tras el #10) y la entrega; los hace el desarrollador.
 
-**Auditoría de gestión de errores completada en la rama `feature/error-handling-audit`**, creada desde `feature/incident-manager` (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto contra `feature/incident-manager`. Se auditó todo el repositorio y se corrigieron los 29 hallazgos (1 crítico, 6 altos, 11 medios y 11 bajos), uno por commit, sin funcionalidades nuevas:
+**Auditoría de gestión de errores completada en la rama `feature/error-handling-audit`**, creada desde `feature/incident-manager` (2026-11-09). Commit de cierre `d8f39c2`; PR #12 fusionado en `main` (2026-11-18). Se auditó todo el repositorio y se corrigieron los 29 hallazgos (1 crítico, 6 altos, 11 medios y 11 bajos), uno por commit, sin funcionalidades nuevas:
 
 - **Frontend (backoffice y web):** pantallas de error de Next.js (`error.tsx`, `global-error.tsx` y `not-found.tsx`) con "Reintentar" y "Volver al inicio". Mensajes legibles para cualquier estado HTTP o respuesta no JSON, y `toUserMessage` para no mostrar nunca un error técnico. Cliente del tracker de talento con timeout, captura de red y listas comprobadas. Guardado parcial distinguido, "Reintentar" en todas las cargas, indicación de qué hacer tras un error del análisis, `finally` en los formularios, fechas no válidas como "—", y `localStorage` bloqueado sin romper la sesión.
 - **Intermediario (BFF):** mensaje genérico si falta `API_BASE_URL`, y log `[BFF]` de los 502 y 504 sin cabeceras ni cuerpo.
@@ -87,7 +87,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Documentación:** `services/brasaland-api/TESTING.md` y `TESTING.es.md` (plan, cómo ejecutar, cómo están construidas, revisión con IA, bugs, Jest y cobertura); README de la API y del backoffice; `docs/BRIEFING_DIVERGENCES.md`, sección "Batería de pruebas de autenticación" (7 divergencias y la tabla de los 8 criterios).
 - **Extra API-042 completado:** 11 módulos y 101 casos en `tests/suppliers/` y `tests/incidents/` (los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP); con ellos solos, la cobertura de los dos dominios es del 84 % (objetivo: 60 %). Las pruebas de router de los dos dominios pasaron a `tests/integration/`. `uv run pytest`: 806 pasan.
 - **Extra FE-019 completado:** 35 pruebas de Jest en `uis/backoffice/__tests__/utils/` para `lib/format.ts`, `toUserMessage` y `readJson`, todas al 100 %; `jest.config.js` fija `TZ=UTC`. El backoffice tiene 90 pruebas de Jest.
-- **PR:** #13, abierto el 2026-11-10 contra `feature/error-handling-audit` mientras el #12 no se fusione.
+- **PR:** #13, fusionado en `main` el 2026-11-18.
 
 **Gestión de inventario con ORM (Hito 5, ticket BRD-0512) completada en la rama `feature/inventory-orm`**, creada desde `feature/auth-tests` (`65f2a76`) el 2026-11-14 porque el PR #13 sigue abierto. Decisiones D1 a D7 aprobadas (en `docs/_private/briefing-inventario-backend.md`) y fases 0 a 6 hechas, con un commit por fase hecho por el desarrollador:
 
@@ -96,7 +96,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Semilla:** `uv run --env-file .env seed-inventory` (6 ingredientes, 4 entradas y 3 salidas; stock 52/32/20/0), idempotente, con el UUID del administrador activo más antiguo. Cargada en Supabase.
 - **Verificación:** `uv run pytest`: 916 pasan (110 nuevas; cobertura del dominio, 97 %). En vivo contra Supabase (2026-11-14): semilla dos veces, stock, filtro por país, 400 sin escritura, 422 con `user_uuid` o `reason` inválido, `GET /orders`, 401 sin token y 405 al intentar editar el stock.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestión de inventario con ORM" (D1–D7, decisiones y la tabla de verificación de los criterios de evaluación); README de la API y de `services/`; `techContext.md`; `ARCHITECTURE_PROPOSAL.md` (quinto bloque en 2.7 y sección 7).
-- **PR:** #14, abierto el 2026-11-14 contra `feature/auth-tests` mientras el #13 no se fusione. La herramienta de inventario del backoffice llegó en la fase frontend (párrafo siguiente).
+- **PR:** #14, fusionado en `main` el 2026-11-18. La herramienta de inventario del backoffice llegó en la fase frontend (párrafo siguiente).
 
 **Inventario en el backoffice (Hito 5, fase frontend, BRD-0512) completado en la rama `feature/inventory-frontend`**, creada desde `feature/inventory-orm` el 2026-11-14 porque el PR #14 sigue abierto. Decisiones F1 a F6 aprobadas (en `docs/_private/briefing-inventario-backend.md`) y fases 0 a 5 hechas, con un commit por fase hecho por el desarrollador:
 
@@ -105,14 +105,14 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Verificación:** `npm test` 159 pasan (69 de inventario); `tsc`, `lint` y `build` pasan. En vivo contra una API temporal (SQLite y TinyDB fuera del repositorio), sin tocar Supabase.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Inventario en el backoffice" (divergencias, decisiones y tabla de los 10 criterios); README del backoffice.
 - **Ajustes tras el plan (commit aparte):** pestañas del inventario en dos líneas en móvil, y Proveedor de la entrada como lista de los proveedores activos del directorio, filtrada por el país y la categoría equivalente del ingrediente (`lib/inventory-suppliers.ts`).
-- **PR:** #15, abierto el 2026-11-16 contra `feature/inventory-orm` mientras el #14 no se fusione. Los cambios de cabecera y menú (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) van en la rama `feature/backoffice-navigation`, creada desde esta.
+- **PR:** #15, fusionado en `main` el 2026-11-18. Los cambios de cabecera y menú (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) van en la rama `feature/backoffice-navigation`, creada desde esta.
 
 **Navegación del backoffice completada en la rama `feature/backoffice-navigation`**, creada desde `feature/inventory-frontend` (`3c7fe3d`) el 2026-11-16 porque el PR #15 sigue abierto. Sin ticket; un commit por cambio:
 
 - **Cuenta:** "Mi perfil" y "Cerrar sesión" solo con iconos en todos los tamaños, con un tooltip propio (`components/Tooltip.tsx`) al pasar el ratón o llegar con el teclado.
 - **Menú por secciones:** `lib/tools.ts` agrupa las herramientas en `toolSections` (Inventario, Proveedores, Incidencias y Herramientas). En la cabecera, las secciones con varias herramientas son desplegables (`components/NavDropdown.tsx`), y la portada muestra las mismas secciones.
 - **Menú hamburguesa** por debajo de `xl` (`components/MobileNav.tsx`): panel superpuesto bajo la cabecera, sin cambiar su altura. Ya se puede navegar desde cualquier página en móvil y tablet, así que la divergencia del menú del gestor de incidencias queda resuelta (`docs/BRIEFING_DIVERGENCES.md`).
-- **PR:** #16, abierto el 2026-11-16 contra `feature/inventory-frontend` mientras el #15 no se fusione (3 commits: `14f69ff`, `fee7215` y `64f0d68`).
+- **PR:** #16, fusionado en `main` el 2026-11-18.
 
 **Contenedorización del monorepo (ticket #infra-40) completada en la rama `feature/dockerize`**, creada desde `feature/backoffice-navigation` (`64f0d68`) el 2026-11-16 porque el PR #16 sigue abierto. El objetivo es que `docker compose up` desde la raíz levante dos servicios en la red `brasaland-net`: `uis` (website en el 3000 y backoffice en el 3001, con `next dev`) y `api` (Uvicorn con `--reload`). Ambos usan bind mounts y leen sus variables del `.env` de la raíz. El despliegue al VPS de la consigna quedó fuera de alcance: ese apartado se eliminó. Los paquetes `packages/shared` y `packages/brasa-core` entran a las imágenes con `additional_contexts` de Compose.
 
@@ -123,7 +123,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Fase 4 (`ba3eae3` y `e780588`, verificación):** arranque desde cero (`down -v`, `build --no-cache`, `up -d`) sin pasos manuales; las páginas responden desde el host; `uis` y `api` se alcanzan por nombre en los dos sentidos; el BFF llega a la API (401 sin token, y login real con una cuenta temporal que después se borró, con lectura del inventario en Supabase); la recarga en caliente funciona en la API y en las dos apps con cambios hechos desde Windows; ningún secreto real en archivos versionados y el `.env` nunca se ha versionado; en el host pasan `uv run pytest` (916) y `npm test` (163). **Cambio:** Turbopack no detecta cambios en los bind mounts (ni con sondeo), así que en Docker las dos apps arrancan con `next dev --webpack` (`uis/start.sh`); fuera de Docker sigue Turbopack.
 - **Fase 5 (documentación):** sección "Ejecutar con Docker" en el README raíz (`.md` y `.es.md`: requisitos, `cp .env.example .env`, servicios y URL, recarga, datos y comandos útiles), notas en los README de `uis/` y `services/`, `techContext.md` y la sección "Contenedorización del monorepo" de `docs/BRIEFING_DIVERGENCES.md` (VPS fuera de alcance, contextos adicionales, `requirements.txt` desde `uv.lock`, webpack en Docker, sondeo, el `.env` como paso previo, el PR contra la rama anterior, decisiones y la tabla de los 8 criterios).
 - **Commit de la Fase 5:** `b1cab16`.
-- **PR:** #17, abierto el 2026-11-17 contra `feature/backoffice-navigation` mientras el #16 no se fusione (7 commits), con la captura de `docker compose ps`.
+- **PR:** #17, abierto el 2026-11-17; desde el 2026-11-18 apunta a `main` (7 commits), con la captura de `docker compose ps`.
 
 **Auditoría de rendimiento de ambos frontends completada en la rama `feature/performance-audit`**, creada desde `feature/dockerize` (`b1cab16`) el 2026-11-17 porque el PR #17 sigue abierto. Ciclo medir → analizar → corregir → volver a medir con Lighthouse 13.5.0 (la de DevTools en Chrome 157) sobre el build de producción (`build` + `start`) servido en local, fuera de Docker. Las cifras son la mediana de 3 ejecuciones del CLI; las capturas, de DevTools. Todo está en `audit/`.
 
@@ -139,27 +139,44 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
   - R3 `ae6eb10`: componente `BrandLogo` en las dos cabeceras del website.
 - **Medición final (`6f7f0c3`):** `audit/after/`.
 - **Informe:** `audit/REPORT.md` (comparativa, valoración y criterios). Divergencias en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends").
-- **PR:** pendiente de abrir contra `feature/dockerize`.
+- **PR:** #18, abierto el 2026-11-17 contra `feature/dockerize` mientras el #17 no se fusione.
 
-**Pull requests (comprobados en GitHub el 2026-11-17).** Forman una cadena: cada PR parte de la rama del anterior.
+**Auditoría de serialización del backend completada en la rama `feature/serialization-audit`**, creada desde `feature/performance-audit` (`cd078c9`) el 2026-11-18 porque los PR #17 y #18 siguen abiertos. El objetivo es que cada endpoint de `services/brasaland-api` tenga un `response_model` explícito y ajustado a lo que usa su consumidor, sin campos sensibles ni email en las rutas de auth no autenticadas. Decisiones D1 a D5 aprobadas (en `docs/_private/plan-auditoria-serializacion.md`); un commit por fase y subfase, hechos por el desarrollador.
+
+- **Auditoría (Fase 1):** `docs/serialization-audit.md`. Hay 35 endpoints: 23 ✅, 10 ⚠️, 1 ❌ (`GET /health`) y 1 excepción documentada (la exportación CSV). Ningún endpoint devuelve un ORM en crudo ni contraseñas. El trabajo pendiente está en el registro (reenvía el email), en los perfiles (exponen `id` y `user_id`), en el listado de incidencias (usa el esquema de detalle) y en las órdenes del inventario (ingrediente anidado junto a su clave foránea).
+- **Implementación (Fase 2), con el backoffice adaptado en el mismo commit:**
+  - 2a `d618a8a`: el registro devuelve `{id, message}`, y los perfiles y `/auth/me` usan `ProfileRead` (sin `id` ni `user_id`);
+  - 2b `857802f`: las órdenes del inventario llevan el ingrediente aplanado (`ingredient_name`, `ingredient_sku`, `ingredient_unit`);
+  - 2c `ad55908`: el listado de incidencias usa `IncidentListItem` (sin `updated_at`), `/health` usa `HealthResponse` y la exportación CSV declara `response_model=None` como excepción documentada;
+  - 2d `1c19ca5`: la guarda `tests/integration/test_response_models.py` exige, sobre OpenAPI, modelos con nombre, ninguna contraseña ni token en las respuestas, ningún email en los flujos de auth salvo `/auth/me` y entradas separadas de las salidas.
+- **Verificación (Fase 3):**
+  - `uv run pytest`: 926 pasan (916 + 10);
+  - backoffice: Jest 170, `tsc`, lint y build sin errores;
+  - el OpenAPI solo cambia en lo previsto;
+  - prueba manual en `/docs` de 5 endpoints, con una cuenta temporal que después se borró.
+  Los 35 endpoints quedan ✅. La excepción del CSV está en `docs/BRIEFING_DIVERGENCES.md` (sección 13).
+- **PR:** pendiente de abrir contra `feature/performance-audit`.
+
+**Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
 |---|---|---|
 | #6 Analizador de incidentes | `features/csv-reader` → `main` | ✅ Fusionado |
 | #7 Directorio de proveedores | `directorio-prov` → `main` | ✅ Fusionado |
-| #8 AUTH-01 | `feature/auth-api` → `main` | ⏳ Abierto; listo para fusionar (destino cambiado a `main` el 2026-11-09) |
-| #9 AUTH-02 | `feature/auth-frontend` → `feature/auth-api` | ⏳ Abierto |
-| #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
-| #11 Gestor de incidencias | `feature/incident-manager` → `feature/password-reset` | ⏳ Abierto |
-| #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
-| #13 AUTH-088 (pruebas, API-042 y FE-019) | `feature/auth-tests` → `feature/error-handling-audit` | ⏳ Abierto (2026-11-10) |
-| #14 Hito 5: inventario con SQLModel y Supabase | `feature/inventory-orm` → `feature/auth-tests` | ⏳ Abierto (2026-11-14) |
-| #15 Hito 5, fase frontend: inventario en el backoffice | `feature/inventory-frontend` → `feature/inventory-orm` | ⏳ Abierto (2026-11-16) |
-| #16 Navegación del backoffice | `feature/backoffice-navigation` → `feature/inventory-frontend` | ⏳ Abierto (2026-11-16) |
-| #17 Contenedorización del monorepo (#infra-40) | `feature/dockerize` → `feature/backoffice-navigation` | ⏳ Abierto (2026-11-17) |
+| #8 AUTH-01 | `feature/auth-api` → `main` | ✅ Fusionado (2026-11-18) |
+| #9 AUTH-02 | `feature/auth-frontend` → `main` | ✅ Fusionado (2026-11-18) |
+| #10 AUTH-03 | `feature/password-reset` → `main` | ✅ Fusionado (2026-11-18) |
+| #11 Gestor de incidencias | `feature/incident-manager` → `main` | ✅ Fusionado (2026-11-18) |
+| #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `main` | ✅ Fusionado (2026-11-18) |
+| #13 AUTH-088 (pruebas, API-042 y FE-019) | `feature/auth-tests` → `main` | ✅ Fusionado (2026-11-18) |
+| #14 Hito 5: inventario con SQLModel y Supabase | `feature/inventory-orm` → `main` | ✅ Fusionado (2026-11-18) |
+| #15 Hito 5, fase frontend: inventario en el backoffice | `feature/inventory-frontend` → `main` | ✅ Fusionado (2026-11-18) |
+| #16 Navegación del backoffice | `feature/backoffice-navigation` → `main` | ✅ Fusionado (2026-11-18) |
+| #17 Contenedorización del monorepo (#infra-40) | `feature/dockerize` → `main` | ⏳ Abierto (2026-11-17) |
+| #18 Auditoría de rendimiento de ambos frontends | `feature/performance-audit` → `feature/dockerize` | ⏳ Abierto (2026-11-17) |
 
-- **Orden de merge:** #8, #9, #10, #11, #12, #13, #14, #15, #16 y #17, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
-- **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
+- **Orden de merge:** del #6 al #16 ya están fusionados (el #8 a #16, el 2026-11-18). Quedan el #17 y el #18, en ese orden, con "Create a merge commit" (sin squash ni rebase), para que el PR siguiente no repita commits ni dé conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Ramas (2026-11-18):** las ramas fusionadas, incluida `directorio-prov`, están borradas en local y en GitHub. Quedan `main` (al día con `origin/main`), `feature/dockerize`, `feature/performance-audit` y `feature/serialization-audit`.
 
 ### 1. Contexto y Configuración Inicial
 
@@ -298,25 +315,27 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Auditoría de rendimiento (rama `feature/performance-audit`)** — Completada (2026-11-17): `audit/AUDIT.md`, `audit/REPORT.md` y las capturas de `audit/before/` y `audit/after/`. Mejoras medidas: CLS del gestor de incidencias 0,204 → 0 y Best Practices del website 96 → 100. Pendiente: abrir el PR contra `feature/dockerize`. Cuando se fusione la cadena y se actualice Next, repetir las mediciones con la misma versión de Lighthouse. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends"). Plan en `docs/_private/plan-auditoria-rendimiento.md`.
+0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. Pendiente: abrir el PR contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
 
-0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Completada: `docker compose up` desde la raíz levanta `uis` y `api` con recarga en caliente, verificado (2026-11-17). Un commit por fase (la última, `b1cab16`). PR #17 abierto contra `feature/backoffice-navigation` mientras el #16 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Contenedorización del monorepo"). Plan en `docs/_private/plan-contenedorizacion.md`.
+0. **Auditoría de rendimiento (rama `feature/performance-audit`)** — Completada (2026-11-17): `audit/AUDIT.md`, `audit/REPORT.md` y las capturas de `audit/before/` y `audit/after/`. Mejoras medidas: CLS del gestor de incidencias 0,204 → 0 y Best Practices del website 96 → 100. PR #18 abierto contra `feature/dockerize`. Cuando se fusione la cadena y se actualice Next, repetir las mediciones con la misma versión de Lighthouse. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends"). Plan en `docs/_private/plan-auditoria-rendimiento.md`.
 
-0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 abierto contra `feature/inventory-frontend`. Pendiente: fusionar la cadena en orden (#8 a #16) y, cuando no quede ninguno, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
+0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Completada: `docker compose up` desde la raíz levanta `uis` y `api` con recarga en caliente, verificado (2026-11-17). Un commit por fase (la última, `b1cab16`). PR #17 abierto; desde el 2026-11-18 apunta a `main`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Contenedorización del monorepo"). Plan en `docs/_private/plan-contenedorizacion.md`.
 
-0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 abierto contra `feature/auth-tests` mientras el #13 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
+0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 fusionado en `main` (2026-11-18). La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 fusionado en `main` (2026-11-18). Pendiente: cuando se fusionen el #17 y el #18, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
-0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. PR #13 abierto contra `feature/error-handling-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
+0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 fusionado en `main` (2026-11-18). Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 
-0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 abierto, contra `feature/incident-manager` mientras el #11 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
+0. **AUTH-088: pruebas de la API de autenticación (rama `feature/auth-tests`)** — Núcleo completado (fases 0 a 6; bugs H-1 y H-2 corregidos): 146 pruebas unitarias de autenticación (88 % de cobertura), 55 de Jest y `TESTING.md`. Extras API-042 (101 pruebas, 84 %) y FE-019 (35 pruebas de Jest) completados. PR #13 fusionado en `main` (2026-11-18). Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Batería de pruebas de autenticación").
 
-0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado, documentado y con commit (`ccd09cc`). PR #11 abierto, contra `feature/password-reset` mientras el #10 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
+0. **Entregar la auditoría de gestión de errores (rama `feature/error-handling-audit`)** — Los 29 hallazgos están corregidos, verificados y documentados (2026-11-09). Commit de cierre `d8f39c2`; PR #12 fusionado en `main` (2026-11-18). La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de gestión de errores").
 
-0. **Entregar AUTH-03 (rama `feature/password-reset`)** — Implementado, verificado y documentado. Commits `e87121c` y `2906225`; PR #10 abierto, contra `feature/auth-frontend` mientras el #9 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Recuperación y cambio de contraseña", con la verificación de los 12 criterios).
+0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado, documentado y con commit (`ccd09cc`). PR #11 fusionado en `main` (2026-11-18). La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
 
-0. **Entregar AUTH-02 (rama `feature/auth-frontend`)** — Implementado, verificado, documentado y con commit (`fb35b8d`). PR #9 abierto, contra `feature/auth-api` mientras el #8 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend").
+0. **Entregar AUTH-03 (rama `feature/password-reset`)** — Implementado, verificado y documentado. Commits `e87121c` y `2906225`; PR #10 fusionado en `main` (2026-11-18). La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Recuperación y cambio de contraseña", con la verificación de los 12 criterios).
 
-0. **Entregar AUTH-01 (rama `feature/auth-api`)** — Implementado, verificado y documentado. PR #8 abierto contra `main` y listo para fusionar; es el primero de la cadena. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas").
+0. **Entregar AUTH-02 (rama `feature/auth-frontend`)** — Implementado, verificado, documentado y con commit (`fb35b8d`). PR #9 fusionado en `main` (2026-11-18). La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend").
+
+0. **Entregar AUTH-01 (rama `feature/auth-api`)** — Implementado, verificado y documentado. PR #8 fusionado en `main` (2026-11-18). La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas").
 
 0. ✅ **Directorio de proveedores (milestone 09)** — PR #7 aprobado y fusionado en `main` (2026-11-08). Sus justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Directorio de proveedores").
 

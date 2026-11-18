@@ -9,14 +9,14 @@ def test_pme_f1_returns_own_profile(auth_store, user_factory):
 
     profile = read_my_profile(user=user, store=auth_store)
 
-    assert (profile.user_id, profile.name, profile.phone, profile.address) == (user.id, "Ana Gómez", None, "Calle 1")
+    # Solo nombre y contacto: sin `id` ni `user_id` (docs/serialization-audit.md, P1).
+    assert profile.model_dump() == {"name": "Ana Gómez", "phone": None, "address": "Calle 1"}
 
 
 def test_pme_l1_profile_with_all_fields_empty(auth_store, active_user):
     profile = read_my_profile(user=active_user, store=auth_store)
 
-    assert profile.user_id == active_user.id
-    assert (profile.name, profile.phone, profile.address) == (None, None, None)
+    assert profile.model_dump() == {"name": None, "phone": None, "address": None}
 
 
 def test_pme_x1_user_without_profile_is_not_found(auth_store, active_user):

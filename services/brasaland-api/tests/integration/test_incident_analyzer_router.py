@@ -92,6 +92,12 @@ def test_export_returns_last_analysis_as_csv(client, sample_upload):
     assert by_metric["invalid.missing_reporter"]["value"] == "0"
 
 
+def test_export_is_documented_as_csv_in_openapi(client):
+    # Excepción de la auditoría de serialización (I2): un archivo, no JSON, sin esquema Pydantic.
+    operation = client.get("/openapi.json").json()["paths"][EXPORT_URL]["get"]
+    assert list(operation["responses"]["200"]["content"]) == ["text/csv"]
+
+
 def test_export_uses_the_latest_analysis(client, sample_upload):
     client.post(ANALYZE_URL, files=sample_upload)
     header = sample_upload["file"][1].decode("utf-8").splitlines()[0]

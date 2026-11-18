@@ -17,6 +17,7 @@ from app.domains.incidents.models import (
     Incident,
     IncidentCategory,
     IncidentCreate,
+    IncidentListItem,
     IncidentOrigin,
     IncidentStatus,
     IncidentSummary,
@@ -52,16 +53,20 @@ def create_incident(
     return repository.create(data)
 
 
-@router.get("", response_model=list[Incident], responses=INVALID_REQUEST)
+@router.get("", response_model=list[IncidentListItem], responses=INVALID_REQUEST)
 def list_incidents(
     status: IncidentStatus | None = Query(None, description="Filtra por estado"),
     origin: IncidentOrigin | None = Query(None, description="Filtra por origen"),
     branch: Branch | None = Query(None, description="Filtra por sede"),
     category: IncidentCategory | None = Query(None, description="Filtra por categoría"),
     repository: IncidentRepository = Depends(get_incident_repository),
-) -> list[Incident]:
-    """Lista las incidencias, de la más reciente a la más antigua. Los filtros se pueden combinar."""
-    return repository.list(status=status, origin=origin, branch=branch, category=category)
+) -> list[IncidentListItem]:
+    """Lista las incidencias, de la más reciente a la más antigua. Los filtros se pueden combinar.
+
+    Cada fila trae lo que muestra el listado; `updated_at` solo está en el detalle (GET /incidents/{id}).
+    """
+    incidents = repository.list(status=status, origin=origin, branch=branch, category=category)
+    return [incident.to_list_item() for incident in incidents]
 
 
 # Antes de /{incident_id}, para que "summary" no se interprete como un ID.

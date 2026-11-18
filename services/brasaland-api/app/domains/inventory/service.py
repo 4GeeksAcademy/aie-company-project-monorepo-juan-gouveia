@@ -26,7 +26,6 @@ from app.domains.inventory.schemas import (
     IngredientExitCreate,
     IngredientExitRead,
     IngredientRead,
-    IngredientSummary,
     OrdersRead,
 )
 
@@ -153,10 +152,9 @@ def create_ingredient(session: Session, data: IngredientCreate) -> IngredientRea
 # --- Órdenes ---------------------------------------------------------------------------------
 
 
-def _summary(ingredient: Ingredient) -> IngredientSummary:
-    return IngredientSummary(
-        id=ingredient.id, name=ingredient.name, sku=ingredient.sku, unit=ingredient.unit, country=ingredient.country
-    )
+def _ingredient_fields(ingredient: Ingredient) -> dict[str, str]:
+    """Proyección plana del ingrediente que acompaña a cada orden (sin objeto anidado)."""
+    return {"ingredient_name": ingredient.name, "ingredient_sku": ingredient.sku, "ingredient_unit": ingredient.unit}
 
 
 def _to_entry_read(entry: IngredientEntry, ingredient: Ingredient) -> IngredientEntryRead:
@@ -168,7 +166,7 @@ def _to_entry_read(entry: IngredientEntry, ingredient: Ingredient) -> Ingredient
         location_id=entry.location_id,
         created_at=entry.created_at,
         user_uuid=entry.user_uuid,
-        ingredient=_summary(ingredient),
+        **_ingredient_fields(ingredient),
     )
 
 
@@ -181,7 +179,7 @@ def _to_exit_read(exit_: IngredientExit, ingredient: Ingredient) -> IngredientEx
         location_id=exit_.location_id,
         created_at=exit_.created_at,
         user_uuid=exit_.user_uuid,
-        ingredient=_summary(ingredient),
+        **_ingredient_fields(ingredient),
     )
 
 

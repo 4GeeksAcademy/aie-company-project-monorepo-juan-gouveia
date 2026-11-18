@@ -23,7 +23,7 @@ def test_upm_f1_sending_only_phone_changes_only_phone(auth_store, ana):
     profile = update(auth_store, ana, phone="+57 311")
 
     assert (profile.name, profile.phone, profile.address) == ("Ana Gómez", "+57 311", "Calle 1")
-    assert auth_store.profiles.get_by_user_id(ana.id) == profile
+    assert auth_store.profiles.get_by_user_id(ana.id).to_read() == profile
 
 
 def test_upm_l1_null_empties_the_field(auth_store, ana):

@@ -91,7 +91,7 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
       setAttempted(false);
       show({
         tone: "success",
-        text: `Salida #${exit.id} registrada: ${formatQuantity(exit.quantity, exit.ingredient.unit)} de ${exit.ingredient.name} (${exit.reason}: ${REASON_DESCRIPTIONS[exit.reason]}).`,
+        text: `Salida #${exit.id} registrada: ${formatQuantity(exit.quantity, exit.ingredient_unit)} de ${exit.ingredient_name} (${exit.reason}: ${REASON_DESCRIPTIONS[exit.reason]}).`,
       });
       refresh();
     } catch (err) {

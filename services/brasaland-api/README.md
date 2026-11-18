@@ -78,16 +78,16 @@ The API **does not start** if `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` or `DA
 
 ```bash
 uv sync --extra dev    # pytest, pytest-cov and httpx
-uv run pytest          # all 916 tests
+uv run pytest          # all 926 tests
 uv run pytest --cov    # with coverage of app/
 ```
 
-The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 916 tests break down as follows:
+The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 926 tests break down as follows:
 
-- **Authentication unit tests (146, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
+- **Authentication unit tests (147, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
 - **Supplier and incident unit tests (101, `tests/suppliers/` and `tests/incidents/`, ticket API-042):** the logic of the 6 supplier endpoints and the 5 incident manager endpoints, without HTTP, with the three levels for each. On their own, they reach 84% coverage of both domains.
 - **Inventory (80, `tests/inventory/`, Milestone 5):** models (tables, FKs and unique SKU enforced by the database), schemas with the briefing values, the 6 endpoints without HTTP (calculated stock, 400 without writing, `user_uuid` of the authenticated user), the seed and the query count (no N+1). Together with the integration and SQL connection tests, the domain reaches 97% coverage.
-- **HTTP integration (325, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier, incident and inventory endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
+- **HTTP integration (334, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier, incident and inventory endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones. The serialization guard (`test_response_models.py`) requires every JSON response to be a named model (except the CSV export), no password, hash or reset token in any response, and no email in the auth flows other than `GET /auth/me` (see [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **`core` (81):** configuration from the environment (the API doesn't start without a key or without `DATABASE_URL`), the SQL connection (per-request session and psycopg2 driver), password hashing and tokens, email sending, and error headers.
 - **`incidents` (51, `tests/domains/`):** the CSV analyzer service and the incident manager (model with the exact values, and repository: lifecycle, filters, `/summary` and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
 - **`suppliers` (67, `tests/domains/`):** the model with the briefing values, the seeder and the repository (including writes from two processes).
@@ -178,6 +178,8 @@ The response (200) includes:
 
 Downloads the latest analysis as `results.csv`, with `Content-Disposition: attachment`. It has one row per metric, with the `metric`, `value` and `percentage` columns, the same as the script's export.
 
+It is the only route without a Pydantic response schema: the response is a file, not JSON. The route declares `response_model=None` explicitly and documents the `text/csv` content in OpenAPI (see [`docs/serialization-audit.md`](../../docs/serialization-audit.md), I2).
+
 ## Centralized incident manager
 
 Incident registration and tracking from the backoffice (branch `feature/incident-manager`). It shares the `/incidents` prefix with the CSV analyzer, but they are separate pieces: the analyzer does not store incidents.
@@ -206,7 +208,7 @@ Incident registration and tracking from the backoffice (branch `feature/incident
 | Method and route | Response | Errors |
 |---|---|---|
 | `POST /api/v1/incidents` | 201 with the incident | 400 `invalid_request` (with `details`) |
-| `GET /api/v1/incidents` | 200 with the list, newest first. Optional `status`, `origin`, `branch` and `category` filters, which can be combined | 400 if a filter is not valid |
+| `GET /api/v1/incidents` | 200 with the list, newest first. Each row (`IncidentListItem`) has every field except `updated_at`, which only the detail returns. Optional `status`, `origin`, `branch` and `category` filters, which can be combined | 400 if a filter is not valid |
 | `GET /api/v1/incidents/summary` | 200 with `total`, `by_status`, `by_category`, `by_origin` and `by_branch`; each breakdown includes every value, also at 0 | — |
 | `GET /api/v1/incidents/{id}` | 200 with the incident | 404 `incident_not_found` |
 | `PATCH /api/v1/incidents/{id}/status` | 200 with the incident; only changes `status` and `updated_at` | 400 `invalid_transition` (the message says which states are allowed) or `invalid_request`; 404 |
@@ -287,7 +289,7 @@ All of them require a token. The router has the `/inventory` prefix and is mount
 | `GET /api/v1/inventory/products/{id}` | One ingredient with its current stock | 200, 404 `ingredient_not_found` |
 | `POST /api/v1/inventory/orders/inbound` | Records a supplier delivery (`IngredientEntry`) | 201, 404, 422 |
 | `POST /api/v1/inventory/orders/outbound` | Records consumption or waste (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
-| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` with the ingredient data and `user_uuid`, newest first | 200 |
+| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` newest first. Each order carries a flat projection of its ingredient (`ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`) and `user_uuid`, with no nested object; the two `POST` routes return the same shape | 200 |
 
 An exit that would leave stock negative is rejected **before anything is written**. The message is in Spanish, like the rest of the API:
 
@@ -325,7 +327,7 @@ No route that exposes or changes sensitive data may respond without a valid sess
 
 - **`User`** stores credentials only: `id` (UUID4), `email` (unique, lowercase), `hashed_password` (bcrypt), `is_active`, `role` and `created_at`. The hash never appears in a response.
 - **`role`** only accepts `admin`, `manager` or `user`. Sign-up always creates `user`.
-- **`Profile`** stores the display name and contact details: `id`, `user_id`, `name`, `phone` and `address`. It is created with the user and deleted with them.
+- **`Profile`** stores the display name and contact details: `id`, `user_id`, `name`, `phone` and `address`. It is created with the user and deleted with them. Responses only carry `name`, `phone` and `address` (`ProfileRead`): `id` is internal and the caller already knows `user_id` (see [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **Password:** from 8 characters to 72 bytes (the bcrypt limit). It is hashed with libpass (`from passlib.hash import bcrypt`); plain text is never stored or compared.
 - **Other modules** reference a user by their `id`, under the name `user_uuid`. Users and profiles are not copied to other databases.
 
@@ -339,16 +341,16 @@ No route that exposes or changes sensitive data may respond without a valid sess
 | Endpoint | Access | Success | Errors |
 |---|---|---|---|
 | `POST /api/v1/auth/login` | Public | 200 `{access_token, token_type: "bearer"}` | 401 `invalid_credentials`, 403 `inactive_user`, 415, 422 |
-| `GET /api/v1/auth/me` | Token | 200 with `id`, `email`, `role` and `profile` | 401, 403 |
-| `POST /api/v1/users` | Public (sign-up) | 201 with the user and their profile | 409 `duplicate_email`, 422 (also if `role` is sent) |
+| `GET /api/v1/auth/me` | Token | 200 with `id`, `email`, `role` and `profile` (`name`, `phone`, `address`, or `null`) | 401, 403 |
+| `POST /api/v1/users` | Public (sign-up) | 201 `{id, message}`: no email, credentials or profile | 409 `duplicate_email`, 422 (also if `role` is sent) |
 | `GET /api/v1/users` | Admin only | 200 with the list | 401, 403 |
 | `GET /api/v1/users/{id}` | Own account or admin | 200 | 401, 403, 404 `user_not_found` |
 | `PUT /api/v1/users/{id}` | Own account or admin. `role` and `is_active`, admin only | 200 | 401, 403, 404, 409, 422 |
 | `DELETE /api/v1/users/{id}` | Own account or admin | 200 with the deleted user (also deletes their profile) | 401, 403, 404 |
-| `GET /api/v1/profiles/me` | Token | 200 | 401, 404 `profile_not_found` |
-| `PUT /api/v1/profiles/me` | Token (own profile only) | 200 | 401, 404, 422 |
-| `GET /api/v1/profiles/{user_id}` | Own profile or admin | 200 | 401, 403 `forbidden`, 404 (admin only) |
-| `PUT /api/v1/profiles/{user_id}` | Profile owner only, even for an admin | 200 | 401, 403 `forbidden`, 404, 422 |
+| `GET /api/v1/profiles/me` | Token | 200 `{name, phone, address}` | 401, 404 `profile_not_found` |
+| `PUT /api/v1/profiles/me` | Token (own profile only) | 200 `{name, phone, address}` | 401, 404, 422 |
+| `GET /api/v1/profiles/{user_id}` | Own profile or admin | 200 `{name, phone, address}` | 401, 403 `forbidden`, 404 (admin only) |
+| `PUT /api/v1/profiles/{user_id}` | Profile owner only, even for an admin | 200 `{name, phone, address}` | 401, 403 `forbidden`, 404, 422 |
 
 - **Sign-in:** accepts JSON `{"email", "password"}` and also the `username`/`password` form sent by the **Authorize** button in `/docs` (`username` is the email). If the email does not exist or the password is wrong, the response is the same, and bcrypt runs in both cases so that response times do not reveal which emails are registered.
 - **`PUT`:** changes only the fields sent. In profiles, `null` clears a field.
@@ -381,7 +383,7 @@ Ticket AUTH-03. Emails are sent with [Resend](https://resend.com), chosen over S
 
 ## `GET /health`
 
-Returns `{"status": "ok"}`. It is outside `/api/v1` and has no authentication.
+Returns `{"status": "ok"}` (`HealthResponse`). It is outside `/api/v1` and has no authentication.
 
 ## Errors
 

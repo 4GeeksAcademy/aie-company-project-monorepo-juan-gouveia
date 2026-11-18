@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.errors import ApiError
 from app.domains.auth.dependencies import ensure_self_or_admin, forbidden, get_current_user
-from app.domains.profiles.models import Profile, ProfileUpdate
+from app.domains.profiles.models import ProfileRead, ProfileUpdate
 from app.domains.users.database import AuthStore
 from app.domains.users.dependencies import get_auth_store
 from app.domains.users.models import User
@@ -30,42 +30,42 @@ def profile_not_found() -> ApiError:
     return ApiError(404, "profile_not_found", "Esa cuenta no tiene perfil. Contacta con un administrador.")
 
 
-def read_profile(store: AuthStore, user_id: str) -> Profile:
+def read_profile(store: AuthStore, user_id: str) -> ProfileRead:
     profile = store.profiles.get_by_user_id(user_id)
     if profile is None:
         raise profile_not_found()
-    return profile
+    return profile.to_read()
 
 
-def write_profile(store: AuthStore, user_id: str, data: ProfileUpdate) -> Profile:
+def write_profile(store: AuthStore, user_id: str, data: ProfileUpdate) -> ProfileRead:
     profile = store.profiles.update_for_user(user_id, data)
     if profile is None:
         raise profile_not_found()
-    return profile
+    return profile.to_read()
 
 
-@router.get("/me", response_model=Profile, responses=RESPONSES)
-def read_my_profile(user: User = Depends(get_current_user), store: AuthStore = Depends(get_auth_store)) -> Profile:
+@router.get("/me", response_model=ProfileRead, responses=RESPONSES)
+def read_my_profile(user: User = Depends(get_current_user), store: AuthStore = Depends(get_auth_store)) -> ProfileRead:
     """Perfil del usuario autenticado: nombre visible y datos de contacto."""
     return read_profile(store, user.id)
 
 
-@router.put("/me", response_model=Profile, responses={**RESPONSES, **INVALID})
+@router.put("/me", response_model=ProfileRead, responses={**RESPONSES, **INVALID})
 def update_my_profile(
     data: ProfileUpdate, user: User = Depends(get_current_user), store: AuthStore = Depends(get_auth_store)
-) -> Profile:
+) -> ProfileRead:
     """Actualiza `name`, `phone` y `address` del propio perfil (solo los campos enviados; `null` los vacía)."""
     return write_profile(store, user.id, data)
 
 
 @router.get(
     "/{user_id}",
-    response_model=Profile,
+    response_model=ProfileRead,
     responses={**RESPONSES, 403: {"description": "No es tu perfil y no eres admin (`forbidden`)"}},
 )
 def read_profile_by_user(
     user_id: str, current: User = Depends(get_current_user), store: AuthStore = Depends(get_auth_store)
-) -> Profile:
+) -> ProfileRead:
     """Perfil de una cuenta por el `id` de su usuario: el propio o, si eres admin, cualquiera."""
     ensure_self_or_admin(current, user_id)
     return read_profile(store, user_id)
@@ -73,7 +73,7 @@ def read_profile_by_user(
 
 @router.put(
     "/{user_id}",
-    response_model=Profile,
+    response_model=ProfileRead,
     responses={**RESPONSES, **INVALID, 403: {"description": "No es tu perfil (`forbidden`), también para un admin"}},
 )
 def update_profile_by_user(
@@ -81,7 +81,7 @@ def update_profile_by_user(
     data: ProfileUpdate,
     current: User = Depends(get_current_user),
     store: AuthStore = Depends(get_auth_store),
-) -> Profile:
+) -> ProfileRead:
     """Actualiza un perfil por el `id` de su usuario. Solo el dueño puede modificarlo."""
     if current.id != user_id:
         raise forbidden("Solo el dueño del perfil puede modificarlo.")

@@ -3,6 +3,7 @@ import type {
   Incident,
   IncidentCreateInput,
   IncidentFilters,
+  IncidentListItem,
   IncidentStatus,
   IncidentSummary,
 } from "@/types/incident-manager";
@@ -19,7 +20,7 @@ export function createIncident(input: IncidentCreateInput): Promise<Incident> {
 }
 
 // GET /incidents con los filtros elegidos (los vacíos no se envían). Más reciente primero.
-export function listIncidents(filters: IncidentFilters): Promise<Incident[]> {
+export function listIncidents(filters: IncidentFilters): Promise<IncidentListItem[]> {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);

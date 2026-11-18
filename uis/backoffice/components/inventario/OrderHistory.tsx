@@ -52,15 +52,15 @@ export default function OrderHistory({ orders, currentUserId }: OrderHistoryProp
               </div>
 
               <div className="min-w-0">
-                <p className="font-semibold text-black">{order.ingredient.name}</p>
-                <p className="break-all text-xs text-gray-600">{order.ingredient.sku}</p>
+                <p className="font-semibold text-black">{order.ingredient_name}</p>
+                <p className="break-all text-xs text-gray-600">{order.ingredient_sku}</p>
               </div>
 
               <p className="text-sm text-black">
                 <CardLabel>{FIELD_LABELS.quantity}</CardLabel>
                 <span className={`font-semibold ${row.kind === "entry" ? "text-green-800" : "text-red-800"}`}>
                   {ORDER_SIGN[row.kind]}
-                  {formatQuantity(order.quantity, order.ingredient.unit)}
+                  {formatQuantity(order.quantity, order.ingredient_unit)}
                 </span>
               </p>
 

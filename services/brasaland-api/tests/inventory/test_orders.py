@@ -25,9 +25,10 @@ def test_entry_is_stored_with_the_authenticated_user(add_ingredient, add_entry, 
 
     assert entry.user_uuid == user.id
     assert (entry.id, entry.quantity, entry.supplier_name, entry.location_id) == (1, 50.0, "Carnes del Valle S.A.", 1)
-    assert entry.ingredient.model_dump() == {
-        "id": 1, "name": "Falda de ternera", "sku": "BRS-BEEF-001", "unit": "kg", "country": "CO",
-    }
+    # Proyección plana del ingrediente, sin objeto anidado (docs/serialization-audit.md, D4).
+    assert (entry.ingredient_id, entry.ingredient_name, entry.ingredient_sku, entry.ingredient_unit) == (
+        1, "Falda de ternera", "BRS-BEEF-001", "kg",
+    )
     assert entry.created_at.tzinfo == UTC
 
 
@@ -120,8 +121,8 @@ def test_list_returns_entries_and_exits_newest_first_with_ingredient(
     add_exit(ingredient_id=2, quantity=5.0)
 
     orders = list_orders(session=session)
-    assert [(item.id, item.ingredient.sku) for item in orders.inbound] == [(2, "BRS-SAUCE-001"), (1, "BRS-BEEF-001")]
-    assert [(item.id, item.ingredient.name, item.reason) for item in orders.outbound] == [
+    assert [(item.id, item.ingredient_sku) for item in orders.inbound] == [(2, "BRS-SAUCE-001"), (1, "BRS-BEEF-001")]
+    assert [(item.id, item.ingredient_name, item.reason) for item in orders.outbound] == [
         (1, "Chimichurri", "consumption")
     ]
     assert {item.user_uuid for item in orders.inbound + orders.outbound} == {user.id}

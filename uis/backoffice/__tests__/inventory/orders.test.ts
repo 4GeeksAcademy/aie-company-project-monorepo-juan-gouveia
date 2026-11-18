@@ -1,15 +1,16 @@
 import { mergeOrders } from "@/lib/inventory-orders";
 import type { IngredientEntry, IngredientExit } from "@/types/inventory";
 
-const INGREDIENT = { id: 1, name: "Falda de ternera", sku: "BRS-BEEF-001", unit: "kg" as const, country: "CO" as const };
+// Proyección plana del ingrediente que acompaña a cada orden (docs/serialization-audit.md, D4).
+const INGREDIENT = { ingredient_id: 1, ingredient_name: "Falda de ternera", ingredient_sku: "BRS-BEEF-001", ingredient_unit: "kg" as const };
 const USER = "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2";
 
 function entry(id: number, created_at: string): IngredientEntry {
-  return { id, ingredient_id: 1, quantity: 10, location_id: 1, created_at, user_uuid: USER, ingredient: INGREDIENT, supplier_name: "Carnes del Valle S.A.S." };
+  return { id, ...INGREDIENT, quantity: 10, location_id: 1, created_at, user_uuid: USER, supplier_name: "Carnes del Valle S.A.S." };
 }
 
 function exit(id: number, created_at: string): IngredientExit {
-  return { id, ingredient_id: 1, quantity: 2, location_id: 1, created_at, user_uuid: USER, ingredient: INGREDIENT, reason: "waste" };
+  return { id, ...INGREDIENT, quantity: 2, location_id: 1, created_at, user_uuid: USER, reason: "waste" };
 }
 
 describe("mergeOrders", () => {

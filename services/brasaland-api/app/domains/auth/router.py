@@ -130,7 +130,10 @@ async def login(request: Request, store: AuthStore = Depends(get_auth_store)) ->
 )
 def read_me(user: User = Depends(get_current_user), store: AuthStore = Depends(get_auth_store)) -> CurrentUser:
     """Email y rol del usuario autenticado, con su perfil vinculado (nombre y datos de contacto)."""
-    return CurrentUser(id=user.id, email=user.email, role=user.role, profile=store.profiles.get_by_user_id(user.id))
+    profile = store.profiles.get_by_user_id(user.id)
+    return CurrentUser(
+        id=user.id, email=user.email, role=user.role, profile=profile.to_read() if profile is not None else None
+    )
 
 
 # --- Restablecimiento y cambio de contraseña (AUTH-03) ----------------------------------------

@@ -78,16 +78,16 @@ La API **no arranca** si falta `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` o `DA
 
 ```bash
 uv sync --extra dev    # pytest, pytest-cov y httpx
-uv run pytest          # las 916 pruebas
+uv run pytest          # las 926 pruebas
 uv run pytest --cov    # con cobertura de app/
 ```
 
-El plan de pruebas, las suites, los comandos por suite, la cobertura y los bugs encontrados están en [TESTING.es.md](./TESTING.es.md). Las 916 pruebas se reparten así:
+El plan de pruebas, las suites, los comandos por suite, la cobertura y los bugs encontrados están en [TESTING.es.md](./TESTING.es.md). Las 926 pruebas se reparten así:
 
-- **Unitarias de autenticación (146, `tests/auth/`, ticket AUTH-088):** la lógica de los 15 endpoints de `auth`, `users` y `profiles` y de los tokens, sin HTTP: camino feliz, caso límite y modo de fallo de cada uno. Con ellas solas, la cobertura de autenticación es del 88 %.
+- **Unitarias de autenticación (147, `tests/auth/`, ticket AUTH-088):** la lógica de los 15 endpoints de `auth`, `users` y `profiles` y de los tokens, sin HTTP: camino feliz, caso límite y modo de fallo de cada uno. Con ellas solas, la cobertura de autenticación es del 88 %.
 - **Unitarias de proveedores e incidencias (101, `tests/suppliers/` y `tests/incidents/`, ticket API-042):** la lógica de los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP, con los tres niveles de cada uno. Con ellas solas, la cobertura de los dos dominios es del 84 %.
 - **Inventario (80, `tests/inventory/`, Hito 5):** modelos (tablas, FK y SKU único aplicados por la base), schemas con los valores del briefing, los 6 endpoints sin HTTP (stock calculado, 400 sin escritura, `user_uuid` del usuario autenticado), la semilla y el recuento de consultas (sin N+1). Con las de integración y las de la conexión SQL, la cobertura del dominio es del 97 %.
-- **Integración HTTP (325, `tests/integration/`, marker `integration`):** el contrato con el backoffice. Cada endpoint de autenticación, de proveedores, de incidencias y de inventario a través de HTTP (login en JSON y en formulario, subida del CSV, códigos de estado, formato de error y cabeceras), y las 13 rutas de `incidents` y `suppliers`, que responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave. Ninguna ruta queda abierta salvo las públicas declaradas.
+- **Integración HTTP (334, `tests/integration/`, marker `integration`):** el contrato con el backoffice. Cada endpoint de autenticación, de proveedores, de incidencias y de inventario a través de HTTP (login en JSON y en formulario, subida del CSV, códigos de estado, formato de error y cabeceras), y las 13 rutas de `incidents` y `suppliers`, que responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave. Ninguna ruta queda abierta salvo las públicas declaradas. La guarda de serialización (`test_response_models.py`) exige que toda respuesta JSON sea un modelo con nombre (salvo la exportación CSV), que ninguna respuesta lleve contraseñas, hashes ni tokens de restablecimiento, y que los flujos de auth no devuelvan el email salvo `GET /auth/me` (ver [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **`core` (81):** la configuración desde el entorno (la API no arranca sin clave ni sin `DATABASE_URL`), la conexión SQL (sesión por petición y driver psycopg2), el hash de contraseñas y los tokens, el envío de correo y las cabeceras de los errores.
 - **`incidents` (51, `tests/domains/`):** el servicio del analizador del CSV y el gestor de incidencias (modelo con los valores exactos y repositorio: ciclo de vida, filtros, `/summary` y el seed sin duplicados). Las reglas del CSV también las prueba el script de consola (`scripts/incident-report/`).
 - **`suppliers` (67, `tests/domains/`):** el modelo con los valores del briefing, el seeder y el repositorio (incluida la escritura desde dos procesos).
@@ -178,6 +178,8 @@ La respuesta (200) incluye:
 
 Descarga el último análisis como `results.csv`, con `Content-Disposition: attachment`. Tiene una fila por métrica, con las columnas `metric`, `value` y `percentage`, igual que la exportación del script.
 
+Es la única ruta sin esquema de respuesta Pydantic: la respuesta es un archivo, no JSON. La ruta declara `response_model=None` de forma explícita y documenta el contenido `text/csv` en OpenAPI (ver [`docs/serialization-audit.md`](../../docs/serialization-audit.md), I2).
+
 ## Gestor de incidencias centralizado
 
 Registro y seguimiento de incidencias desde el backoffice (rama `feature/incident-manager`). Comparte el prefijo `/incidents` con el analizador del CSV, pero son piezas distintas: el analizador no guarda incidencias.
@@ -206,7 +208,7 @@ Registro y seguimiento de incidencias desde el backoffice (rama `feature/inciden
 | Método y ruta | Respuesta | Errores |
 |---|---|---|
 | `POST /api/v1/incidents` | 201 con la incidencia | 400 `invalid_request` (con `details`) |
-| `GET /api/v1/incidents` | 200 con la lista, de la más reciente a la más antigua. Filtros opcionales `status`, `origin`, `branch` y `category`, combinables | 400 si un filtro no es válido |
+| `GET /api/v1/incidents` | 200 con la lista, de la más reciente a la más antigua. Cada fila (`IncidentListItem`) trae todos los campos salvo `updated_at`, que solo devuelve el detalle. Filtros opcionales `status`, `origin`, `branch` y `category`, combinables | 400 si un filtro no es válido |
 | `GET /api/v1/incidents/summary` | 200 con `total`, `by_status`, `by_category`, `by_origin` y `by_branch`; cada desglose incluye todos los valores, también en 0 | — |
 | `GET /api/v1/incidents/{id}` | 200 con la incidencia | 404 `incident_not_found` |
 | `PATCH /api/v1/incidents/{id}/status` | 200 con la incidencia; cambia solo `status` y `updated_at` | 400 `invalid_transition` (el mensaje dice a qué estados se puede pasar) o `invalid_request`; 404 |
@@ -287,7 +289,7 @@ Todos exigen token. El router tiene el prefijo `/inventory` y se monta bajo `/ap
 | `GET /api/v1/inventory/products/{id}` | Un ingrediente con su stock actual | 200, 404 `ingredient_not_found` |
 | `POST /api/v1/inventory/orders/inbound` | Registra una entrega de proveedor (`IngredientEntry`) | 201, 404, 422 |
 | `POST /api/v1/inventory/orders/outbound` | Registra un consumo o una merma (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
-| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` con los datos del ingrediente y el `user_uuid`, de la más reciente a la más antigua | 200 |
+| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` de la más reciente a la más antigua. Cada orden lleva una proyección plana de su ingrediente (`ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`) y el `user_uuid`, sin objeto anidado; los dos `POST` devuelven la misma forma | 200 |
 
 Una salida que dejaría el stock en negativo se rechaza **antes de escribir nada**:
 
@@ -325,7 +327,7 @@ Ninguna ruta que exponga o modifique datos sensibles debe responder sin una sesi
 
 - **`User`** guarda solo credenciales: `id` (UUID4), `email` (único, en minúsculas), `hashed_password` (bcrypt), `is_active`, `role` y `created_at`. El hash nunca sale en una respuesta.
 - **`role`** solo admite `admin`, `manager` o `user`. El registro siempre crea `user`.
-- **`Profile`** guarda el nombre visible y el contacto: `id`, `user_id`, `name`, `phone` y `address`. Se crea con el usuario y se borra con él.
+- **`Profile`** guarda el nombre visible y el contacto: `id`, `user_id`, `name`, `phone` y `address`. Se crea con el usuario y se borra con él. Las respuestas solo llevan `name`, `phone` y `address` (`ProfileRead`): `id` es interno y quien llama ya conoce el `user_id` (ver [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **Contraseña:** de 8 caracteres a 72 bytes (límite de bcrypt). Se hashea con libpass (`from passlib.hash import bcrypt`); el texto plano nunca se guarda ni se compara.
 - **Otros módulos** referencian al usuario por su `id` con el nombre `user_uuid`. Los usuarios y perfiles no se copian a otras bases.
 
@@ -339,16 +341,16 @@ Ninguna ruta que exponga o modifique datos sensibles debe responder sin una sesi
 | Endpoint | Acceso | Éxito | Errores |
 |---|---|---|---|
 | `POST /api/v1/auth/login` | Público | 200 `{access_token, token_type: "bearer"}` | 401 `invalid_credentials`, 403 `inactive_user`, 415, 422 |
-| `GET /api/v1/auth/me` | Token | 200 con `id`, `email`, `role` y `profile` | 401, 403 |
-| `POST /api/v1/users` | Público (registro) | 201 con el usuario y su perfil | 409 `duplicate_email`, 422 (también si se envía `role`) |
+| `GET /api/v1/auth/me` | Token | 200 con `id`, `email`, `role` y `profile` (`name`, `phone`, `address`, o `null`) | 401, 403 |
+| `POST /api/v1/users` | Público (registro) | 201 `{id, message}`: sin email, credenciales ni perfil | 409 `duplicate_email`, 422 (también si se envía `role`) |
 | `GET /api/v1/users` | Solo admin | 200 con la lista | 401, 403 |
 | `GET /api/v1/users/{id}` | La propia cuenta o admin | 200 | 401, 403, 404 `user_not_found` |
 | `PUT /api/v1/users/{id}` | La propia cuenta o admin. `role` e `is_active`, solo admin | 200 | 401, 403, 404, 409, 422 |
 | `DELETE /api/v1/users/{id}` | La propia cuenta o admin | 200 con el usuario eliminado (también borra su perfil) | 401, 403, 404 |
-| `GET /api/v1/profiles/me` | Token | 200 | 401, 404 `profile_not_found` |
-| `PUT /api/v1/profiles/me` | Token (solo el propio perfil) | 200 | 401, 404, 422 |
-| `GET /api/v1/profiles/{user_id}` | El propio perfil o admin | 200 | 401, 403 `forbidden`, 404 (solo admin) |
-| `PUT /api/v1/profiles/{user_id}` | Solo el dueño del perfil, también frente a un admin | 200 | 401, 403 `forbidden`, 404, 422 |
+| `GET /api/v1/profiles/me` | Token | 200 `{name, phone, address}` | 401, 404 `profile_not_found` |
+| `PUT /api/v1/profiles/me` | Token (solo el propio perfil) | 200 `{name, phone, address}` | 401, 404, 422 |
+| `GET /api/v1/profiles/{user_id}` | El propio perfil o admin | 200 `{name, phone, address}` | 401, 403 `forbidden`, 404 (solo admin) |
+| `PUT /api/v1/profiles/{user_id}` | Solo el dueño del perfil, también frente a un admin | 200 `{name, phone, address}` | 401, 403 `forbidden`, 404, 422 |
 
 - **Login:** acepta JSON `{"email", "password"}` y también el formulario `username`/`password` que envía el botón «Authorize» de `/docs` (`username` es el email). Si el email no existe o la contraseña falla, la respuesta es la misma, y bcrypt se ejecuta en ambos casos para no revelar qué emails están registrados.
 - **`PUT`:** cambia solo los campos enviados. En los perfiles, `null` vacía un campo.
@@ -381,7 +383,7 @@ Ticket AUTH-03. El correo se envía con [Resend](https://resend.com), elegido fr
 
 ## `GET /health`
 
-Devuelve `{"status": "ok"}`. Está fuera de `/api/v1` y no lleva autenticación.
+Devuelve `{"status": "ok"}` (`HealthResponse`). Está fuera de `/api/v1` y no lleva autenticación.
 
 ## Errores
 

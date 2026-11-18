@@ -113,7 +113,7 @@ def test_created_at_is_returned_in_utc(stored, expected):
     entry = IngredientEntryRead(
         id=1, ingredient_id=1, quantity=50.0, supplier_name="Carnes del Valle S.A.", location_id=1,
         created_at=stored, user_uuid=USER_UUID,
-        ingredient={"id": 1, "name": "Falda de ternera", "sku": "BRS-BEEF-001", "unit": "kg", "country": "CO"},
+        ingredient_name="Falda de ternera", ingredient_sku="BRS-BEEF-001", ingredient_unit="kg",
     )
     assert entry.created_at == expected
     assert entry.created_at.tzinfo == UTC
