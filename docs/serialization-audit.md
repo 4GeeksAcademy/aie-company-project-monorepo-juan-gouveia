@@ -418,6 +418,35 @@ Los endpoints ✅ no se tocan. La revisión de proveedores (S1–S6) no encontr�
 - README de la API (en y es): filas del listado y de `/health`, y la nota de la exportación.
 - `docs/BRIEFING_DIVERGENCES.md`: sección 13, con la excepción del CSV y el destino del PR.
 
+### 2d — Prueba de guarda (todos los endpoints)
+
+Nueva suite `tests/integration/test_response_models.py`. Recorre el esquema OpenAPI de la app real, que es el contrato que ven los clientes, y fija los criterios de esta auditoría para que una ruta nueva o modificada no los rompa sin que nadie se entere:
+
+| Prueba | Qué exige |
+|---|---|
+| `test_the_app_still_has_the_35_audited_operations` | Que sigan siendo 35 operaciones. Una ruta nueva obliga a auditarla y añadirla a este documento |
+| `test_every_json_response_is_a_named_model_except_the_named_exceptions` | Que toda respuesta 2xx JSON sea un `$ref` a un modelo con nombre, o una lista de ellos. La única excepción es I2 (CSV) |
+| `test_the_csv_exception_answers_a_file_not_json` | Que la excepción siga respondiendo `text/csv` |
+| `test_no_response_exposes_passwords_hashes_or_reset_tokens` | Que ninguna respuesta, ni siquiera en un modelo anidado, tenga `password`, `hashed_password`, `password_changed_at`, `current_password`, `new_password` ni `token` |
+| `test_auth_flows_do_not_echo_the_email_but_me_does` | Que registro, login, forgot/validate/reset y change-password no devuelvan `email`, y que `GET /auth/me` sí lo devuelva |
+| `test_writes_do_not_reuse_the_response_schema_as_input` | Que ningún POST, PUT o PATCH use el mismo modelo como entrada y como salida |
+
+**Por qué un modelo con nombre y no solo que "haya `response_model`":**
+
+- FastAPI deduce el modelo de respuesta de la anotación de retorno.
+- El antiguo `def health() -> dict[str, str]` tenía, por tanto, un esquema en OpenAPI, pero genérico (`{"type": "object", ...}`) y sin contrato.
+- Exigir un `$ref` es lo que distingue un serializer explícito de un `dict`.
+- Además, comprobarlo en OpenAPI evita depender de la estructura interna de rutas de FastAPI 0.162, que guarda los routers incluidos en una clase privada (`_IncludedRouter`).
+
+**Comprobación de que la guarda funciona:** se reintrodujeron a propósito, y sin commit, dos regresiones:
+
+- `/health` volvió a `-> dict[str, str]` sin `response_model`;
+- `POST /users` pasó a devolver `UserPublic`, con email.
+
+La suite falló con exactamente esas dos rutas (`('GET', '/health')` y `('POST', '/api/v1/users')`). Después se restauraron los dos archivos con `git checkout`.
+
+**Resultado:** las 6 pruebas nuevas pasan; batería completa de la API: 926.
+
 ## 8. Verificación
 
 **Línea base** (2026-11-18, antes de cualquier cambio):
