@@ -10,7 +10,7 @@
 |---|---|---|
 | **Unitarias de autenticación** (AUTH-088) | `tests/auth/` | La lógica de cada endpoint de autenticación: qué decide, no cómo responde. Llaman directamente a las funciones de cada ruta y a sus servicios, sin cliente HTTP. **16 módulos y 147 casos**: `test_token.py` y uno por cada uno de los 15 endpoints. |
 | **Unitarias de proveedores e incidencias** (API-042) | `tests/suppliers/` y `tests/incidents/` | La lógica de los 6 endpoints del directorio de proveedores y los 5 del gestor de incidencias, sin HTTP. **11 módulos y 101 casos**. Ver "API-042: proveedores y gestor de incidencias". |
-| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 de autenticación (214 casos con la parametrización), más las de proveedores, el gestor y el analizador de incidencias (60 pruebas y 90 casos, movidas en API-042). En total, 304 casos en su momento; el inventario (Hito 5) y la auditoría de serialización, que añade la guarda `test_response_models.py`, llevan la carpeta a 334. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
+| **Integración HTTP** | `tests/integration/` | El contrato HTTP con el backoffice: rutas protegidas, códigos de estado, formato `{"error": {...}}` y cabeceras. Son las pruebas de router que ya existían: 99 de autenticación (214 casos con la parametrización), más las de proveedores, el gestor y el analizador de incidencias (60 pruebas y 90 casos, movidas en API-042). En total, 304 casos en su momento; el inventario (Hito 5) y la auditoría de serialización, que añade la guarda `test_response_models.py`, llevan la carpeta a 334, y la caché del inventario (`test_inventory_cache.py`), a 347. Llevan el marker `integration`, que `tests/integration/conftest.py` aplica a toda la carpeta. |
 | **Resto de la API** | `tests/core/` y `tests/domains/` | Configuración, seguridad, correo, errores, `create-admin`, y los modelos, repositorios y seeds de cada dominio. |
 | **Jest del backoffice** (AUTH-088) | `uis/backoffice/__tests__/auth/` | La lógica TypeScript de autenticación del backoffice: validación de formularios, destino tras el login, token en `localStorage` y reparto de los errores de la API. 55 pruebas. Ver "Pruebas del backoffice (Jest)". |
 | **Jest de utilidades** (FE-019) | `uis/backoffice/__tests__/utils/` | Formateadores de fechas y métricas, el mensaje de error para el usuario y la lectura de respuestas JSON. 35 pruebas. Ver "FE-019: utilidades del frontend". |
@@ -23,7 +23,7 @@ Desde `services/brasaland-api/`:
 
 ```bash
 uv sync --extra dev                      # instala pytest, pytest-cov y httpx
-uv run pytest                            # toda la batería (926 pruebas desde la auditoría de serialización, unos 4,5 min por bcrypt)
+uv run pytest                            # toda la batería (952 pruebas desde la caché del inventario, unos 4,5 min por bcrypt)
 uv run pytest tests/auth                 # solo las unitarias de autenticación (147, unos 45 s)
 uv run pytest tests/suppliers tests/incidents   # solo las de API-042 (101, unos 2 s)
 uv run pytest -m integration             # solo las pruebas de integración HTTP

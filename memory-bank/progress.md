@@ -316,7 +316,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Estrategia de caching (rama `feature/caching-optimisation`)** — En curso (desde 2026-11-18). La rama sale de `feature/serialization-audit` y el PR irá contra ella. Hecho: middleware de timing (`app/core/timing.py`, logger `api.timing`) y medición base. Pendiente: seeder de volumen, caché con TTL e invalidación en dos endpoints, carga diferida y `useMemo` en el backoffice, y `CACHING_REPORT.md`.
+0. **Estrategia de caching (rama `feature/caching-optimisation`)** — En curso (desde 2026-11-18). La rama sale de `feature/serialization-audit` y el PR irá contra ella. Hecho: middleware de timing (`app/core/timing.py`, logger `api.timing`), seeder de volumen (`scripts/seed_volume.py`, cargado en Supabase y TinyDB; se retira con `--clear`) y caché con TTL e invalidación en `GET /inventory/products` (60 s) y `GET /inventory/orders` (5 min). Pendiente: carga diferida y `useMemo` en el backoffice, y `CACHING_REPORT.md`.
 
 0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. PR #19 abierto contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
 

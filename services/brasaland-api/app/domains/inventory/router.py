@@ -8,16 +8,23 @@ No hay ninguna ruta para modificar o borrar ingredientes ni órdenes: el stock s
 registrando órdenes de entrada o de salida.
 
 Los endpoints son síncronos, como la sesión de SQLModel; FastAPI los ejecuta en su pool de hilos.
+
+`GET /products` y `GET /orders` se sirven desde la caché del inventario (`cache.py`): guardan el JSON
+serializado desde los mismos schemas de respuesta que devuelve el servicio y lo envían tal cual, con
+la cabecera `X-Cache` (`HIT` o `MISS`). El `response_model` se mantiene para documentar el contrato
+en OpenAPI.
 """
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import TypeAdapter
 from sqlmodel import Session
 
 from app.core.database import get_db
 from app.domains.auth.dependencies import get_current_user
 from app.domains.inventory import service
+from app.domains.inventory.cache import ORDERS_KEY, orders_cache, products_cache, products_key
 from app.domains.inventory.schemas import (
     Country,
     IngredientCreate,
@@ -34,15 +41,32 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 INVALID = {422: {"description": "Entrada inválida (`invalid_request`, con `details` por campo)"}}
 NOT_FOUND = {404: {"description": "No existe ningún ingrediente con ese ID (`ingredient_not_found`)"}}
+CACHED = {"X-Cache": {"description": "`HIT` si la respuesta salió de la caché; `MISS` si se consultó la base"}}
+
+INGREDIENT_LIST = TypeAdapter(list[IngredientRead])
 
 
-@router.get("/products", response_model=list[IngredientRead], responses=INVALID)
+def cached_json(body: bytes, hit: bool) -> Response:
+    return Response(content=body, media_type="application/json", headers={"X-Cache": "HIT" if hit else "MISS"})
+
+
+@router.get(
+    "/products",
+    response_model=list[IngredientRead],
+    responses={**INVALID, 200: {"description": "Ingredientes con su stock", "headers": CACHED}},
+)
 def list_products(
     country: Annotated[Country | None, Query(description='Filtra por mercado: "CO" o "US"')] = None,
     session: Session = Depends(get_db),
-) -> list[IngredientRead]:
-    """Lista los ingredientes con su `current_stock` calculado (entradas − salidas)."""
-    return service.list_ingredients(session, country)
+) -> Response:
+    """Lista los ingredientes con su `current_stock` calculado (entradas − salidas).
+
+    Caché de 60 s por filtro de país; cualquier escritura del inventario la limpia.
+    """
+    body, hit = products_cache.get_or_load(
+        products_key(country), lambda: INGREDIENT_LIST.dump_json(service.list_ingredients(session, country))
+    )
+    return cached_json(body, hit)
 
 
 @router.post(
@@ -96,7 +120,15 @@ def create_outbound_order(
     return service.create_exit(session, data, current_user.id)
 
 
-@router.get("/orders", response_model=OrdersRead)
-def list_orders(session: Session = Depends(get_db)) -> OrdersRead:
-    """Lista todas las entradas y salidas con los datos de su ingrediente y su `user_uuid`."""
-    return service.list_orders(session)
+@router.get(
+    "/orders",
+    response_model=OrdersRead,
+    responses={200: {"description": "Entradas y salidas", "headers": CACHED}},
+)
+def list_orders(session: Session = Depends(get_db)) -> Response:
+    """Lista todas las entradas y salidas con los datos de su ingrediente y su `user_uuid`.
+
+    Caché de 5 minutos; cualquier escritura del inventario la limpia.
+    """
+    body, hit = orders_cache.get_or_load(ORDERS_KEY, lambda: service.list_orders(session).model_dump_json().encode())
+    return cached_json(body, hit)

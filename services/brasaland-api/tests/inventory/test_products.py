@@ -1,6 +1,7 @@
 """`POST /inventory/products`, `GET /inventory/products` y `GET /inventory/products/{id}`."""
 
-from app.domains.inventory.router import get_product, list_products
+from app.domains.inventory.router import get_product
+from app.domains.inventory.service import list_ingredients
 from app.domains.inventory.schemas import Country, IngredientRead
 from tests.helpers import raises_api_error
 
@@ -22,14 +23,14 @@ def test_duplicate_sku_is_rejected_with_409(add_ingredient, session):
 
     with raises_api_error(409, "duplicate_sku"):
         add_ingredient(name="Otra falda")
-    assert len(list_products(session=session)) == 1
+    assert len(list_ingredients(session)) == 1
 
 
 # --- Listar y obtener ------------------------------------------------------------------------
 
 
 def test_list_is_empty_without_ingredients(session):
-    assert list_products(session=session) == []
+    assert list_ingredients(session) == []
 
 
 def test_stock_is_entries_minus_exits(add_ingredient, add_entry, add_exit, session):
@@ -40,7 +41,7 @@ def test_stock_is_entries_minus_exits(add_ingredient, add_entry, add_exit, sessi
     add_exit(quantity=3.0, reason="waste")
 
     assert get_product(1, session=session).current_stock == 52.0
-    assert list_products(session=session)[0].current_stock == 52.0
+    assert list_ingredients(session)[0].current_stock == 52.0
 
 
 def test_stock_of_each_ingredient_only_counts_its_own_orders(add_ingredient, add_entry, add_exit, session):
@@ -51,7 +52,7 @@ def test_stock_of_each_ingredient_only_counts_its_own_orders(add_ingredient, add
     add_entry(ingredient_id=2, quantity=40.0, supplier_name="MiamiMeat Co.", location_id=10)
     add_exit(ingredient_id=2, quantity=8.0, location_id=10)
 
-    stocks = {item.sku: item.current_stock for item in list_products(session=session)}
+    stocks = {item.sku: item.current_stock for item in list_ingredients(session)}
     assert stocks == {"BRS-BEEF-001": 50.0, "BRS-PORK-001": 32.0, "BRS-PROD-001": 0.0}
 
 
@@ -69,9 +70,9 @@ def test_list_is_ordered_by_id_and_filters_by_country(add_ingredient, session):
     add_ingredient(name="Costilla de cerdo", sku="BRS-PORK-001", country="US")
     add_ingredient(name="Chimichurri", sku="BRS-SAUCE-001", unit="litro", category="sauce")
 
-    assert [item.id for item in list_products(session=session)] == [1, 2, 3]
-    assert [item.sku for item in list_products(country=Country.CO, session=session)] == ["BRS-BEEF-001", "BRS-SAUCE-001"]
-    assert [item.sku for item in list_products(country=Country.US, session=session)] == ["BRS-PORK-001"]
+    assert [item.id for item in list_ingredients(session)] == [1, 2, 3]
+    assert [item.sku for item in list_ingredients(session, Country.CO)] == ["BRS-BEEF-001", "BRS-SAUCE-001"]
+    assert [item.sku for item in list_ingredients(session, Country.US)] == ["BRS-PORK-001"]
 
 
 def test_decimal_quantities_do_not_leave_float_noise(add_ingredient, add_entry, add_exit, session):

@@ -7,7 +7,8 @@ SQLAlchemy directamente; el código de la API usa únicamente `sqlmodel`.
 import pytest
 from sqlalchemy import event
 
-from app.domains.inventory.router import get_product, list_orders, list_products
+from app.domains.inventory.router import get_product
+from app.domains.inventory.service import list_ingredients, list_orders
 
 
 @pytest.fixture
@@ -48,8 +49,8 @@ def populate(add_ingredient, add_entry, add_exit):
 def test_products_list_query_count_does_not_grow(populate, session, query_counter, size):
     populate(size)
 
-    assert query_counter(lambda: list_products(session=session)) == 1
-    assert {item.current_stock for item in list_products(session=session)} == {12.0}
+    assert query_counter(lambda: list_ingredients(session)) == 1
+    assert {item.current_stock for item in list_ingredients(session)} == {12.0}
 
 
 @pytest.mark.parametrize("size", [1, 20])

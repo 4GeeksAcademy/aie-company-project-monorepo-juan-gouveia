@@ -86,7 +86,7 @@ El plan de pruebas, las suites, los comandos por suite, la cobertura y los bugs 
 
 - **Unitarias de autenticación (147, `tests/auth/`, ticket AUTH-088):** la lógica de los 15 endpoints de `auth`, `users` y `profiles` y de los tokens, sin HTTP: camino feliz, caso límite y modo de fallo de cada uno. Con ellas solas, la cobertura de autenticación es del 88 %.
 - **Unitarias de proveedores e incidencias (101, `tests/suppliers/` y `tests/incidents/`, ticket API-042):** la lógica de los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP, con los tres niveles de cada uno. Con ellas solas, la cobertura de los dos dominios es del 84 %.
-- **Inventario (80, `tests/inventory/`, Hito 5):** modelos (tablas, FK y SKU único aplicados por la base), schemas con los valores del briefing, los 6 endpoints sin HTTP (stock calculado, 400 sin escritura, `user_uuid` del usuario autenticado), la semilla y el recuento de consultas (sin N+1). Con las de integración y las de la conexión SQL, la cobertura del dominio es del 97 %.
+- **Inventario (80, `tests/inventory/`, Hito 5):** modelos (tablas, FK y SKU único aplicados por la base), schemas con los valores del briefing, los endpoints y el servicio sin HTTP (stock calculado, 400 sin escritura, `user_uuid` del usuario autenticado), la semilla y el recuento de consultas (sin N+1). Con las de integración y las de la conexión SQL, la cobertura del dominio es del 97 %.
 - **Integración HTTP (334, `tests/integration/`, marker `integration`):** el contrato con el backoffice. Cada endpoint de autenticación, de proveedores, de incidencias y de inventario a través de HTTP (login en JSON y en formulario, subida del CSV, códigos de estado, formato de error y cabeceras), y las 13 rutas de `incidents` y `suppliers`, que responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave. Ninguna ruta queda abierta salvo las públicas declaradas. La guarda de serialización (`test_response_models.py`) exige que toda respuesta JSON sea un modelo con nombre (salvo la exportación CSV), que ninguna respuesta lleve contraseñas, hashes ni tokens de restablecimiento, y que los flujos de auth no devuelvan el email salvo `GET /auth/me` (ver [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **`core` (81):** la configuración desde el entorno (la API no arranca sin clave ni sin `DATABASE_URL`), la conexión SQL (sesión por petición y driver psycopg2), el hash de contraseñas y los tokens, el envío de correo y las cabeceras de los errores.
 - **`incidents` (51, `tests/domains/`):** el servicio del analizador del CSV y el gestor de incidencias (modelo con los valores exactos y repositorio: ciclo de vida, filtros, `/summary` y el seed sin duplicados). Las reglas del CSV también las prueba el script de consola (`scripts/incident-report/`).
@@ -107,6 +107,7 @@ app/
 │   ├── email.py            # EmailMessage y emisores: Resend, o desactivado sin RESEND_API_KEY
 │   ├── storage.py          # brasaland-db.json compartido: ruta, apertura, bloqueo por archivo e insert_with_file_id
 │   ├── timing.py           # Middleware de timing: una línea de log por petición (logger api.timing)
+│   ├── cache.py            # TTLCache: caché en memoria con TTL e invalidación, segura entre hilos
 │   └── errors.py           # Formato único de errores, 400 de validación del gestor y 500 genérico
 └── domains/
     ├── auth/
@@ -145,6 +146,7 @@ app/
     │   ├── schemas.py      # Schemas Pydantic de petición y respuesta, separados de los modelos
     │   ├── service.py      # Stock calculado en SQL, rechazo de stock negativo y listados sin N+1
     │   ├── router.py       # Endpoints de /inventory
+    │   ├── cache.py        # Caché de GET /products (60 s) y GET /orders (5 min); las escrituras la limpian
     │   └── seed.py         # Datos semilla del briefing (`uv run seed-inventory`)
     └── suppliers/
         ├── models.py       # Modelos Pydantic: Supplier, SupplierCreate, RateUpdate, StatusUpdate
@@ -303,6 +305,20 @@ La salida bloquea la fila del ingrediente (`SELECT ... FOR UPDATE`) mientras cal
 ### Consultas sin N+1
 
 La API solo usa `sqlmodel` (`select`, `func`, `col`), sin SQLAlchemy directo. `GET /products` es una sola consulta (ingredientes con dos subconsultas que suman entradas y salidas) y `GET /orders` son dos (una por tabla, con un `join` al ingrediente), haya las filas que haya. `tests/inventory/test_queries.py` lo comprueba contando las sentencias SQL.
+
+### Caché de lecturas
+
+`GET /products` y `GET /orders` se sirven desde una caché en memoria (`inventory/cache.py`, sobre `core/cache.py`). Se guarda el JSON ya serializado y la respuesta lleva la cabecera `X-Cache: HIT` o `MISS`; el contrato no cambia.
+
+| Endpoint | TTL | Por qué |
+|---|---|---|
+| `GET /products` (una entrada por filtro de país) | 60 s | Es la lectura más frecuente y cada una es una ida y vuelta a Supabase (~100 ms) |
+| `GET /orders` | 5 min | Con ~21 000 órdenes tarda ~1,3 s; es de consulta y no decide nada |
+
+- **Invalidación:** cada escritura confirmada (`POST /products`, `/orders/inbound` y `/orders/outbound`) limpia las dos justo después del `commit`. Una salida rechazada no la toca. Si una lectura empezó antes de una escritura, no guarda su resultado.
+- **Lo que no ve:** escrituras de otros procesos (scripts, panel de Supabase) o de otros workers. Esas solo aparecen al expirar el TTL. Con un solo proceso de uvicorn, como ahora, no hay más casos.
+- **El stock de una salida nunca sale de la caché:** se recalcula en la base con bloqueo, así que un stock desactualizado en pantalla no permite dejarlo en negativo.
+- **Sin datos por usuario:** las dos respuestas son iguales para cualquier usuario autenticado y el token se comprueba antes de leer la caché.
 
 ### Semilla
 
