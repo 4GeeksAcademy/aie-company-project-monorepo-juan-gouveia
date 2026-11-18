@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { getRecordById, PartialSaveError, updateRecord } from "@/lib/talento/api";
 import BackLink from "@/components/BackLink";
 import CandidateDetails from "@/components/talento/CandidateDetails";
-import CandidateFormModal from "@/components/talento/CandidateFormModal";
+import CandidateFormModal from "@/components/talento/LazyCandidateFormModal";
 import CandidateHeader from "@/components/talento/CandidateHeader";
 import LoadingMessage from "@/components/LoadingMessage";
 import NotesSection from "@/components/talento/NotesSection";

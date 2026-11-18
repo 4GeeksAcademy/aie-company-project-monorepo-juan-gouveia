@@ -1,15 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Button from "@/components/Button";
 import EmptyMessage from "@/components/EmptyMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import SupplierFilters from "@/components/proveedores/SupplierFilters";
-import SupplierFormModal from "@/components/proveedores/SupplierFormModal";
 import SupplierList from "@/components/proveedores/SupplierList";
 import RetryableError from "@/components/RetryableError";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import type { Supplier } from "@/types/supplier";
+
+// Carga diferida: el formulario de alta (con su validación y sus opciones) solo se descarga la primera
+// vez que se pulsa "Registrar proveedor". Quien solo consulta el directorio, que es el uso habitual,
+// nunca lo descarga.
+const SupplierFormModal = dynamic(() => import("@/components/proveedores/SupplierFormModal"));
 
 export default function SupplierDirectory() {
   const { filters, updateFilter, clearFilters, hasFilters, suppliers, fetchState, replaceSupplier, reload } =

@@ -9,7 +9,7 @@ const STYLE: Record<OrderKind, string> = {
   exit: "border-red-700 bg-red-50 text-red-800",
 };
 
-const LABEL: Record<OrderKind, string> = {
+export const ORDER_LABEL: Record<OrderKind, string> = {
   entry: "Entrada",
   exit: "Salida",
 };
@@ -25,7 +25,7 @@ export default function OrderTypeBadge({ kind }: { kind: OrderKind }) {
       className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${STYLE[kind]}`}
     >
       <span aria-hidden="true">{ORDER_SIGN[kind]}</span>
-      {LABEL[kind]}
+      {ORDER_LABEL[kind]}
     </span>
   );
 }
