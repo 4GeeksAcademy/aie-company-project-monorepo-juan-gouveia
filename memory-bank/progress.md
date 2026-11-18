@@ -166,6 +166,12 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **PR:** #20, abierto el 2026-11-18 contra `feature/serialization-audit` mientras el #19 no se fusione (5 commits, head `95538a6`).
 - **Datos de volumen:** siguen cargados (`VOL-`) en Supabase y en `brasaland-db.json` local, con 4 incidencias en `in_progress` por la medición; se retiran con `scripts/seed_volume.py --clear`.
 
+**Plan de Telemetría completado en la rama `feature/telemetry-plan`**, creada desde `feature/caching-optimisation` (`95538a6`) el 2026-11-18 porque los PR #17 a #20 siguen abiertos. Responde al RFI del equipo de gestión sin escribir código. Un commit por fase.
+
+- **Catálogo (Fase 1):** 44 eventos, entre ellos las 6 métricas obligatorias del briefing con su disparo exacto en la API y 38 oportunidades en 7 categorías (inventario, autenticación, navegación, rendimiento, errores, otras áreas del negocio y procesos internos). Cada evento tiene la frase de la regla de oro y su responsable. El flujo de inventario tiene 9 puntos de instrumentación.
+- **Diseño (Fase 2):** envelope con los nombres literales del enunciado, más `source` y `environment`; datos sensibles (seudónimos, HMAC del email, IP truncada); una ficha y un allowlist por evento. `docs/telemetry/event-schemas.json` es JSON Schema draft-07 validado (44 ejemplos y 220 casos negativos).
+- **Entrega (Fase 3):** 12 eventos en stream y 32 en batch, según la urgencia de la decisión; throttle en 15; riesgos y exclusiones; y 11 brechas con el modelo actual, que son la primera tarea de la fase de captura.
+
 **Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
@@ -326,7 +332,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Plan de Telemetría (rama `feature/telemetry-plan`)** — En curso (desde 2026-11-18). La rama sale de `feature/caching-optimisation` y el PR irá contra ella con el título `docs: telemetry design plan`. Entregables en `docs/telemetry/`: `telemetry-plan.md` y `event-schemas.json`, sin código. Hecho: catálogo de 44 eventos (6 obligatorios del briefing y 38 oportunidades en 7 categorías), mapa del flujo de inventario con 9 puntos de instrumentación, envelope con los nombres del enunciado, reglas de datos sensibles, una ficha por evento con su allowlist y `event-schemas.json` (JSON Schema draft-07, validado). Pendiente: estrategia stream/batch, throttle, riesgos y exclusiones, y brechas con el modelo actual. Plan en `docs/_private/plan-telemetria.md`.
+0. **Plan de Telemetría (rama `feature/telemetry-plan`)** — Completado (2026-11-18). La rama sale de `feature/caching-optimisation` y el PR irá contra ella con el título `docs: telemetry design plan`. `docs/telemetry/telemetry-plan.md` y `docs/telemetry/event-schemas.json` (JSON Schema draft-07, validado): 44 eventos (6 obligatorios del briefing y 38 oportunidades en 7 categorías), envelope con los nombres del enunciado, allowlist y datos sensibles por evento, 12 en stream y 32 en batch, throttle en 15, riesgos y exclusiones, y 11 brechas con el modelo actual (precio en las entradas, motivo de merma, mínimos y stock por local, entidad de locales, id de proveedor, cabeceras de correlación…), que son la primera tarea de la fase de captura. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Plan de Telemetría"). Plan en `docs/_private/plan-telemetria.md`.
 
 0. **Estrategia de caching (rama `feature/caching-optimisation`)** — Completada (2026-11-18): `docs/CACHING_REPORT.md` recoge la medición, los 35 endpoints evaluados, las decisiones (caché de 60 s y 5 min en el inventario, modales diferidos, listas de 50 en 50 y `useMemo`), los intercambios y lo que no se cacheó. PR #20 abierto contra `feature/serialization-audit`. Los datos `VOL-` se mantienen hasta que se revise el PR, por si hay que repetir las mediciones; después se retiran con `scripts/seed_volume.py --clear`. Trabajo futuro: paginar `GET /inventory/orders` y `GET /incidents` en la API, y Redis si la API pasa a varios workers. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Estrategia de caching"). Plan en `docs/_private/plan-caching.md`.
 

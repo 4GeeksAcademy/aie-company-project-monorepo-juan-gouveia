@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "urn:brasaland:telemetry:event-schemas:1.0.0",
   "title": "Brasaland — esquemas de eventos de telemetría",
-  "description": "Un evento válido cumple exactamente uno de los esquemas de `definitions/events` (por su `event_type`). Cada evento comparte el envelope de `definitions/envelope`, y su `properties` solo admite las claves de su allowlist (`additionalProperties: false`). Las claves `x-*` son anotaciones documentales (clasificación, categoría, emisor, disparo, datos sensibles): los validadores de draft-07 las ignoran. Documentación: telemetry-plan.md.",
+  "description": "Un evento válido cumple exactamente uno de los esquemas de `definitions/events` (por su `event_type`). Cada evento comparte el envelope de `definitions/envelope`, y su `properties` solo admite las claves de su allowlist (`additionalProperties: false`). Las claves `x-*` son anotaciones documentales (clasificación, categoría, emisor, disparo, datos sensibles, entrega): los validadores de draft-07 las ignoran. Documentación: telemetry-plan.md.",
   "definitions": {
     "envelope": {
       "type": "object",
@@ -359,6 +359,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/orders/inbound`.",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Consolidar compras y negociar precios son decisiones semanales o mensuales de Lucía; nadie actúa sobre una entrega concreta en minutos."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -457,6 +462,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de consumo. Una salida de merma emite `stock_waste_registered` en su lugar.",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "La sugerencia automática de pedidos se recalcula con el consumo acumulado del día; un consumo concreto no cambia la decisión en minutos."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -551,6 +561,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de merma.",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Priorizar auditorías de merma es una decisión semanal por local; la merma de hoy ya ocurrió y no se corrige en minutos."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -656,6 +671,12 @@
         "x-emitter": "api",
         "x-trigger": "Tras el `commit` de una salida que hace cruzar el mínimo: stock antes ≥ `threshold_quantity` y después < `threshold_quantity`.",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un local que se queda corto de un ingrediente clave necesita reponer **ese mismo día**: el supervisor debe enterarse en minutos, no al día siguiente. Además alimenta en batch el ajuste del mínimo.",
+          "throttle": "Natural: solo se emite al **cruzar** el mínimo (§3.2), así que un producto bajo no repite la alerta en cada consumo."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -755,6 +776,11 @@
         "x-emitter": "api",
         "x-trigger": "Al responder 405 a un `PUT`/`PATCH`/`DELETE` sobre una ruta del inventario, o 422 a un `POST` del inventario cuyo cuerpo incluye `current_stock` o `stock`.",
         "x-pii": "Ninguno. No se guarda el cuerpo de la petición ni el valor de stock que se intentó escribir.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Reforzar capacitación o permisos es una decisión semanal de Jake; el sistema ya rechazó el intento, no hay daño que contener en minutos."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -888,6 +914,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras el `commit` de una entrada cuyo `unit_cost` se desvía más de `threshold_pct` de la media de los últimos `history_window_days` días del mismo producto y proveedor, con al menos 3 entradas en esa ventana.",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Es una alerta para Lucía y Mariana: renegociar o cambiar de proveedor **antes** de aceptar más entregas al precio nuevo. Un día de retraso son más compras al precio anómalo."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1020,6 +1051,11 @@
         "x-emitter": "api",
         "x-trigger": "Al responder 422 `invalid_request` o 404 `ingredient_not_found` a `POST /api/v1/inventory/orders/inbound` u `/outbound`.",
         "x-pii": "Ninguno. Solo nombres de campo, nunca los valores enviados.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Corregir datos de catálogo y capacitar se decide con el acumulado de la semana."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1131,6 +1167,11 @@
         "x-emitter": "api",
         "x-trigger": "Al responder 400 `insufficient_stock` a `POST /api/v1/inventory/orders/outbound` (no se escribe nada).",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "El conteo físico se programa con el acumulado del día por producto y local; el rechazo ya protegió el stock."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1236,6 +1277,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras el `commit` de `POST /api/v1/inventory/products`.",
         "x-pii": "Ninguno. El nombre de un ingrediente no es un dato personal.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Revisar duplicados del catálogo es una tarea periódica de Compras."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1312,6 +1358,11 @@
         "x-emitter": "api",
         "x-trigger": "Cuando `POST /api/v1/auth/login` emite un token.",
         "x-pii": "`userId` es un identificador seudónimo (UUID). No se guarda el email.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Planificar capacitación y ventanas de mantenimiento usa patrones de semanas."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1365,6 +1416,12 @@
         "x-emitter": "api",
         "x-trigger": "Cuando `POST /api/v1/auth/login` responde 401 `invalid_credentials` o 403 `inactive_user`.",
         "x-pii": "**Sí (sanitizado).** El email nunca se emite: va como `account_fingerprint` (HMAC truncado). La IP va truncada (`client_network`). `userId` es `null` aunque la cuenta exista, para no revelar qué emails tienen cuenta.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un ataque de fuerza bruta se detiene en minutos o no se detiene: la decisión (bloqueo temporal) solo sirve si llega a tiempo.",
+          "throttle": "Sin muestreo: cada intento cuenta para detectar la ráfaga. Si un mismo `client_network` supera 60 eventos por minuto, el emisor los sigue enviando todos, agrupados en lotes de 1 segundo."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1433,6 +1490,12 @@
         "x-emitter": "api",
         "x-trigger": "Cuando la dependencia de autenticación responde 401 `token_expired`.",
         "x-pii": "`userId` sale del `sub` del token caducado (la firma es válida). No se guarda el token.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Ajustar la duración del token es una decisión de configuración que se toma con semanas de datos.",
+          "throttle": "Uno por token: varias peticiones en paralelo con el mismo token caducado (resumen y listado) emiten un solo evento por (`userId`, `iat`) en 60 s."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1493,6 +1556,12 @@
         "x-emitter": "api",
         "x-trigger": "Cuando la dependencia de autenticación responde 401 `invalid_token` o `session_revoked`.",
         "x-pii": "`userId` es el `sub` solo si el token está revocado (firma válida); con `invalid_token` es `null`. No se guarda el token.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Tokens manipulados o sesiones revocadas que insisten son un posible incidente de seguridad: investigar y rotar `SECRET_KEY` no puede esperar al día siguiente.",
+          "throttle": "Uno por token y motivo cada 60 s (las peticiones en paralelo comparten token)."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1556,6 +1625,11 @@
         "x-emitter": "browser",
         "x-trigger": "Al pulsar \"Cerrar sesión\" en el menú de la cuenta, antes de borrar el token.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "El cierre automático por inactividad se decide con el patrón de semanas."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1621,6 +1695,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras crear la cuenta con `POST /api/v1/users`.",
         "x-pii": "`userId` es `null` (la petición no está autenticada); la cuenta nueva va como `new_user_id` (seudónimo). No se guarda el email.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Con el registro abierto, una cuenta creada por alguien ajeno ya puede leer el inventario: hay que poder revisarla y desactivarla en minutos."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1687,6 +1766,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `PUT /api/v1/users/{id}` que cambia `role` o `is_active`, o tras `DELETE /api/v1/users/{id}`.",
         "x-pii": "`target_user_id` es seudónimo (UUID). No se guardan emails.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Una concesión de administrador fuera de proceso es una escalada de privilegios: se revisa en el momento."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1789,6 +1873,11 @@
         "x-emitter": "api",
         "x-trigger": "Al recibir `POST /api/v1/auth/forgot-password`, exista o no la cuenta (la respuesta al usuario es neutra).",
         "x-pii": "**Sí (sanitizado).** El email va como `account_fingerprint`; la IP, truncada. `account_found` solo se usa internamente y nunca llega al usuario.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Una ráfaga contra cuentas inexistentes (enumeración) solo se frena si se detecta mientras ocurre."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1853,6 +1942,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras el cambio de contraseña de `POST /api/v1/auth/reset-password`.",
         "x-pii": "`userId` es el dueño del enlace. No se guarda el enlace ni el token.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Simplificar el flujo de recuperación se decide con la tasa semanal."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1908,6 +2002,11 @@
         "x-emitter": "api",
         "x-trigger": "Cuando `POST /api/v1/auth/reset-password/validate` o `/reset-password` responde con `invalid_reset_token`, `reset_token_expired` o `reset_token_used`.",
         "x-pii": "Ninguno. No se guarda el token ni el email.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Ajustar la caducidad del enlace o el texto del correo es una decisión de configuración."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1977,6 +2076,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `POST /api/v1/auth/change-password` (también al editar `password` con `PUT /api/v1/users/{id}`).",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Exigir o no la renovación periódica es una política, no una reacción."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2041,6 +2145,12 @@
         "x-emitter": "browser",
         "x-trigger": "Al mostrar una ruta del backoffice, en la carga inicial y en cada navegación sin recarga.",
         "x-pii": "Ninguno. La ruta va como plantilla (`/talento/candidates/[id]`), sin ids reales ni query string. `userId` es `null` en las vistas públicas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Reordenar el menú o retirar secciones se decide con semanas de uso.",
+          "throttle": "Se ignora una segunda vista de la misma ruta en menos de 1 s (doble montaje de React en desarrollo, recargas dobles)."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2120,6 +2230,12 @@
         "x-emitter": "browser",
         "x-trigger": "Al pulsar enviar con campos inválidos según la validación del navegador.",
         "x-pii": "Ninguno. Solo nombres de campo, nunca los valores escritos.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Rediseñar campos se decide con el acumulado.",
+          "throttle": "Uno por formulario cada 2 s (doble clic en enviar)."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2193,6 +2309,12 @@
         "x-emitter": "browser",
         "x-trigger": "Al salir de la vista, cerrar el modal o cerrar la pestaña con al menos un campo modificado y sin envío correcto.",
         "x-pii": "Ninguno. Solo nombres de campo.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Simplificar formularios se decide con el acumulado.",
+          "throttle": "Uno por formulario abierto: se emite una sola vez, al salir."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2279,6 +2401,12 @@
         "x-emitter": "browser",
         "x-trigger": "Al aplicarse un filtro (en el texto, cuando deja de escribirse durante 500 ms).",
         "x-pii": "Ninguno. El texto de búsqueda no se emite: solo su longitud.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Mover filtros a la API se decide con el uso de semanas.",
+          "throttle": "Debounce de 500 ms en los filtros de texto: solo se emite cuando se deja de escribir."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2366,6 +2494,11 @@
         "x-emitter": "browser",
         "x-trigger": "Al pulsar \"Mostrar más\".",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Fijar las filas iniciales o añadir paginación se decide con el acumulado."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2439,6 +2572,12 @@
         "x-emitter": "api",
         "x-trigger": "Al terminar cada petición, en el middleware de timing (`app/core/timing.py`), con el muestreo de la estrategia de entrega.",
         "x-pii": "Ninguno. La ruta va como plantilla. `userId` es `null` en las rutas públicas.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "Decidir dónde cachear o fijar objetivos de latencia usa percentiles por hora y por día. Las caídas, que sí son urgentes, las detectan `server_error_occurred` y `api_connection_failed` en stream.",
+          "throttle": "**Muestreo:** se emite siempre si `duration_ms` ≥ 300 o `status_code` ≥ 400; el resto, 1 de cada 10 peticiones, elegidas por el `requestId` (determinista). `sample_rate` indica la tasa aplicada (1 o 0,1) para reconstruir los recuentos."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2460,7 +2599,8 @@
               "method",
               "route",
               "status_code",
-              "duration_ms"
+              "duration_ms",
+              "sample_rate"
             ],
             "properties": {
               "method": {
@@ -2482,6 +2622,12 @@
                   "MISS"
                 ],
                 "description": "Resultado de la caché en las rutas cacheadas (`X-Cache`)."
+              },
+              "sample_rate": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "description": "Tasa de muestreo aplicada a esta medición: 1 (siempre: lenta o con error) o 0.1 (1 de cada 10)."
               }
             },
             "additionalProperties": false
@@ -2501,7 +2647,8 @@
               "route": "/api/v1/inventory/orders",
               "status_code": 200,
               "duration_ms": 1.4,
-              "cache": "HIT"
+              "cache": "HIT",
+              "sample_rate": 0.1
             },
             "source": "api",
             "environment": "production"
@@ -2516,6 +2663,12 @@
         "x-emitter": "browser",
         "x-trigger": "Al ocultarse la vista o salir de ella (cuando las métricas son definitivas).",
         "x-pii": "Ninguno. No se emite el user agent completo: solo la clase de dispositivo.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Priorizar optimizaciones y fijar presupuestos de rendimiento usa la distribución de días.",
+          "throttle": "Uno por vista mostrada."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2615,6 +2768,12 @@
         "x-emitter": "api",
         "x-trigger": "Cada 5 minutos por cada caché del inventario, con los contadores de esa ventana.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "Ajustar TTL es una decisión de configuración con tendencias de horas.",
+          "throttle": "Ya es un agregado: uno por caché cada 5 minutos."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2701,6 +2860,12 @@
         "x-emitter": "api",
         "x-trigger": "Al responder cualquier 4xx con el formato `{\"error\": {\"code\", \"message\"}}`.",
         "x-pii": "Ninguno. No se guarda el `message` ni el cuerpo; solo el código. `userId` es `null` si la petición no estaba autenticada.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "Corregir flujos que provocan errores evitables se decide con el acumulado; los errores graves (500) van por su propio evento en stream.",
+          "throttle": "Un mismo (`route`, `error_code`, `userId`) se emite como máximo una vez cada 10 s: un script que repite la misma petición fallida no multiplica el volumen."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2775,6 +2940,12 @@
         "x-emitter": "api",
         "x-trigger": "Al responder 500 `internal_error`.",
         "x-pii": "Ninguno. No se emite el mensaje de la excepción (puede contener datos): solo su tipo y una huella.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un 500 es un fallo de la API que hay que atender ya: puede estar impidiendo registrar órdenes en todos los locales.",
+          "throttle": "Una vez por `error_fingerprint` cada 60 s, con el recuento en el log del emisor."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2846,6 +3017,12 @@
         "x-emitter": "browser",
         "x-trigger": "En `window.onerror`, en `unhandledrejection` y al mostrarse la pantalla de error de una vista (`error.tsx`).",
         "x-pii": "**Posible (sanitizado).** El mensaje se recorta a 200 caracteres y se le sustituyen emails, números de 4 o más cifras y UUID por `[redacted]` antes de emitirlo.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "cada hora",
+          "justification": "La decisión es priorizar correcciones por número de sesiones afectadas, con datos de horas. Un despliegue roto se ve también en `api_error_returned` y en las consultas de soporte.",
+          "throttle": "Una vez por `error_fingerprint` y sesión cada 60 s, y como máximo 20 por sesión (un error en bucle no inunda la telemetría)."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2929,6 +3106,12 @@
         "x-emitter": "bff",
         "x-trigger": "Cuando el intermediario `app/api/[...path]/route.ts` responde 502 `api_unavailable` o 500 `api_not_configured`.",
         "x-pii": "Ninguno. `userId` es `null`: el BFF no decodifica el token.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Sin API, ningún local puede registrar órdenes: es un incidente de disponibilidad que se abre en minutos.",
+          "throttle": "Una vez por sesión cada 30 s mientras la API no responde."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3022,6 +3205,11 @@
         "x-emitter": "process",
         "x-trigger": "En la tarea en segundo plano de envío (`send_safely`) cuando el proveedor falla o el envío está desactivado (falta `RESEND_API_KEY`).",
         "x-pii": "Ninguno. Nunca se emiten el destinatario, el asunto ni el enlace.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Hay un usuario esperando su enlace de recuperación ahora mismo; una configuración rota afecta a todos los siguientes."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3096,6 +3284,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `POST /api/v1/suppliers`.",
         "x-pii": "Ninguno. No se emiten los datos de contacto del proveedor.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Consolidar categorías de proveedores es una decisión trimestral."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3176,6 +3369,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `PATCH /api/v1/suppliers/{id}/rate`.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Renegociar se planifica con el histórico de cambios; la tarifa ya está registrada."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3264,6 +3462,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `PATCH /api/v1/suppliers/{id}/status` que cambia el estado.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Buscar proveedores alternativos se decide con la cobertura por categoría, revisada a diario."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3344,6 +3547,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `DELETE /api/v1/suppliers/{id}`.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Revisar si el borrado debió ser suspensión es una tarea periódica."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3419,6 +3627,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `POST /api/v1/incidents`.",
         "x-pii": "Ninguno. No se emiten el título ni la descripción (texto libre).",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Planificar visitas y mantenimiento usa el acumulado por sede. La atención de cada incidencia ya ocurre en el gestor, no en la telemetría."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3494,6 +3707,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `PATCH /api/v1/incidents/{id}/status`.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Los tiempos objetivo de respuesta se fijan y revisan con datos de semanas."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3583,6 +3801,11 @@
         "x-emitter": "api",
         "x-trigger": "Cuando `PATCH /api/v1/incidents/{id}/status` responde 400 `invalid_transition`.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Revisar el ciclo de vida o la interfaz se decide con el acumulado."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3648,6 +3871,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras un análisis correcto de `POST /api/v1/incidents/analyze`.",
         "x-pii": "Ninguno. No se emite el contenido del archivo ni su nombre.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "La capacitación por calidad de los reportes es periódica."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3766,6 +3994,11 @@
         "x-emitter": "api",
         "x-trigger": "Tras `GET /api/v1/incidents/results/export`.",
         "x-pii": "Ninguno.",
+        "x-delivery": {
+          "mode": "batch",
+          "cadence": "diario (cierre 02:00 hora local)",
+          "justification": "Mantener o sustituir la exportación se decide con meses de uso."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3821,6 +4054,11 @@
         "x-emitter": "process",
         "x-trigger": "Al final del `lifespan` de `app/main.py`.",
         "x-pii": "Ninguno. No se emite ningún valor de configuración, solo si cada función está activa.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un reinicio inesperado o un arranque con el correo desactivado en producción hay que verlo en el momento, antes de que lo noten los usuarios."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3889,6 +4127,11 @@
         "x-emitter": "process",
         "x-trigger": "Al terminar `uv run seed`, `uv run seed-inventory`, `scripts/seed_incidents.py` o `scripts/seed_volume.py`.",
         "x-pii": "Ninguno. No se emiten las filas cargadas.",
+        "x-delivery": {
+          "mode": "stream",
+          "cadence": "segundos",
+          "justification": "Un script de carga ejecutado contra producción mete datos sin trazabilidad en los indicadores de negocio: hay que detectarlo y retirarlos antes del batch diario."
+        },
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
