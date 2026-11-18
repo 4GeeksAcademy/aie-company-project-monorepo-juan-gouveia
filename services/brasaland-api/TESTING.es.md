@@ -23,7 +23,7 @@ Desde `services/brasaland-api/`:
 
 ```bash
 uv sync --extra dev                      # instala pytest, pytest-cov y httpx
-uv run pytest                            # toda la batería (806 pruebas, unos 2,5 min por bcrypt)
+uv run pytest                            # toda la batería (916 pruebas desde el Hito 5, unos 4,5 min por bcrypt)
 uv run pytest tests/auth                 # solo las unitarias de autenticación (146, unos 45 s)
 uv run pytest tests/suppliers tests/incidents   # solo las de API-042 (101, unos 2 s)
 uv run pytest -m integration             # solo las pruebas de integración HTTP

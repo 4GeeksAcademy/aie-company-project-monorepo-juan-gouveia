@@ -311,6 +311,14 @@ Cubre la parte de directorio que esta propuesta asignaba a `procurement/`: alta,
 - **Errores:** desde este bloque, cualquier excepción no controlada de la API responde 500 con un mensaje genérico; el detalle solo va al log.
 - **Pendiente:** cuando exista `locations/`, `branch` deberá validarse contra sus locales en vez de una lista fija, y el filtro de "quejas de cliente abiertas más de 48 horas" que pide Operaciones (el modelo ya tiene lo necesario).
 
+**Quinto bloque implementado: inventario (`inventory/`, Hito 5).** Operaciones necesitaba una única fuente de verdad del stock de ingredientes de los 14 locales, que hasta ahora se llevaba por WhatsApp y hojas de cálculo. Es el primer dominio en una base de datos de servidor. Se resolvió así:
+
+- **Base de datos:** por decisión del tech lead, los datos de negocio del inventario viven en **Supabase** (PostgreSQL) y se modelan con **SQLModel**; la autenticación sigue en TinyDB. La API mantiene las dos conexiones a la vez. `core/database.py` tiene el motor SQLModel y una sesión por petición (`get_db`), como preveía 2.6.
+- **Capas:** `models.py` (tablas ORM) y `schemas.py` (entrada y salida) son clases distintas; `service.py` tiene las reglas y `router.py` solo traduce HTTP. Al ser el primer dominio con ORM, las consultas viven en `service.py`, sin `repository.py` aparte.
+- **Stock calculado:** no es una columna. Es siempre la suma de las entradas menos la suma de las salidas de cada ingrediente, calculada por la base de datos. Solo cambia registrando órdenes, y una salida que dejaría el stock en negativo se rechaza antes de escribir.
+- **Trazabilidad:** cada orden guarda el `user_uuid` del usuario autenticado (regla 3 de 2.5), sin tabla de usuarios en Supabase.
+- **Pendiente:** las migraciones de esquema (hoy `create_all` solo crea tablas nuevas), el stock por local cuando exista `locations/` y la relación con `procurement/` (las entradas vienen de proveedores).
+
 **Excepción a "el backend es la fuente de verdad": `packages/shared`.** Las reglas del CSV de incidentes (validación y análisis) viven en un paquete Python del monorepo, `packages/shared` (`brasaland_shared`), porque la consigna del gestor exige que el script y la API compartan esa lógica desde `packages/shared/`. No contradice la decisión de 6.2, que va contra duplicar reglas en dos lenguajes: aquí hay una sola implementación, en Python, que la API instala como dependencia local y los scripts importan sin instalar nada. `packages/brasa-core` sigue siendo transitorio.
 
 ---
@@ -673,7 +681,7 @@ Esta propuesta define la estructura del backend, pero deja abiertas varias decis
 
 | Decisión | Qué condiciona | Dónde se menciona |
 |---|---|---|
-| **Motor de base de datos, librería para tablas y esquemas, y herramienta de migraciones** | `core/database.py`, los `models.py` de cada dominio y `migrations/`. Mientras tanto, `suppliers/` usa TinyDB con su propio `database.py` (2.7). | 2.3, 4.3 |
+| **Motor de base de datos, librería para tablas y esquemas, y herramienta de migraciones.** *Resuelto para el inventario (Hito 5):* PostgreSQL en Supabase con SQLModel, en `core/database.py` (2.7). *Pendiente:* la herramienta de migraciones y el paso de `suppliers/` e `incidents/`, que siguen en TinyDB. Usuarios y perfiles se quedan en TinyDB por directiva. | `core/database.py`, los `models.py` de cada dominio y `migrations/`. | 2.3, 4.3 |
 | **Estrategia de autenticación.** *Resuelto en la API:* el personal inicia sesión con email y contraseña y recibe un JWT; la API es stateless, sin sesiones ni cookies (2.7). *Resuelto en el backoffice (AUTH-02):* el token vive en `localStorage` y el intermediario lo reenvía (5.2). *Contraseñas (AUTH-03):* restablecimiento por correo (Resend) y cambio con sesión; ambos cierran las sesiones anteriores con `password_changed_at`, sin guardar las sesiones en el servidor. *Pendiente:* el modelo de permisos por rol, local o país; y cómo se identificarán los clientes cuando exista la app de fidelización (3.6). | `auth/`, `core/security.py` y el intermediario del backoffice. | 2.7, 3.3, 5.2, 5.4 |
 | **Tecnología para el flujo en tiempo real** | `GET /telemetry/stream` y el dashboard operativo. | 3.3 |
 | **Ejecución de tareas programadas y de fondo** | Cómo se lanzan y se reintentan los procesos de `jobs/`. | 2.6 |

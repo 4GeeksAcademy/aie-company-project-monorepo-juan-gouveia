@@ -5,21 +5,24 @@ Brasaland's central API, built with FastAPI and organized by domain as described
 - **`incidents`:** the analysis of the operational incidents CSV used by Operations and the backoffice, and the centralized incident manager (registration, tracking and metrics).
 - **`suppliers`:** Procurement's supplier directory, stored in TinyDB.
 - **`auth`, `users` and `profiles`:** JWT sign-in, users (credentials only) and profiles (name and contact details), stored in TinyDB (ticket AUTH-01).
+- **`inventory`:** ingredients, supplier deliveries and consumption or waste exits, with stock calculated from the orders. Stored in Supabase (PostgreSQL) with SQLModel (Milestone 5, ticket BRD-0512).
 
 > _Spanish version: [README.es.md](./README.es.md)._
 
 ## Status
 
-- **Implemented:** the `incidents` and `suppliers` domains, authentication (`/auth`, `/users`, `/profiles`) and `GET /health`.
+- **Implemented:** the `incidents`, `suppliers` and `inventory` domains, authentication (`/auth`, `/users`, `/profiles`) and `GET /health`.
+- **Inventory (Milestone 5, branch `feature/inventory-orm`):** 6 routes under `/api/v1/inventory`, with calculated stock and no way to edit it directly. See [`inventory` domain](#inventory-domain).
 - **Passwords (AUTH-03, branch `feature/password-reset`):** reset by email (Resend) and change while signed in. See [Password reset and change](#password-reset-and-change).
 - **Incident manager (branch `feature/incident-manager`):** creation, filtered list, detail, status changes and metrics. See [Centralized incident manager](#centralized-incident-manager).
-- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03) and `GET /health`. That includes the 7 `incidents` routes (2 from the analyzer and 5 from the manager) and the 6 `suppliers` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
+- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03) and `GET /health`. That includes the 7 `incidents` routes (2 from the analyzer and 5 from the manager) the 6 `suppliers` routes and the 6 `inventory` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
 - **Storage:**
   - The latest incident analysis is kept in memory and is lost when the API restarts.
   - Suppliers and the manager's incidents are stored in a TinyDB file, `storage/brasaland-db.json`, which survives restarts. Each has its own table, and they share one lock per file. TinyDB is temporary until Postgres with an ORM exists.
   - Users, profiles and password reset links (`password_resets`) are stored in another TinyDB file, `storage/auth-db.json`. As the briefing requires, users and profiles will stay in TinyDB even after PostgreSQL arrives.
   - Inserts into that file compute the document ID by reading the file, so they do not clash with writes from another process (for example, `uv run create-admin` while the API is running).
-  - In every domain, only `repository.py` and `database.py` know about storage.
+  - In the TinyDB domains, only `repository.py` and `database.py` know about storage.
+  - Inventory is stored in **Supabase** (PostgreSQL) with SQLModel: tables `ingredients`, `ingredient_entries` and `ingredient_exits`. The connection lives in `app/core/database.py`, and the API keeps both connections open at once: TinyDB for authentication and Supabase for inventory. No users table is replicated in Supabase: orders only store the TinyDB `user_uuid`.
 
 ## Requirements
 
@@ -32,9 +35,10 @@ From this folder:
 
 ```bash
 uv sync --extra dev                                 # creates .venv and installs what uv.lock pins
-cp .env.example .env                                # and fill in SECRET_KEY (see below)
+cp .env.example .env                                # and fill in SECRET_KEY and DATABASE_URL (see below)
 uv run seed                                         # loads the briefing suppliers (optional)
-uv run create-admin                                 # creates the first administrator (optional)
+uv run create-admin                                 # creates the first administrator (required by the inventory seed)
+uv run --env-file .env seed-inventory               # loads the briefing inventory into Supabase
 uv run --env-file .env uvicorn app.main:app --reload --port 8000
 ```
 
@@ -56,12 +60,13 @@ pip does not use the versions pinned in `uv.lock`, and `uvicorn` needs `--env-fi
 
 ### Environment variables
 
-The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is missing or invalid: the error names the variable to check. They have no default value in the code. Locally they are read from the `.env` file (ignored by Git) with `uv run --env-file .env`. The template is [`.env.example`](./.env.example).
+The API **does not start** if `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` or `DATABASE_URL` is missing or invalid: the error names the variable to check. They have no default value in the code. Locally they are read from the `.env` file (ignored by Git) with `uv run --env-file .env`. The template is [`.env.example`](./.env.example).
 
 | Variable | Required | Use |
 |---|---|---|
 | `SECRET_KEY` | Yes | JWT signing key, at least 32 characters. Generate one with `uv run python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Yes | Minutes an access token is valid (integer greater than 0) |
+| `DATABASE_URL` | Yes | Supabase PostgreSQL connection string for inventory: **Connect → Session pooler** (works over IPv4), with the database password instead of `[YOUR-PASSWORD]`. **It is a secret: it only goes in `.env`.** It must start with `postgresql://`; the API uses the psycopg2 driver. Special characters in the password (`@`, `:`, `/`, `#`…) must be URL-encoded (`%40`…) |
 | `AUTH_DB_PATH` | No | TinyDB file for users and profiles; defaults to `storage/auth-db.json` |
 | `BRASALAND_DB_PATH` | No | TinyDB file for suppliers; defaults to `storage/brasaland-db.json` |
 | `RESEND_API_KEY` | No | [Resend](https://resend.com/api-keys) API key with "Sending access". **It is a secret: it only goes in `.env`.** Without it, the API starts, logs a warning and does not send password reset emails |
@@ -73,29 +78,31 @@ The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is m
 
 ```bash
 uv sync --extra dev    # pytest, pytest-cov and httpx
-uv run pytest          # all 806 tests
-uv run pytest --cov    # with coverage of app/ (98%)
+uv run pytest          # all 916 tests
+uv run pytest --cov    # with coverage of app/
 ```
 
-The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 806 tests break down as follows:
+The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 916 tests break down as follows:
 
 - **Authentication unit tests (146, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
 - **Supplier and incident unit tests (101, `tests/suppliers/` and `tests/incidents/`, ticket API-042):** the logic of the 6 supplier endpoints and the 5 incident manager endpoints, without HTTP, with the three levels for each. On their own, they reach 84% coverage of both domains.
-- **HTTP integration (304, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier and incident endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
-- **`core` (72):** configuration from the environment (the API doesn't start without a key), password hashing and tokens, email sending, and error headers.
+- **Inventory (80, `tests/inventory/`, Milestone 5):** models (tables, FKs and unique SKU enforced by the database), schemas with the briefing values, the 6 endpoints without HTTP (calculated stock, 400 without writing, `user_uuid` of the authenticated user), the seed and the query count (no N+1). Together with the integration and SQL connection tests, the domain reaches 97% coverage.
+- **HTTP integration (325, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier, incident and inventory endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
+- **`core` (81):** configuration from the environment (the API doesn't start without a key or without `DATABASE_URL`), the SQL connection (per-request session and psycopg2 driver), password hashing and tokens, email sending, and error headers.
 - **`incidents` (51, `tests/domains/`):** the CSV analyzer service and the incident manager (model with the exact values, and repository: lifecycle, filters, `/summary` and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
 - **`suppliers` (67, `tests/domains/`):** the model with the briefing values, the seeder and the repository (including writes from two processes).
 - **`users`, `profiles` and `auth` (65, `tests/domains/`):** models, repositories (including writes from another process), the user service and `uv run create-admin`.
 
-Each test uses temporary TinyDB databases and its own configuration, so it never touches `storage/` or depends on `.env`.
+Each test uses temporary TinyDB databases, a temporary SQLite database instead of Supabase (with foreign keys enabled) and its own configuration, so it never touches `storage/` or Supabase, nor depends on `.env`.
 
 ## Structure
 
 ```
 app/
-├── main.py                 # Creates the app, GET /health, registers routers under /api/v1, validates configuration and seeds on startup
+├── main.py                 # Creates the app, GET /health, registers routers under /api/v1, validates configuration, seeds suppliers and creates the inventory tables on startup
 ├── core/
 │   ├── config.py           # Environment variables (JWT, email and password reset) and API_PREFIX
+│   ├── database.py         # Supabase: SQLModel engine (DATABASE_URL, psycopg2), init_db (create_all) and get_db (per-request session)
 │   ├── security.py         # bcrypt hashing and JWTs: access tokens and reset tokens (purpose, jti)
 │   ├── email.py            # EmailMessage and senders: Resend, or disabled without RESEND_API_KEY
 │   ├── storage.py          # Shared brasaland-db.json: path, opening, per-file lock and insert_with_file_id
@@ -132,6 +139,12 @@ app/
     │   ├── incident_repository.py # Manager: incidents and incident_seed_log tables (TinyDB)
     │   ├── manager_router.py # Manager: /incidents endpoints
     │   └── dependencies.py # Repository injection
+    ├── inventory/
+    │   ├── models.py       # ORM models (SQLModel): Ingredient, IngredientEntry, IngredientExit
+    │   ├── schemas.py      # Pydantic request and response schemas, separate from the models
+    │   ├── service.py      # Stock calculated in SQL, negative stock rejection and lists without N+1
+    │   ├── router.py       # /inventory endpoints
+    │   └── seed.py         # Briefing seed data (`uv run seed-inventory`)
     └── suppliers/
         ├── models.py       # Pydantic models: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Suppliers table; path and opening come from core/storage.py
@@ -141,7 +154,7 @@ app/
         ├── exceptions.py   # DuplicateSupplierError
         └── dependencies.py # Repository injection
 storage/                    # brasaland-db.json and auth-db.json (TinyDB); ignored by Git
-tests/                      # Mirrors the app/ structure, plus auth/ (auth unit tests) and integration/ (HTTP; see TESTING.md)
+tests/                      # Mirrors the app/ structure, plus auth/ (auth unit tests), inventory/ and integration/ (HTTP; see TESTING.md)
 ```
 
 The incidents CSV rules live in the shared package [`packages/shared`](../../packages/shared/README.md) (`brasaland_shared.incidents`), which `scripts/incident-report/analyze.py` and `scripts/seed_incidents.py` also use. The API installs it as a local dependency (`[tool.uv.sources]` in `pyproject.toml`), so `uv sync` is enough; `incidents/service.py` only re-exports what the analyzer uses.
@@ -244,6 +257,65 @@ According to the briefing, suppliers are not deleted: they are suspended. `DELET
 - **File:** `storage/brasaland-db.json`, readable UTF-8, ignored by Git. It can be changed with the `BRASALAND_DB_PATH` variable.
 - **Back to the initial data:** delete the file and restart the API, or run `uv run seed`.
 - **Two processes on the same file:** the repository uses no cache and computes each ID from the file, so `uv run seed` can run while the API is up. Even so, TinyDB is not designed for many processes writing at once. It is enough for a directory of about 20 suppliers managed by a small team.
+
+## `inventory` domain
+
+Centralized ingredient inventory (Milestone 5, ticket BRD-0512). Operations' rule is that **stock cannot be modified directly**: it only changes by recording an inbound order (supplier delivery) or an outbound order (consumption or waste), and every order is traceable to the user who created it. The data lives in Supabase (PostgreSQL) and is modelled with SQLModel.
+
+### Model
+
+Entity and field names are exactly the briefing's. The ORM models (`models.py`) and the API schemas (`schemas.py`) are separate classes: no endpoint returns an ORM object.
+
+| Entity (table) | Fields | Rules |
+|---|---|---|
+| `Ingredient` (`ingredients`) | `id`, `name`, `sku`, `unit`, `category`, `country` | Unique `sku`; `unit`: `kg`, `litro` or `unidad`; `category`: `meat`, `produce`, `sauce`, `beverage`, `packaging` or `cleaning`; `country`: `CO` or `US`. **No stock column**: `current_stock` only exists in the response |
+| `IngredientEntry` (`ingredient_entries`) | `id`, `ingredient_id` (FK), `quantity`, `supplier_name`, `location_id`, `created_at`, `user_uuid` | `quantity` > 0; `location_id` from 1 to 14 (not an FK) |
+| `IngredientExit` (`ingredient_exits`) | `id`, `ingredient_id` (FK), `quantity`, `reason`, `location_id`, `created_at`, `user_uuid` | `reason`: `consumption` or `waste` |
+
+- **`current_stock`** = sum of the ingredient's entries − sum of its exits, calculated by the database on every read. The scope is global per ingredient: `location_id` is stored but does not partition stock.
+- **`user_uuid`** is the TinyDB `id` of the authenticated user; the API sets it from the token. Sending it in the body returns 422. It is not an FK: users are not replicated in Supabase.
+- **`created_at`** is set by the API, in UTC.
+
+### Endpoints
+
+All of them require a token. The router has the `/inventory` prefix and is mounted under `/api/v1`.
+
+| Method and route | Use | Responses |
+|---|---|---|
+| `GET /api/v1/inventory/products` | Ingredients with `current_stock`; `?country=CO` or `US` filters by market | 200, 422 |
+| `POST /api/v1/inventory/products` | Creates an ingredient; it starts with zero stock | 201, 409 `duplicate_sku`, 422 |
+| `GET /api/v1/inventory/products/{id}` | One ingredient with its current stock | 200, 404 `ingredient_not_found` |
+| `POST /api/v1/inventory/orders/inbound` | Records a supplier delivery (`IngredientEntry`) | 201, 404, 422 |
+| `POST /api/v1/inventory/orders/outbound` | Records consumption or waste (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
+| `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` with the ingredient data and `user_uuid`, newest first | 200 |
+
+An exit that would leave stock negative is rejected **before anything is written**. The message is in Spanish, like the rest of the API:
+
+```json
+{"error": {"code": "insufficient_stock", "message": "Stock insuficiente para el ingrediente 'Falda de ternera'. Disponible: 52, solicitado: 60."}}
+```
+
+The exit locks the ingredient row (`SELECT ... FOR UPDATE`) while it calculates stock, so two simultaneous exits cannot spend the same stock. There are no routes to edit or delete ingredients or orders.
+
+### Queries without N+1
+
+The API only uses `sqlmodel` (`select`, `func`, `col`), with no direct SQLAlchemy. `GET /products` is a single query (ingredients with two subqueries that add up entries and exits) and `GET /orders` is two (one per table, with a `join` to the ingredient), whatever the number of rows. `tests/inventory/test_queries.py` checks this by counting the SQL statements.
+
+### Seed
+
+`uv run --env-file .env seed-inventory` loads the briefing seed data into Supabase:
+
+- the 6 ingredients in the table;
+- 4 entries: Falda de ternera 50 and 30 kg (Carnes del Valle S.A.), Costilla de cerdo 40 kg (MiamiMeat Co.) and Chimichurri 20 litres (Salsas Artesanales Ltda.);
+- 3 exits: Falda de ternera 25 kg consumption and 3 kg waste, and Costilla de cerdo 8 kg consumption.
+
+Resulting stock: Falda de ternera 52, Costilla de cerdo 32, Chimichurri 20 and the rest 0.
+
+- Orders carry the UUID of the oldest active administrator in TinyDB: run `uv run create-admin` first.
+- It creates the tables if they don't exist, validates the data with the API schemas and inserts everything in a single transaction.
+- It is idempotent: if there are already ingredients, it inserts nothing.
+- `location_id` is 1 for Colombian ingredients and 10 for US ones (example values: the briefing doesn't assign locations to countries).
+- The API does not seed inventory on startup.
 
 ## Authentication: `auth`, `users` and `profiles`
 
@@ -367,7 +439,7 @@ The incident file type is validated by extension, not by `Content-Type`, because
 
 ### Console commands
 
-`uv run seed` and `uv run create-admin` write the result to `stdout` and errors to `stderr`, without a traceback, and exit with code 0 on success and 1 on failure (`create-admin` exits with 130 when cancelled with Ctrl+C). They detect a database that cannot be opened, is not valid JSON (it is left untouched) or cannot be written.
+`uv run seed`, `uv run create-admin` and `uv run seed-inventory` write the result to `stdout` and errors to `stderr`, without a traceback, and exit with code 0 on success and 1 on failure (`create-admin` exits with 130 when cancelled with Ctrl+C). The first two detect a database that cannot be opened, is not valid JSON (it is left untouched) or cannot be written. `seed-inventory` detects a missing administrator or `DATABASE_URL` and Supabase connection failures; for the latter it only shows the error type, because the driver message may include the connection host or user.
 
 Both show the absolute path of the database they use, on purpose: only the person operating the server sees it, in their own console, and since `BRASALAND_DB_PATH` and `AUTH_DB_PATH` can point anywhere, it is how they confirm which file was changed. The API never returns that path to a client.
 
@@ -385,6 +457,8 @@ The assignments ask for `/services/api`, with routes such as `/api/incidents/...
 - a second service for each exercise would duplicate environments, ports and rules.
 
 Authentication follows the same pattern: the briefing asks for `/auth`, `/users` and `/profiles`, and here they live under `/api/v1`. Sign-in also accepts a form as well as JSON, and sign-up does not accept `role`.
+
+Inventory (Milestone 5) does too: the assignment asks for `services/database.py`, `models.py`, `schemas.py` and `routers/inventory.py`, and here it is the `app/domains/inventory/` domain, with routes under `/api/v1/inventory`. The SQLModel engine has its own module (`app/core/database.py`) so the auth TinyDB configuration is left untouched.
 
 The assignment's file names are kept inside the `suppliers` domain. From the browser, routes look as in the assignment: the backoffice exposes `/api/suppliers` and `/api/incidents/...`, and its intermediary forwards them to `/api/v1/...`.
 
