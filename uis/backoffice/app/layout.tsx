@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Header from "@/components/Header";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,8 +16,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
+      {/* La cabecera la pone el layout de cada grupo: (protegido) con navegación y (publico) sin ella. */}
       <body className="min-h-screen bg-gray-100">
-        <Header />
         {children}
       </body>
     </html>

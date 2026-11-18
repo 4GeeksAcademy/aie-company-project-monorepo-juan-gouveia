@@ -296,7 +296,7 @@ The incident file type is validated by extension, not by `Content-Type`, because
 
 ## Who uses it
 
-- **`uis/backoffice`:** through its intermediary `app/api/[...path]/route.ts` (BFF pattern), with the server variable `API_BASE_URL=http://localhost:8000/api/v1`. The browser never calls the API directly, so no CORS is needed. The `/incidencias` and `/proveedores` tools use it. The intermediary does not send a token yet, so those tools get 401 until the frontend is updated in a later phase, as the briefing expects.
+- **`uis/backoffice`:** through its intermediary `app/api/[...path]/route.ts` (BFF pattern), with the server variable `API_BASE_URL=http://localhost:8000/api/v1`. The browser never calls the API directly, so no CORS is needed. The `/incidencias` and `/proveedores` tools use it, and so do the session views (`/login`, `/register`). The browser stores the token in `localStorage` and sends it in `Authorization: Bearer`; the intermediary forwards it as is (ticket AUTH-02).
 - **`scripts/incident-report/analyze.py`:** imports `incidents/service.py` directly; it does not use HTTP.
 
 ## Differences from the course assignment

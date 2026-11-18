@@ -2,7 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { tools } from "@/lib/tools";
 
-export default function Header() {
+interface HeaderProps {
+  // Sin navegación ni cuenta: para el login, el registro y mientras se comprueba la sesión.
+  minimal?: boolean;
+  // Bloque de cuenta (perfil y cierre de sesión); se muestra también en móvil.
+  account?: React.ReactNode;
+}
+
+export default function Header({ minimal = false, account }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 border-b border-red-200 bg-white">
       <div className="mx-auto flex items-center gap-2 px-3 py-2 md:px-4 lg:max-w-6xl lg:px-8">
@@ -25,20 +32,23 @@ export default function Header() {
           Backoffice
         </p>
         {/* En móvil se navega desde la portada: FilterBar depende de la altura fija de esta cabecera. */}
-        <nav aria-label="Herramientas" className="hidden md:block">
-          <ul className="flex justify-end gap-1">
-            {tools.map((tool) => (
-              <li key={tool.href}>
-                <Link
-                  href={tool.href}
-                  className="block rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100"
-                >
-                  {tool.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        {!minimal && (
+          <nav aria-label="Herramientas" className="hidden md:block">
+            <ul className="flex justify-end gap-1">
+              {tools.map((tool) => (
+                <li key={tool.href}>
+                  <Link
+                    href={tool.href}
+                    className="block rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100"
+                  >
+                    {tool.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+        {!minimal && account}
       </div>
     </header>
   );

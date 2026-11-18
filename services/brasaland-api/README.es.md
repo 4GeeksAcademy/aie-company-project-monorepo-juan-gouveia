@@ -296,7 +296,7 @@ Ejemplo de 422:
 
 ## Quién la usa
 
-- **`uis/backoffice`:** a través de su intermediario `app/api/[...path]/route.ts` (patrón BFF), con la variable de servidor `API_BASE_URL=http://localhost:8000/api/v1`. El navegador nunca llama a la API directamente, así que no hace falta CORS. Lo usan las herramientas `/incidencias` y `/proveedores`. El intermediario aún no envía token, así que esas herramientas reciben 401 hasta que el frontend se actualice en una fase posterior, como prevé el briefing.
+- **`uis/backoffice`:** a través de su intermediario `app/api/[...path]/route.ts` (patrón BFF), con la variable de servidor `API_BASE_URL=http://localhost:8000/api/v1`. El navegador nunca llama a la API directamente, así que no hace falta CORS. Lo usan las herramientas `/incidencias` y `/proveedores`, y las vistas de sesión (`/login`, `/register`). El navegador guarda el token en `localStorage` y lo envía en `Authorization: Bearer`; el intermediario lo reenvía tal cual (ticket AUTH-02).
 - **`scripts/incident-report/analyze.py`:** importa `incidents/service.py` directamente; no usa HTTP.
 
 ## Diferencias con la consigna del curso

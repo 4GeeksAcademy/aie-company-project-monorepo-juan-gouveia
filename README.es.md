@@ -56,8 +56,8 @@ Este repositorio contiene el proyecto de **Brasaland**. `CONTEXT.md` (y su versi
 | Área | Ruta | Estado |
 | --- | --- | --- |
 | Web corporativa | [`uis/website/`](./uis/website/README.es.md) | App Next.js en el puerto 3000. El envío del formulario de Brasa Points es simulado |
-| Backoffice | [`uis/backoffice/`](./uis/backoffice/README.es.md) | App Next.js en el puerto 3001: Talent Pipeline Tracker (`/talento`), análisis de incidencias (`/incidencias`), directorio de proveedores (`/proveedores`) y pruebas de funciones (`/funciones`). Aún no tiene autenticación, así que no debe publicarse |
-| API de Brasaland | [`services/brasaland-api/`](./services/brasaland-api/README.es.md) | FastAPI, organizada por dominios. Implementa los dominios `incidents` y `suppliers` (este último con TinyDB provisional), todavía sin autenticación |
+| Backoffice | [`uis/backoffice/`](./uis/backoffice/README.es.md) | App Next.js en el puerto 3001: Talent Pipeline Tracker (`/talento`), análisis de incidencias (`/incidencias`), directorio de proveedores (`/proveedores`) y pruebas de funciones (`/funciones`). Exige sesión en todas las vistas salvo `/login` y `/register` (token JWT en `localStorage`) |
+| API de Brasaland | [`services/brasaland-api/`](./services/brasaland-api/README.es.md) | FastAPI, organizada por dominios. Implementa `incidents` y `suppliers` (este último con TinyDB provisional), y la autenticación JWT (`auth`, `users` y `profiles`) |
 | Script de reporte de incidentes | [`scripts/incident-report/`](./scripts/incident-report/README.es.md) | CLI en Python que valida y resume el CSV de incidentes y exporta `data/process/results.csv`. Reutiliza la lógica de análisis de la API |
 | Paquetes compartidos | [`packages/`](./packages/README.es.md) | `@repo/brasa-core` es transitorio (lo usa `/funciones`); `@repo/shared-types` aún no tiene consumidores |
 | Datos | [`data/raw/`](./data/raw/README.es.md) | `incidents-brasaland.csv` (100 incidentes de prueba) |

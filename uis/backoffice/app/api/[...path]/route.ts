@@ -1,11 +1,13 @@
 // Intermediario (Backend for Frontend) entre el navegador y la API de Brasaland.
 // Solo reenvía la petición: no aplica reglas de negocio ni decide permisos (propuesta 5.2).
 // Así la URL de la API es una variable de servidor y el navegador no necesita CORS.
+// El token JWT lo envía el navegador en Authorization (ticket AUTH-02) y se reenvía tal cual;
+// la API es quien lo valida.
 
 const API_BASE_URL = process.env.API_BASE_URL;
 
 // Cabeceras que se copian en cada sentido; el resto (host, cookies…) no se reenvía.
-const REQUEST_HEADERS = ["content-type", "accept"];
+const REQUEST_HEADERS = ["content-type", "accept", "authorization"];
 const RESPONSE_HEADERS = ["content-type", "content-disposition"];
 
 interface RouteContext {
@@ -56,5 +58,6 @@ async function forward(request: Request, { params }: RouteContext) {
 
 export const GET = forward;
 export const POST = forward;
+export const PUT = forward;
 export const PATCH = forward;
 export const DELETE = forward;

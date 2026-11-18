@@ -299,6 +299,7 @@ Cubre la parte de directorio que esta propuesta asignaba a `procurement/`: alta,
 - **Dependencia `get_current_user`:** valida el token en cada petición. Se declara al registrar el router de cada dominio, como recomienda 3.1. Hoy protege todas las rutas salvo el inicio de sesión, el registro y `/health`.
 - **Usuarios y perfiles:** `users/` guarda solo credenciales y rol (`admin`, `manager` o `user`), y `profiles/` el nombre y el contacto.
 - **Almacenamiento:** por indicación del CTO, ambos viven en **TinyDB** también después de introducir PostgreSQL, en un archivo propio. Los demás dominios guardan solo el identificador de la cuenta, con el nombre `user_uuid` (regla 3 de 2.5).
+- **Frontend (ticket AUTH-02):** el backoffice tiene `/login`, `/register` y `/account/profile`, y protege el resto de vistas con un guard en el cliente. El token vive en `localStorage` y pasa por el intermediario (5.2). El website público no cambia.
 - **Pendiente:** los permisos por rol, fuera de la gestión de cuentas, y la asignación de locales o país a cada cuenta.
 
 ---
@@ -515,8 +516,11 @@ Por qué no repositorios separados:
 - **Desde dónde sale cada llamada depende del cliente:**
   - **Web, lecturas.** Las páginas piden sedes y menú desde el servidor de Next.js, para que el contenido llegue en el HTML.
   - **Web, alta de Brasa Points.** El formulario llama a `POST /loyalty/enrollments` directamente desde el navegador (3.6). Así el límite de peticiones ve la IP real del visitante.
-  - **Backoffice.** Usa el servidor de Next.js como intermediario (patrón *Backend for Frontend*). La sesión se guarda en una cookie inaccesible desde JavaScript, y una única ruta genérica (`app/api/[...path]/route.ts`) reenvía las peticiones a la API con el token, que nunca llega al navegador. `proxy.ts` puede redirigir al login antes de mostrar una página.
-- **El intermediario no contiene lógica.** Solo reenvía peticiones y añade el token. No aplica reglas de negocio ni decide permisos: eso sigue en la API.
+  - **Backoffice.** Usa el servidor de Next.js como intermediario (patrón *Backend for Frontend*): una única ruta genérica (`app/api/[...path]/route.ts`) reenvía las peticiones a la API. Por indicación del ticket AUTH-02, el token se guarda en el navegador (`localStorage`). El navegador lo envía en `Authorization: Bearer` a cada llamada, y el intermediario lo reenvía tal cual. La comprobación de sesión la hace un guard en el cliente, porque el servidor no puede leer `localStorage`.
+    - **Cambio respecto a la versión anterior de esta propuesta:** antes la sesión vivía en una cookie inaccesible desde JavaScript, el token nunca llegaba al navegador y `proxy.ts` redirigía al login.
+    - **Coste:** un script inyectado en la página podría leer el token.
+    - **Alternativa:** si la seguridad lo exige más adelante, volver a la cookie solo cambia el intermediario y el guard; las vistas y la API no se tocan.
+- **El intermediario no contiene lógica.** Solo reenvía peticiones, con su token. No valida el token, no aplica reglas de negocio ni decide permisos: eso sigue en la API.
 - **La autorización vive siempre en el backend.** Que un frontend oculte un botón no protege nada: cada ruta de la API comprueba los permisos por sí misma (3.1, 3.2), sea quien sea el cliente.
 - **Un solo backoffice, con herramientas según los permisos.** Las áreas internas no son aplicaciones separadas, sino herramientas de `uis/backoffice`. `GET /auth/me` devuelve los permisos del usuario, y cada entrada de `lib/tools.ts` declara el permiso que necesita para aparecer en la portada y la navegación. Es solo un filtro de interfaz: la API rechaza igualmente cualquier petición sin permiso, aunque alguien escriba la URL de una herramienta a mano.
 
@@ -659,7 +663,7 @@ Esta propuesta define la estructura del backend, pero deja abiertas varias decis
 | Decisión | Qué condiciona | Dónde se menciona |
 |---|---|---|
 | **Motor de base de datos, librería para tablas y esquemas, y herramienta de migraciones** | `core/database.py`, los `models.py` de cada dominio y `migrations/`. Mientras tanto, `suppliers/` usa TinyDB con su propio `database.py` (2.7). | 2.3, 4.3 |
-| **Estrategia de autenticación.** *Resuelto en la API:* el personal inicia sesión con email y contraseña y recibe un JWT; la API es stateless, sin sesiones ni cookies (2.7). *Pendiente:* cómo guarda el token el intermediario del backoffice, porque 5.2 preveía una cookie y la directiva de autenticación descarta las cookies; el modelo de permisos por rol, local o país; y cómo se identificarán los clientes cuando exista la app de fidelización (3.6). | `auth/`, `core/security.py` y el intermediario del backoffice. | 2.7, 3.3, 5.2, 5.4 |
+| **Estrategia de autenticación.** *Resuelto en la API:* el personal inicia sesión con email y contraseña y recibe un JWT; la API es stateless, sin sesiones ni cookies (2.7). *Resuelto en el backoffice (AUTH-02):* el token vive en `localStorage` y el intermediario lo reenvía (5.2). *Pendiente:* el modelo de permisos por rol, local o país; y cómo se identificarán los clientes cuando exista la app de fidelización (3.6). | `auth/`, `core/security.py` y el intermediario del backoffice. | 2.7, 3.3, 5.2, 5.4 |
 | **Tecnología para el flujo en tiempo real** | `GET /telemetry/stream` y el dashboard operativo. | 3.3 |
 | **Ejecución de tareas programadas y de fondo** | Cómo se lanzan y se reintentan los procesos de `jobs/`. | 2.6 |
 | **Criterio para usar funciones asíncronas** | Rendimiento de las rutas y de los adaptadores de POS e IA, cuyas llamadas externas no deben bloquear la API. | 4 |
