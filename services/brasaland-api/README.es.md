@@ -106,6 +106,7 @@ app/
 │   ├── security.py         # Hash bcrypt y JWT: tokens de acceso y de restablecimiento (purpose, jti)
 │   ├── email.py            # EmailMessage y emisores: Resend, o desactivado sin RESEND_API_KEY
 │   ├── storage.py          # brasaland-db.json compartido: ruta, apertura, bloqueo por archivo e insert_with_file_id
+│   ├── timing.py           # Middleware de timing: una línea de log por petición (logger api.timing)
 │   └── errors.py           # Formato único de errores, 400 de validación del gestor y 500 genérico
 └── domains/
     ├── auth/
@@ -384,6 +385,16 @@ Ticket AUTH-03. El correo se envía con [Resend](https://resend.com), elegido fr
 ## `GET /health`
 
 Devuelve `{"status": "ok"}` (`HealthResponse`). Está fuera de `/api/v1` y no lleva autenticación.
+
+## Log de timing
+
+`app/core/timing.py` registra una línea por petición en el logger `api.timing`, con el método, la ruta (sin la query), el estado y la duración dentro de la API:
+
+```
+INFO:     api.timing - GET /api/v1/inventory/products → 200 | 98.6ms
+```
+
+Sirve para elegir con datos qué endpoints merecen caché. Los errores no controlados también se registran, como 500. Con `--no-access-log`, uvicorn deja solo estas líneas.
 
 ## Errores
 

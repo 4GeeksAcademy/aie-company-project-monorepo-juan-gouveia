@@ -155,7 +155,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
   - el OpenAPI solo cambia en lo previsto;
   - prueba manual en `/docs` de 5 endpoints, con una cuenta temporal que después se borró.
   Los 35 endpoints quedan ✅. La excepción del CSV está en `docs/BRIEFING_DIVERGENCES.md` (sección 13).
-- **PR:** pendiente de abrir contra `feature/performance-audit`.
+- **PR:** #19, abierto el 2026-11-18 contra `feature/performance-audit` mientras el #18 no se fusione (6 commits, head `9f0da00`).
 
 **Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -174,8 +174,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #16 Navegación del backoffice | `feature/backoffice-navigation` → `main` | ✅ Fusionado (2026-11-18) |
 | #17 Contenedorización del monorepo (#infra-40) | `feature/dockerize` → `main` | ⏳ Abierto (2026-11-17) |
 | #18 Auditoría de rendimiento de ambos frontends | `feature/performance-audit` → `feature/dockerize` | ⏳ Abierto (2026-11-17) |
+| #19 Auditoría de serialización del backend | `feature/serialization-audit` → `feature/performance-audit` | ⏳ Abierto (2026-11-18) |
 
-- **Orden de merge:** del #6 al #16 ya están fusionados (el #8 a #16, el 2026-11-18). Quedan el #17 y el #18, en ese orden, con "Create a merge commit" (sin squash ni rebase), para que el PR siguiente no repita commits ni dé conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** del #6 al #16 ya están fusionados (el #8 a #16, el 2026-11-18). Quedan el #17, el #18 y el #19, en ese orden, con "Create a merge commit" (sin squash ni rebase), para que el PR siguiente no repita commits ni dé conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas (2026-11-18):** las ramas fusionadas, incluida `directorio-prov`, están borradas en local y en GitHub. Quedan `main` (al día con `origin/main`), `feature/dockerize`, `feature/performance-audit` y `feature/serialization-audit`.
 
 ### 1. Contexto y Configuración Inicial
@@ -315,13 +316,15 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. Pendiente: abrir el PR contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
+0. **Estrategia de caching (rama `feature/caching-optimisation`)** — En curso (desde 2026-11-18). La rama sale de `feature/serialization-audit` y el PR irá contra ella. Hecho: middleware de timing (`app/core/timing.py`, logger `api.timing`) y medición base. Pendiente: seeder de volumen, caché con TTL e invalidación en dos endpoints, carga diferida y `useMemo` en el backoffice, y `CACHING_REPORT.md`.
+
+0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. PR #19 abierto contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
 
 0. **Auditoría de rendimiento (rama `feature/performance-audit`)** — Completada (2026-11-17): `audit/AUDIT.md`, `audit/REPORT.md` y las capturas de `audit/before/` y `audit/after/`. Mejoras medidas: CLS del gestor de incidencias 0,204 → 0 y Best Practices del website 96 → 100. PR #18 abierto contra `feature/dockerize`. Cuando se fusione la cadena y se actualice Next, repetir las mediciones con la misma versión de Lighthouse. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends"). Plan en `docs/_private/plan-auditoria-rendimiento.md`.
 
 0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Completada: `docker compose up` desde la raíz levanta `uis` y `api` con recarga en caliente, verificado (2026-11-17). Un commit por fase (la última, `b1cab16`). PR #17 abierto; desde el 2026-11-18 apunta a `main`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Contenedorización del monorepo"). Plan en `docs/_private/plan-contenedorizacion.md`.
 
-0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 fusionado en `main` (2026-11-18). La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 fusionado en `main` (2026-11-18). Pendiente: cuando se fusionen el #17 y el #18, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
+0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 fusionado en `main` (2026-11-18). La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 fusionado en `main` (2026-11-18). Pendiente: cuando se fusionen el #17, el #18 y el #19, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
 0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 fusionado en `main` (2026-11-18). Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 
