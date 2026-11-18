@@ -11,4 +11,4 @@ Cada subcarpeta dentro de `services/` debe corresponder a **un servicio concreto
 
 | Servicio | Qué hace |
 |---|---|
-| [`brasaland-api/`](./brasaland-api/README.es.md) | API central de Brasaland (FastAPI), organizada por dominios. Implementa los dominios `incidents` (análisis del CSV de incidentes y exportación de resultados) y `suppliers` (directorio de proveedores en TinyDB). |
+| [`brasaland-api/`](./brasaland-api/README.es.md) | API central de Brasaland (FastAPI), organizada por dominios. Implementa los dominios `incidents` (análisis del CSV de incidentes y exportación de resultados) y `suppliers` (directorio de proveedores en TinyDB), además de la autenticación con JWT (`auth`, `users` y `profiles`, en TinyDB). |

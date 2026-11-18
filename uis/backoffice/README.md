@@ -62,6 +62,7 @@ Internal areas, including training, join this project as tools, not as separate 
 ## Known limitations
 
 - **No authentication:** do not publish it until login exists.
+- **`/incidencias` and `/proveedores` get 401 for now:** the Brasaland API requires a JWT on those routes (ticket AUTH-01), and the intermediary does not send it yet. This is expected: the frontend will be updated to send the token in a later phase.
 - **`/funciones` is temporary:** it tests the rules in `@repo/brasa-core`, a transitional package. Once those rules move to the backend, it must be retired or call the API. Do not add business calculations to the frontends.
 - **`/incidencias` downloads the API's latest analysis:** it is kept in memory, so if the API restarts the file must be uploaded again, and if two people analyze at the same time, the most recent one is downloaded.
 - **`/proveedores` writes to the API's local database:** registrations and rate or status changes are saved in `services/brasaland-api/storage/brasaland-db.json`. To go back to the initial data, delete that file and restart the API. The interface does not offer deleting suppliers: the usual flow is to suspend them.

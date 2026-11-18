@@ -12,11 +12,17 @@ dependencies = [
     "tinydb>=4.8",
     # EmailStr para el contacto de los proveedores.
     "pydantic[email]>=2.7",
+    # Firma y verificación de los tokens JWT de acceso.
+    "python-jose[cryptography]>=3.5.0",
+    # Hash de contraseñas con bcrypt. Fork mantenido de passlib: se importa como `passlib`.
+    "libpass[bcrypt]>=1.9.4",
 ]
 
 [project.scripts]
 # `uv run seed` carga los proveedores iniciales del briefing en TinyDB.
 seed = "app.domains.suppliers.seed:main"
+# `uv run create-admin` crea el primer administrador (POST /users siempre crea rol `user`).
+create-admin = "app.domains.users.create_admin:run"
 
 [project.optional-dependencies]
 dev = [
