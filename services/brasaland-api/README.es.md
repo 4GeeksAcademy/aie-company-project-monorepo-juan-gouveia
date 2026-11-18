@@ -2,7 +2,7 @@
 
 API central de Brasaland, hecha con FastAPI y organizada por dominios según [`docs/ARCHITECTURE_PROPOSAL.md`](../../docs/ARCHITECTURE_PROPOSAL.md). Implementa estos dominios:
 
-- **`incidents`:** el análisis del CSV de incidentes operativos que usan Operaciones y el backoffice.
+- **`incidents`:** el análisis del CSV de incidentes operativos que usan Operaciones y el backoffice, y el gestor de incidencias centralizado (registro, seguimiento y métricas).
 - **`suppliers`:** el directorio de proveedores de Compras, guardado en TinyDB.
 - **`auth`, `users` y `profiles`:** inicio de sesión con JWT, usuarios (solo credenciales) y perfiles (nombre y contacto), guardados en TinyDB (ticket AUTH-01).
 
@@ -12,10 +12,11 @@ API central de Brasaland, hecha con FastAPI y organizada por dominios según [`d
 
 - **Implementado:** los dominios `incidents` y `suppliers`, la autenticación (`/auth`, `/users`, `/profiles`) y `GET /health`.
 - **Contraseñas (AUTH-03, rama `feature/password-reset`):** restablecimiento por correo (Resend) y cambio con la sesión iniciada. Ver [Restablecimiento y cambio de contraseña](#restablecimiento-y-cambio-de-contraseña).
-- **Rutas protegidas (AUTH-01):** todas las rutas exigen un token válido salvo `POST /auth/login`, `POST /users` (registro), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (las tres de AUTH-03) y `GET /health`. Eso incluye las 2 de `incidents` y las 6 de `suppliers`, que se protegen al registrar sus routers en `main.py`. Una prueba recorre el esquema OpenAPI y falla si una ruta nueva queda sin proteger por olvido.
+- **Gestor de incidencias (rama `feature/incident-manager`):** alta, listado con filtros, detalle, cambio de estado y métricas. Ver [Gestor de incidencias centralizado](#gestor-de-incidencias-centralizado).
+- **Rutas protegidas (AUTH-01):** todas las rutas exigen un token válido salvo `POST /auth/login`, `POST /users` (registro), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (las tres de AUTH-03) y `GET /health`. Eso incluye las 7 de `incidents` (2 del analizador y 5 del gestor) y las 6 de `suppliers`, que se protegen al registrar sus routers en `main.py`. Una prueba recorre el esquema OpenAPI y falla si una ruta nueva queda sin proteger por olvido.
 - **Almacenamiento:**
   - El último análisis de incidentes se guarda en memoria y se pierde al reiniciar la API.
-  - Los proveedores se guardan en un archivo TinyDB, `storage/brasaland-db.json`, que se conserva entre reinicios. TinyDB es provisional para ellos hasta que exista Postgres con ORM.
+  - Los proveedores y las incidencias del gestor se guardan en un archivo TinyDB, `storage/brasaland-db.json`, que se conserva entre reinicios. Cada uno tiene su tabla, y comparten un bloqueo por archivo. TinyDB es provisional hasta que exista Postgres con ORM.
   - Los usuarios, los perfiles y los enlaces de restablecimiento de contraseña (`password_resets`) se guardan en otro archivo TinyDB, `storage/auth-db.json`. Por directiva del briefing, usuarios y perfiles se quedarán en TinyDB también cuando llegue PostgreSQL.
   - Las inserciones en ese archivo calculan el ID del documento leyendo el archivo, así que no chocan con escrituras de otro proceso (por ejemplo, `uv run create-admin` con la API arrancada).
   - En todos los dominios, solo `repository.py` y `database.py` conocen el almacenamiento.
@@ -74,23 +75,25 @@ La API **no arranca** si falta `SECRET_KEY` o `ACCESS_TOKEN_EXPIRE_MINUTES`, o s
 uv run pytest -v
 ```
 
-Las 361 pruebas cubren:
+Las 539 pruebas cubren:
 
-- **`core` (35):** la configuración desde el entorno (variables ausentes o inválidas, la API no arranca sin clave), el hash de contraseñas y los tokens (caducados, firmados con otra clave, alterados, sin firma o sin claims), y las cabeceras de los errores.
-- **`incidents` (24):** la lectura del archivo, los valores del briefing, el JSON del análisis, el CSV exportado y cada error de entrada. Las reglas también las prueban las 32 pruebas del script de consola (`scripts/incident-report/`), que usa el mismo servicio.
+- **`core` (62):** la configuración desde el entorno (variables ausentes o inválidas, la API no arranca sin clave), el hash de contraseñas y los tokens (caducados, firmados con otra clave, alterados, sin firma o sin claims; de acceso y de restablecimiento), el envío de correo y las cabeceras de los errores.
+- **Gestor de incidencias (71):** los valores exactos del briefing y el ciclo de vida; cada campo obligatorio y cada valor no permitido con 400 y su campo; los filtros; las transiciones válidas y las rechazadas; `/summary` con datos y con la base vacía; el 404; el 500 genérico sin detalles internos; la carga del seed sin duplicados; y que proveedores e incidencias comparten archivo y bloqueo.
+- **`incidents`, analizador (24):** la lectura del archivo, los valores del briefing, el JSON del análisis, el CSV exportado y cada error de entrada. Las reglas también las prueban las 32 pruebas del script de consola (`scripts/incident-report/`), que usa el mismo servicio.
 - **`suppliers` (108):**
   - el modelo, con los campos y valores exactos del briefing, y cada rechazo con 422;
   - el seeder: que no duplica y que confirma el recuento en consola;
   - el repositorio, incluidas la persistencia y la escritura desde dos procesos;
   - cada endpoint con sus códigos HTTP.
-- **`users` (78), `profiles` (30) y `auth` (27):**
+- **`users` (79), `profiles` (30) y `auth` (71):**
   - los roles del briefing, el email normalizado y los límites de la contraseña;
   - que el texto plano nunca llega al archivo y que `name`, `phone` y `address` solo están en el perfil;
   - el perfil creado con el usuario y borrado con él;
   - `uv run create-admin`;
   - el login en JSON y en formulario, `get_current_user` (401 sin token, mal formado, caducado o de un usuario borrado; 403 si está desactivado);
-  - cada endpoint, incluidos los 403 cuando un usuario intenta leer, cambiar o borrar la cuenta o el perfil de otro (un admin puede leer cualquier perfil, pero no modificarlo).
-- **Rutas protegidas (59):** las 8 de `incidents` y `suppliers` responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave, y funcionan como antes con un token válido. `/health` sigue pública, y ninguna ruta queda abierta salvo las públicas declaradas. Las pruebas existentes de `incidents` y `suppliers` envían el token de un usuario de prueba.
+  - cada endpoint, incluidos los 403 cuando un usuario intenta leer, cambiar o borrar la cuenta o el perfil de otro (un admin puede leer cualquier perfil, pero no modificarlo);
+  - el restablecimiento y el cambio de contraseña (AUTH-03).
+- **Rutas protegidas (94):** las 13 de `incidents` (analizador y gestor) y `suppliers` responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave, y funcionan como antes con un token válido. `/health` sigue pública, y ninguna ruta queda abierta salvo las públicas declaradas. Las pruebas existentes de `incidents` y `suppliers` envían el token de un usuario de prueba.
 
 Cada prueba usa bases TinyDB temporales y su propia configuración, así que no toca `storage/` ni depende del `.env`.
 
@@ -103,8 +106,8 @@ app/
 │   ├── config.py           # Variables de entorno (JWT, correo y restablecimiento) y API_PREFIX
 │   ├── security.py         # Hash bcrypt y JWT: tokens de acceso y de restablecimiento (purpose, jti)
 │   ├── email.py            # EmailMessage y emisores: Resend, o desactivado sin RESEND_API_KEY
-│   ├── storage.py          # insert_with_file_id: doc_id de TinyDB calculado desde el archivo
-│   └── errors.py           # Formato único de errores
+│   ├── storage.py          # brasaland-db.json compartido: ruta, apertura, bloqueo por archivo e insert_with_file_id
+│   └── errors.py           # Formato único de errores, 400 de validación del gestor y 500 genérico
 └── domains/
     ├── auth/
     │   ├── router.py       # Login, /auth/me y forgot/reset/change-password
@@ -128,15 +131,18 @@ app/
     │   ├── repository.py   # Consultas y escrituras de perfiles
     │   └── router.py       # GET y PUT /profiles/me y /profiles/{user_id}
     ├── incidents/
-    │   ├── router.py       # Endpoints: solo traducen HTTP
-    │   ├── service.py      # Reglas de validación y análisis (solo librería estándar)
-    │   ├── exceptions.py   # Errores del archivo de incidentes
-    │   ├── schemas.py      # Formato de la respuesta
+    │   ├── router.py       # Analizador del CSV: endpoints, solo traducen HTTP
+    │   ├── service.py      # Reexporta las reglas del CSV de packages/shared (brasaland_shared)
+    │   ├── exceptions.py   # Errores del archivo (de packages/shared) y transición no permitida
+    │   ├── schemas.py      # Formato de la respuesta del análisis
     │   ├── repository.py   # Último análisis, en memoria
-    │   └── dependencies.py # Inyección del repositorio
+    │   ├── models.py       # Gestor: Incident, enumeraciones del briefing y ciclo de vida
+    │   ├── incident_repository.py # Gestor: tablas incidents e incident_seed_log (TinyDB)
+    │   ├── manager_router.py # Gestor: endpoints de /incidents
+    │   └── dependencies.py # Inyección de los repositorios
     └── suppliers/
         ├── models.py       # Modelos Pydantic: Supplier, SupplierCreate, RateUpdate, StatusUpdate
-        ├── database.py     # Inicialización de TinyDB y ruta del archivo
+        ├── database.py     # Tabla de proveedores; la ruta y la apertura vienen de core/storage.py
         ├── repository.py   # Consultas y escrituras; lo único que conoce TinyDB
         ├── router.py       # Endpoints de /suppliers
         ├── seed.py         # Proveedores iniciales del briefing (`uv run seed`)
@@ -146,7 +152,7 @@ storage/                    # brasaland-db.json y auth-db.json (TinyDB); ignorad
 tests/                      # Replica la estructura de app/
 ```
 
-`incidents/service.py` es la **fuente de verdad** de las reglas de incidentes. Solo usa la librería estándar porque el script `scripts/incident-report/analyze.py` lo importa sin instalar nada.
+Las reglas del CSV de incidentes están en el paquete compartido [`packages/shared`](../../packages/shared/README.es.md) (`brasaland_shared.incidents`), que también usan `scripts/incident-report/analyze.py` y `scripts/seed_incidents.py`. La API lo instala como dependencia local (`[tool.uv.sources]` en `pyproject.toml`), así que `uv sync` basta; `incidents/service.py` solo reexporta lo que usa el analizador.
 
 ## Dominio `incidents`
 
@@ -166,6 +172,42 @@ La respuesta (200) incluye:
 ### `GET /api/v1/incidents/results/export`
 
 Descarga el último análisis como `results.csv`, con `Content-Disposition: attachment`. Tiene una fila por métrica, con las columnas `metric`, `value` y `percentage`, igual que la exportación del script.
+
+## Gestor de incidencias centralizado
+
+Registro y seguimiento de incidencias desde el backoffice (rama `feature/incident-manager`). Comparte el prefijo `/incidents` con el analizador del CSV, pero son piezas distintas: el analizador no guarda incidencias.
+
+### Modelo
+
+`Incident` usa exactamente los nombres y valores del briefing:
+
+| Campo | Valores |
+|---|---|
+| `id` | Entero generado por TinyDB |
+| `title` | Obligatorio, de 1 a 120 caracteres |
+| `description` | Obligatorio, de 1 a 2.000 caracteres |
+| `category` | `equipment_failure`, `supply_issue`, `customer_complaint`, `staff_issue`, `facility_issue`, `pos_system`, `delivery_issue`, `other` |
+| `status` | `open`, `in_progress`, `resolved`, `discarded` |
+| `origin` | `customer`, `branch`, `internal` |
+| `branch` | Obligatorio en todos los orígenes: `central` y las 14 sedes del briefing (`medellin_centro` … `fort_lauderdale`) |
+| `created_at`, `updated_at` | Fecha y hora en UTC, generadas por el sistema |
+
+- Toda incidencia nueva empieza en `open`: `POST` acepta `status` solo con ese valor.
+- Ciclo de vida: `open → in_progress | discarded`; `in_progress → resolved | discarded`. `resolved` y `discarded` son finales.
+- Se guarda en la tabla `incidents` de `storage/brasaland-db.json`, el mismo archivo que los proveedores y con su mismo bloqueo (`core/storage.lock_for`), porque TinyDB reescribe el archivo entero en cada escritura.
+
+### Endpoints
+
+| Método y ruta | Respuesta | Errores |
+|---|---|---|
+| `POST /api/v1/incidents` | 201 con la incidencia | 400 `invalid_request` (con `details`) |
+| `GET /api/v1/incidents` | 200 con la lista, de la más reciente a la más antigua. Filtros opcionales `status`, `origin`, `branch` y `category`, combinables | 400 si un filtro no es válido |
+| `GET /api/v1/incidents/summary` | 200 con `total`, `by_status`, `by_category`, `by_origin` y `by_branch`; cada desglose incluye todos los valores, también en 0 | — |
+| `GET /api/v1/incidents/{id}` | 200 con la incidencia | 404 `incident_not_found` |
+| `PATCH /api/v1/incidents/{id}/status` | 200 con la incidencia; cambia solo `status` y `updated_at` | 400 `invalid_transition` (el mensaje dice a qué estados se puede pasar) o `invalid_request`; 404 |
+
+- **Errores de validación con 400:** en estas rutas, como pide su consigna, un campo que falta o un valor no permitido responde 400, con el mismo cuerpo que el 422 del resto de la API. Las demás rutas siguen respondiendo 422.
+- **Base vacía:** la lista es `[]` y las métricas, 0.
 
 ## Dominio `suppliers`
 
@@ -292,6 +334,8 @@ Todos los errores responden con el formato `{"error": {"code": "...", "message":
 | Solo tiene el encabezado | 422 | `no_records` |
 | Export sin análisis previo | 404 | `no_analysis` |
 | Proveedor inexistente | 404 | `supplier_not_found` |
+| Incidencia inexistente | 404 | `incident_not_found` |
+| Cambio de estado que el ciclo de vida no permite | 400 | `invalid_transition` |
 | Ya existe un proveedor con ese nombre | 409 | `duplicate_supplier` |
 | Falta el token de acceso | 401 | `not_authenticated` |
 | Token mal formado, con otra firma o de un usuario eliminado | 401 | `invalid_token` |
@@ -306,7 +350,8 @@ Todos los errores responden con el formato `{"error": {"code": "...", "message":
 | La cuenta no tiene perfil | 404 | `profile_not_found` |
 | Ya existe un usuario con ese email | 409 | `duplicate_email` |
 | El login no llega en JSON ni como formulario | 415 | `unsupported_media_type` |
-| Petición mal formada o datos que no cumplen el modelo | 422 | `invalid_request` (con `details`) |
+| Petición mal formada o datos que no cumplen el modelo | 422 (400 en el gestor de incidencias) | `invalid_request` (con `details`) |
+| Error inesperado del servidor | 500 | `internal_error`, con un mensaje genérico; el detalle solo va al log |
 
 Los 401 incluyen la cabecera `WWW-Authenticate: Bearer`.
 
@@ -330,7 +375,8 @@ Ejemplo de 422:
 ## Quién la usa
 
 - **`uis/backoffice`:** a través de su intermediario `app/api/[...path]/route.ts` (patrón BFF), con la variable de servidor `API_BASE_URL=http://localhost:8000/api/v1`. El navegador nunca llama a la API directamente, así que no hace falta CORS. Lo usan las herramientas `/incidencias` y `/proveedores`, y las vistas de sesión (`/login`, `/register`). El navegador guarda el token en `localStorage` y lo envía en `Authorization: Bearer`; el intermediario lo reenvía tal cual (ticket AUTH-02).
-- **`scripts/incident-report/analyze.py`:** importa `incidents/service.py` directamente; no usa HTTP.
+- **`scripts/incident-report/analyze.py`:** usa las mismas reglas que la API, desde `packages/shared`; no usa HTTP.
+- **`scripts/seed_incidents.py`:** carga el histórico del CSV en el gestor de incidencias usando el repositorio de la API (`IncidentRepository`) sobre el mismo archivo TinyDB; no usa HTTP.
 
 ## Diferencias con la consigna del curso
 

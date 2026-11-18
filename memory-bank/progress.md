@@ -6,9 +6,9 @@ La refactorización de las interfaces está completada: `uis/website` y `uis/bac
 
 El procesador de reportes de incidentes (`scripts/incident-report/`) está completado: valida y resume el CSV de incidentes de Operaciones, coincide exactamente con los valores esperados del briefing y exporta las métricas a `data/process/results.csv`.
 
-**Fase 2 completada (integración en la plataforma):** `services/brasaland-api/` (FastAPI) implementa el dominio `incidents` con `POST /api/v1/incidents/analyze` y `GET /api/v1/incidents/results/export`, con errores HTTP apropiados y 24 pruebas pytest. La lógica se extrajo del script a `app/domains/incidents/service.py`, que es su fuente de verdad, y el script la importa. En el backoffice, la herramienta `/incidencias` sube el CSV (arrastrando o con el selector), muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv`. Llama a la API a través del intermediario BFF (`app/api/[...path]/route.ts`), configurado con `API_BASE_URL`. La revisión manual en el navegador está hecha y aprobada (2026-11-03).
+**Fase 2 completada (integración en la plataforma):** `services/brasaland-api/` (FastAPI) implementa el dominio `incidents` con `POST /api/v1/incidents/analyze` y `GET /api/v1/incidents/results/export`, con errores HTTP apropiados y 24 pruebas pytest. La lógica se extrajo del script a `app/domains/incidents/service.py`, que es su fuente de verdad, y el script la importa. En el backoffice, la herramienta `/incidencias` sube el CSV (arrastrando o con el selector), muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv`. Llama a la API a través del intermediario BFF (`app/api/[...path]/route.ts`), configurado con `API_BASE_URL`. La revisión manual en el navegador está hecha y aprobada (2026-11-03). Fusionado en `main` con el PR #6 (`features/csv-reader`, 2026-11-08).
 
-**Directorio de proveedores (milestone 09) completado en la rama `directorio-prov`**, que parte de `features/csv-reader` (PR abierto):
+**Directorio de proveedores (milestone 09) completado y fusionado en `main`** con el PR #7 (`directorio-prov`, 2026-11-08), después del #6:
 
 - **Backend:** el dominio `suppliers` de `services/brasaland-api/` (FastAPI + TinyDB + Pydantic) tiene `POST/GET /api/v1/suppliers`, `GET/DELETE /suppliers/{id}` y `PATCH /suppliers/{id}/rate` y `/status`.
 - **Datos:** el seeder (`uv run seed`) es idempotente, y la API siembra al arrancar si la base está vacía. Los datos persisten en `storage/brasaland-db.json`.
@@ -16,7 +16,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Verificación:** 132 pruebas pytest pasan. La revisión en el navegador está hecha (2026-11-03).
 - **Herramientas:** el servicio adopta uv (`uv.lock` versionado).
 
-**Autenticación (ticket AUTH-01) completada en la rama `feature/auth-api`**, creada desde `directorio-prov` porque sus PR siguen abiertos. Las 6 fases están hechas y la verificación en `/docs` está revisada (2026-11-04):
+**Autenticación (ticket AUTH-01) completada en la rama `feature/auth-api`**, creada desde `directorio-prov` cuando sus PR seguían abiertos. Las 6 fases están hechas y la verificación en `/docs` está revisada (2026-11-04):
 
 - **Configuración:** `SECRET_KEY` y `ACCESS_TOKEN_EXPIRE_MINUTES` se leen del entorno (`.env`, ignorado; plantilla `.env.example`) y la API no arranca sin ellas. Se ejecuta con `uv run --env-file .env uvicorn ...`.
 - **Dominios nuevos:** `users` (solo credenciales, roles `admin`/`manager`/`user`, contraseñas con bcrypt de libpass), `profiles` (nombre y contacto, uno a uno) y `auth` (login con JWT de python-jose, `GET /auth/me` y la dependencia `get_current_user`). Todo bajo `/api/v1`, en TinyDB (`storage/auth-db.json`).
@@ -24,7 +24,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Rutas protegidas:** todas salvo `POST /auth/login`, `POST /users` y `GET /health`, incluidas las 8 de `incidents` y `suppliers`. `/incidencias` y `/proveedores` del backoffice reciben 401 hasta que el BFF envíe el token, como prevé el briefing.
 - **Verificación:** 361 pruebas pytest pasan; flujo y rutas protegidas probados en vivo con bases temporales.
 - **Documentación:** los README del servicio, de `services/` y del backoffice, `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas", con la tabla de verificación) y `docs/ARCHITECTURE_PROPOSAL.md` (2.3, 2.5, 2.7, 3.2, 3.3 y 7).
-- **Pendiente:** abrir el PR (contra `directorio-prov` mientras su PR siga abierto) y entregar.
+- **PR:** #8, abierto. Sigue apuntando a `directorio-prov`, ya fusionada; hay que cambiar su destino a `main` antes de borrar esa rama.
 
 **Autenticación en el frontend (ticket AUTH-02) completada en la rama `feature/auth-frontend`**, creada desde `feature/auth-api` porque su PR sigue abierto. Las 6 fases (0 a 5) están hechas y revisadas por el desarrollador (2026-11-06):
 
@@ -35,7 +35,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Verificación:** `tsc`, `lint` y `build` pasan; 361 pruebas de la API pasan; el website no cambia. Los flujos del BFF se probaron en vivo con bases temporales, y los del navegador los revisó el desarrollador.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend", con la tabla de verificación), `docs/ARCHITECTURE_PROPOSAL.md` (5.2: token en `localStorage` reenviado por el BFF) y los README.
 - **Commit:** `fb35b8d`, hecho por el desarrollador.
-- **Pendiente:** PR (contra `feature/auth-api` mientras no se fusione) y entrega con las justificaciones de `docs/BRIEFING_DIVERGENCES.md`.
+- **PR:** #9, abierto, contra `feature/auth-api` mientras el #8 no se fusione.
 
 **Recuperación y cambio de contraseña (ticket AUTH-03) completada en la rama `feature/password-reset`**, creada desde `feature/auth-frontend` (`fb35b8d`). Las 6 fases (0 a 5) están hechas y revisadas por el desarrollador (2026-11-06 y 2026-11-08):
 
@@ -48,8 +48,34 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Frontend:** `/forgot-password`, `/reset-password` (comprueba el enlace al abrirse, sin `Referer`) y el enlace "¿Olvidaste tu contraseña?" en `/login`. `/account/change-password` (protegida, enlazada desde "Mi perfil") guarda el token nuevo que devuelve la API y muestra "Contraseña actualizada."; una contraseña actual incorrecta se marca en su campo.
 - **Verificación:** 433 pruebas de la API; `tsc`, `lint` y `build` del backoffice; flujo completo con correo real revisado por el desarrollador. El cambio de contraseña se probó en vivo por el BFF (400, 422, 401, token nuevo y `session_revoked` del anterior) y lo revisó el desarrollador en el navegador. Sin claves en el código ni en el historial de Git.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Recuperación y cambio de contraseña": rutas `/api/v1`, Resend, endpoint `validate`, `password_changed_at`, 422 ante un email mal formado, opcionales, correcciones de `doc_id` (AUTH-01) y `mergeFieldErrors` (AUTH-02), y la tabla de los 12 criterios. README de la API y del backoffice.
-- **Pendiente:**
-  - Commit de las fases 4 y 5, PR (contra `feature/auth-frontend` mientras no se fusione) y entrega; los hace el desarrollador.
+- **Commits:** `e87121c` (fases 0-3) y `2906225` (fases 4 y 5), hechos por el desarrollador.
+- **PR:** #10, abierto, contra `feature/auth-frontend` mientras el #9 no se fusione.
+
+**Gestor de incidencias centralizado completado en la rama `feature/incident-manager`**, creada desde `feature/password-reset` (`2906225`) porque los PR de AUTH siguen abiertos; su PR irá contra esa rama. Decisiones G-1 a G-13 aprobadas y las 5 fases hechas (2026-11-08); el formulario y el panel, revisados por el desarrollador en el navegador:
+
+- **API:** `POST`, `GET` (filtros `status`, `origin`, `branch` y `category`), `GET /summary`, `GET /{id}` y `PATCH /{id}/status` bajo `/api/v1/incidents`, junto al analizador del CSV, que no cambia. Valores exactos del briefing, ciclo de vida `open → in_progress | discarded → …`, errores de validación con 400 en estas rutas (el resto de la API sigue con 422) y un 500 genérico para cualquier excepción no controlada en toda la API.
+- **Datos:** tabla `incidents` en `storage/brasaland-db.json`, con un bloqueo por archivo compartido con proveedores, y `incident_seed_log` para que el seed no duplique registros.
+- **Lógica compartida:** las reglas del CSV de incidentes pasaron de la API a `packages/shared/` (paquete Python `brasaland-shared`, solo librería estándar), como pide la consigna. La API lo instala como dependencia local con uv; el analizador y el seed lo importan sin instalar nada. Sin duplicación.
+- **Seed:** `scripts/seed_incidents.py` carga el CSV histórico (96 válidos, 4 inválidos reportados en consola), aplica las transformaciones del briefing y es idempotente. Tras el seed, `/api/incidents/summary` da exactamente los totales esperados.
+- **Formulario:** `/gestor-incidencias/nueva` en el backoffice ("Registrar incidencia" en el menú), con campos grandes para tablet, validación de obligatorios en el cliente, la sede resaltada si `origin = branch`, nombres de sede del briefing, indicador de carga y errores de la API junto a su campo. El intermediario corta a los 15 s (504) y los 5xx sin mensaje propio se muestran con un texto comprensible.
+- **Panel:** `/gestor-incidencias` ("Gestor de incidencias" en el menú) con el resumen por estado, categoría, origen y sede, y el listado con filtros por `status`, `origin` y `branch`. Cada bloque carga y falla por su cuenta (con "Reintentar"); el listado distingue vacío y sin resultados; el cambio de estado es optimista, solo ofrece transiciones válidas y vuelve atrás con aviso si falla.
+- **Verificación:** 539 pruebas pytest (106 nuevas), 32 del analizador y 16 del seed; `tsc`, `lint` y `build` del backoffice; alta, 400, 502, 504, filtros y transiciones probados en vivo por el intermediario.
+- **Revisión en el navegador:** fases 3 y 4 probadas por el desarrollador (2026-11-08), incluida la reversión del estado con la API apagada. En tablet, la cabecera se comporta ahora como en móvil (enlaces a herramientas solo desde `xl`).
+- **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Gestor de incidencias centralizado" (rutas `/api/v1`, `incident_seed_log`, 400 solo en el gestor, `status` fijo, menú en móvil y tablet, decisiones y la tabla de los 21 criterios), y la divergencia 3 del analizador marcada como resuelta. `ARCHITECTURE_PROPOSAL.md` (cuarto bloque en 2.7 y `packages/shared` en 6.2) y los README.
+- **Pendiente:** commit, PR (contra `feature/password-reset` mientras el #10 no se fusione) y entrega; los hace el desarrollador.
+
+**Pull requests (2026-11-08).** Forman una cadena: cada PR parte de la rama del anterior.
+
+| PR | Rama → destino | Estado |
+|---|---|---|
+| #6 Analizador de incidentes | `features/csv-reader` → `main` | ✅ Fusionado |
+| #7 Directorio de proveedores | `directorio-prov` → `main` | ✅ Fusionado |
+| #8 AUTH-01 | `feature/auth-api` → `directorio-prov` | ⏳ Abierto; cambiar el destino a `main` |
+| #9 AUTH-02 | `feature/auth-frontend` → `feature/auth-api` | ⏳ Abierto |
+| #10 AUTH-03 | `feature/password-reset` → `feature/auth-frontend` | ⏳ Abierto |
+
+- **Orden de merge:** #8, #9 y #10, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno, el siguiente debe pasar a apuntar a `main`.
+- **Limpieza pendiente:** las ramas `features/csv-reader` y `directorio-prov` siguen existiendo en local y en GitHub. El desarrollador decidió no borrarlas por ahora. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
 
@@ -157,7 +183,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 | Elemento | Estado |
 |---|---|
 | `packages/brasa-core/` — `@repo/brasa-core` (dominio y lógica de negocio) | ⏳ Transitorio; consumido por `uis/backoffice` |
-| `packages/shared/` — `@repo/shared-types` (Id, BaseEntity) | ✅ Setup inicial; sin consumidores |
+| `packages/shared/` — `brasaland-shared` (Python: reglas del CSV de incidentes) y `@repo/shared-types` (Id, BaseEntity) | ✅ El paquete Python lo usan la API, el analizador y el seed (`feature/incident-manager`); los tipos TypeScript, aún sin consumidores |
 | Sin gestor de monorepo raíz (turborepo/nx/lerna) | ❌ No configurado |
 
 ### 8. Datos
@@ -183,15 +209,17 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Entregar AUTH-03 (rama `feature/password-reset`)** — Implementado, verificado y documentado. Las fases 0-3 están en el commit `e87121c`; faltan el commit de las fases 4 y 5 y el PR, que apunta a `feature/auth-frontend` mientras esa rama no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Recuperación y cambio de contraseña", con la verificación de los 12 criterios).
+0. **Entregar el gestor de incidencias (rama `feature/incident-manager`)** — Implementado, verificado y documentado. Falta el commit y el PR, que apunta a `feature/password-reset` mientras el #10 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Gestor de incidencias centralizado").
 
-0. **Entregar AUTH-02 (rama `feature/auth-frontend`)** — Implementado, verificado, documentado y con commit (`fb35b8d`). Falta el PR, que apunta a `feature/auth-api` mientras esa rama no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend").
+0. **Entregar AUTH-03 (rama `feature/password-reset`)** — Implementado, verificado y documentado. Commits `e87121c` y `2906225`; PR #10 abierto, contra `feature/auth-frontend` mientras el #9 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Recuperación y cambio de contraseña", con la verificación de los 12 criterios).
 
-0. **Entregar AUTH-01 (rama `feature/auth-api`)** — Implementado, verificado y documentado. Su PR apunta a `directorio-prov` mientras esa rama no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas").
+0. **Entregar AUTH-02 (rama `feature/auth-frontend`)** — Implementado, verificado, documentado y con commit (`fb35b8d`). PR #9 abierto, contra `feature/auth-api` mientras el #8 no se fusione. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación en el frontend").
 
-0. **Entregar el Directorio de proveedores (milestone 09)** — Implementado y revisado en la rama `directorio-prov`. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Directorio de proveedores"): `services/brasaland-api/` en lugar de `services/api/`, `/api/v1/suppliers`, `/proveedores` en el backoffice y las decisiones de funcionamiento. Cuando se fusione `features/csv-reader`, el PR de esta rama debe apuntar a `main`.
+0. **Entregar AUTH-01 (rama `feature/auth-api`)** — Implementado, verificado y documentado. PR #8 abierto; su destino sigue siendo `directorio-prov`, ya fusionada en `main`, así que hay que cambiarlo a `main`. La entrega debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md` (sección "Autenticación y protección de rutas").
 
-0. **Entregar la Fase 2 del procesador de incidentes** — La implementación está revisada y aprobada. Queda la entrega, que debe incluir las justificaciones de `docs/BRIEFING_DIVERGENCES.md`: rutas y carpetas, lógica compartida dentro de la API y no en `packages/`, diferencias con la salida del briefing y decisiones de funcionamiento.
+0. ✅ **Directorio de proveedores (milestone 09)** — PR #7 aprobado y fusionado en `main` (2026-11-08). Sus justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Directorio de proveedores").
+
+0. ✅ **Fase 2 del procesador de incidentes** — PR #6 aprobado y fusionado en `main` (2026-11-08). Sus justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Procesador de reportes de incidentes").
 
 1. ✅ **AGENTS.md raíz** — Completado (junto con `.agents/rules/` y `.agents/skills/`). Define:
    - Convenciones de código y estilo.

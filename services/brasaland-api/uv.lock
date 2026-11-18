@@ -108,6 +108,7 @@ name = "brasaland-api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "brasaland-shared" },
     { name = "fastapi" },
     { name = "libpass", extra = ["bcrypt"] },
     { name = "pydantic", extra = ["email"] },
@@ -126,6 +127,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "brasaland-shared", editable = "../../packages/shared" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "libpass", extras = ["bcrypt"], specifier = ">=1.9.4" },
@@ -138,6 +140,11 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "brasaland-shared"
+version = "0.1.0"
+source = { editable = "../../packages/shared" }
 
 [[package]]
 name = "certifi"

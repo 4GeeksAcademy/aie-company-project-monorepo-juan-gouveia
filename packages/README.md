@@ -12,6 +12,6 @@ Each subfolder under `packages/` should represent **one versionable package** (f
 | Package | Folder | Purpose | Consumed by |
 |---|---|---|---|
 | [`@repo/brasa-core`](./brasa-core/README.md) | `brasa-core/` | Transitional: Brasaland domain models and business utilities, to be replaced by the backend | `uis/backoffice` |
-| `@repo/shared-types` | `shared/` | Base types (`Id`, `BaseEntity`) | Not consumed yet |
+| [`brasaland-shared`](./shared/README.md) (Python) and `@repo/shared-types` (TypeScript) | `shared/` | Incidents CSV rules shared by scripts and the API; base types (`Id`, `BaseEntity`) | `scripts/incident-report`, `scripts/seed_incidents.py` and `services/brasaland-api`; the types, not consumed yet |
 
 > _Spanish version: [README.es.md](./README.es.md)._

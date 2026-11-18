@@ -2,25 +2,18 @@
 
 TinyDB es el almacenamiento provisional que pidió el CTO: un archivo JSON, sin servidor.
 Cuando exista Postgres, se sustituyen este módulo y repository.py; los endpoints no cambian.
+
+El archivo (`storage/brasaland-db.json`) lo comparte también el gestor de incidencias; su ruta y
+su apertura están en `app/core/storage.py`. Aquí se conservan los nombres de siempre.
 """
 
-import os
-from pathlib import Path
+from app.core.storage import (
+    BRASALAND_DB_PATH_ENV as DB_PATH_ENV,
+    DEFAULT_BRASALAND_DB_PATH as DEFAULT_DB_PATH,
+    get_brasaland_db_path as get_db_path,
+    open_db,
+)
 
-from tinydb import TinyDB
-
-SERVICE_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_DB_PATH = SERVICE_ROOT / "storage" / "brasaland-db.json"
-DB_PATH_ENV = "BRASALAND_DB_PATH"
 SUPPLIERS_TABLE = "suppliers"
 
-
-def get_db_path() -> Path:
-    """Ruta del archivo de la base: BRASALAND_DB_PATH si está definida; si no, storage/brasaland-db.json."""
-    configured = os.environ.get(DB_PATH_ENV)
-    return Path(configured).expanduser().resolve() if configured else DEFAULT_DB_PATH
-
-
-def open_db(path: Path) -> TinyDB:
-    """Abre (o crea) el archivo JSON en UTF-8, legible y con los acentos tal cual."""
-    return TinyDB(path, create_dirs=True, encoding="utf-8", indent=2, ensure_ascii=False)
+__all__ = ["DB_PATH_ENV", "DEFAULT_DB_PATH", "SUPPLIERS_TABLE", "get_db_path", "open_db"]

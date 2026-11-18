@@ -2,7 +2,7 @@
 
 Brasaland's central API, built with FastAPI and organized by domain as described in [`docs/ARCHITECTURE_PROPOSAL.md`](../../docs/ARCHITECTURE_PROPOSAL.md). It implements these domains:
 
-- **`incidents`:** the analysis of the operational incidents CSV used by Operations and the backoffice.
+- **`incidents`:** the analysis of the operational incidents CSV used by Operations and the backoffice, and the centralized incident manager (registration, tracking and metrics).
 - **`suppliers`:** Procurement's supplier directory, stored in TinyDB.
 - **`auth`, `users` and `profiles`:** JWT sign-in, users (credentials only) and profiles (name and contact details), stored in TinyDB (ticket AUTH-01).
 
@@ -12,10 +12,11 @@ Brasaland's central API, built with FastAPI and organized by domain as described
 
 - **Implemented:** the `incidents` and `suppliers` domains, authentication (`/auth`, `/users`, `/profiles`) and `GET /health`.
 - **Passwords (AUTH-03, branch `feature/password-reset`):** reset by email (Resend) and change while signed in. See [Password reset and change](#password-reset-and-change).
-- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03) and `GET /health`. That includes the 2 `incidents` routes and the 6 `suppliers` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
+- **Incident manager (branch `feature/incident-manager`):** creation, filtered list, detail, status changes and metrics. See [Centralized incident manager](#centralized-incident-manager).
+- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03) and `GET /health`. That includes the 7 `incidents` routes (2 from the analyzer and 5 from the manager) and the 6 `suppliers` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
 - **Storage:**
   - The latest incident analysis is kept in memory and is lost when the API restarts.
-  - Suppliers are stored in a TinyDB file, `storage/brasaland-db.json`, which survives restarts. TinyDB is temporary for them until Postgres with an ORM exists.
+  - Suppliers and the manager's incidents are stored in a TinyDB file, `storage/brasaland-db.json`, which survives restarts. Each has its own table, and they share one lock per file. TinyDB is temporary until Postgres with an ORM exists.
   - Users, profiles and password reset links (`password_resets`) are stored in another TinyDB file, `storage/auth-db.json`. As the briefing requires, users and profiles will stay in TinyDB even after PostgreSQL arrives.
   - Inserts into that file compute the document ID by reading the file, so they do not clash with writes from another process (for example, `uv run create-admin` while the API is running).
   - In every domain, only `repository.py` and `database.py` know about storage.
@@ -74,23 +75,25 @@ The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is m
 uv run pytest -v
 ```
 
-The 361 tests cover:
+The 539 tests cover:
 
-- **`core` (35):** configuration from the environment (missing or invalid variables, the API not starting without a key), password hashing and tokens (expired, signed with another key, tampered with, unsigned or missing claims), and error headers.
-- **`incidents` (24):** file reading, the briefing values, the analysis JSON, the exported CSV, and every input error. The rules are also covered by the 32 tests of the console script (`scripts/incident-report/`), which uses the same service.
+- **`core` (62):** configuration from the environment (missing or invalid variables, the API not starting without a key), password hashing and tokens (expired, signed with another key, tampered with, unsigned or missing claims; access and reset tokens), email sending, and error headers.
+- **Incident manager (71):** the exact briefing values and the lifecycle; every required field and every value that is not allowed, with 400 and its field; the filters; valid and rejected transitions; `/summary` with data and with an empty database; the 404; the generic 500 without internal details; seed loading without duplicates; and that suppliers and incidents share the file and its lock.
+- **`incidents`, analyzer (24):** file reading, the briefing values, the analysis JSON, the exported CSV, and every input error. The rules are also covered by the 32 tests of the console script (`scripts/incident-report/`), which uses the same service.
 - **`suppliers` (108):**
   - the model, with the exact briefing fields and values, and every 422 rejection;
   - the seeder: that it does not duplicate and that it reports the count on the console;
   - the repository, including persistence and writes from two processes;
   - every endpoint with its HTTP codes.
-- **`users` (78), `profiles` (30) and `auth` (27):**
+- **`users` (79), `profiles` (30) and `auth` (71):**
   - the briefing roles, the normalized email and the password limits;
   - that plain text never reaches the file and that `name`, `phone` and `address` only live in the profile;
   - the profile created with the user and deleted with it;
   - `uv run create-admin`;
   - sign-in with JSON and with a form, `get_current_user` (401 without a token, or with a malformed or expired one, or one for a deleted user; 403 if deactivated);
-  - every endpoint, including the 403 when a user tries to read, change or delete someone else's account or profile (an admin can read any profile, but not change it).
-- **Protected routes (59):** the 8 `incidents` and `suppliers` routes respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token, and work as before with a valid token. `/health` stays public, and no route is open other than the declared public ones. The existing `incidents` and `suppliers` tests send the token of a test user.
+  - every endpoint, including the 403 when a user tries to read, change or delete someone else's account or profile (an admin can read any profile, but not change it);
+  - password reset and change (AUTH-03).
+- **Protected routes (94):** the 13 `incidents` (analyzer and manager) and `suppliers` routes respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token, and work as before with a valid token. `/health` stays public, and no route is open other than the declared public ones. The existing `incidents` and `suppliers` tests send the token of a test user.
 
 Each test uses temporary TinyDB databases and its own configuration, so it never touches `storage/` or depends on `.env`.
 
@@ -103,7 +106,7 @@ app/
 │   ├── config.py           # Environment variables (JWT, email and password reset) and API_PREFIX
 │   ├── security.py         # bcrypt hashing and JWTs: access tokens and reset tokens (purpose, jti)
 │   ├── email.py            # EmailMessage and senders: Resend, or disabled without RESEND_API_KEY
-│   ├── storage.py          # insert_with_file_id: TinyDB doc_id computed from the file
+│   ├── storage.py          # Shared brasaland-db.json: path, opening, per-file lock and insert_with_file_id
 │   └── errors.py           # Single error format
 └── domains/
     ├── auth/
@@ -128,15 +131,18 @@ app/
     │   ├── repository.py   # Profile reads and writes
     │   └── router.py       # GET and PUT /profiles/me and /profiles/{user_id}
     ├── incidents/
-    │   ├── router.py       # Endpoints: HTTP translation only
-    │   ├── service.py      # Validation and analysis rules (standard library only)
-    │   ├── exceptions.py   # Incident file errors
-    │   ├── schemas.py      # Response format
+    │   ├── router.py       # CSV analyzer: endpoints, HTTP translation only
+    │   ├── service.py      # Re-exports the CSV rules from packages/shared (brasaland_shared)
+    │   ├── exceptions.py   # File errors (from packages/shared) and invalid transition
+    │   ├── schemas.py      # Analysis response format
     │   ├── repository.py   # Latest analysis, in memory
+    │   ├── models.py       # Manager: Incident, briefing enumerations and lifecycle
+    │   ├── incident_repository.py # Manager: incidents and incident_seed_log tables (TinyDB)
+    │   ├── manager_router.py # Manager: /incidents endpoints
     │   └── dependencies.py # Repository injection
     └── suppliers/
         ├── models.py       # Pydantic models: Supplier, SupplierCreate, RateUpdate, StatusUpdate
-        ├── database.py     # TinyDB initialization and file path
+        ├── database.py     # Suppliers table; path and opening come from core/storage.py
         ├── repository.py   # Reads and writes; the only piece that knows TinyDB
         ├── router.py       # /suppliers endpoints
         ├── seed.py         # Initial suppliers from the briefing (`uv run seed`)
@@ -146,7 +152,7 @@ storage/                    # brasaland-db.json and auth-db.json (TinyDB); ignor
 tests/                      # Mirrors the app/ structure
 ```
 
-`incidents/service.py` is the **source of truth** for the incident rules. It only uses the standard library because the `scripts/incident-report/analyze.py` script imports it without installing anything.
+The incidents CSV rules live in the shared package [`packages/shared`](../../packages/shared/README.md) (`brasaland_shared.incidents`), which `scripts/incident-report/analyze.py` and `scripts/seed_incidents.py` also use. The API installs it as a local dependency (`[tool.uv.sources]` in `pyproject.toml`), so `uv sync` is enough; `incidents/service.py` only re-exports what the analyzer uses.
 
 ## `incidents` domain
 
@@ -166,6 +172,42 @@ The response (200) includes:
 ### `GET /api/v1/incidents/results/export`
 
 Downloads the latest analysis as `results.csv`, with `Content-Disposition: attachment`. It has one row per metric, with the `metric`, `value` and `percentage` columns, the same as the script's export.
+
+## Centralized incident manager
+
+Incident registration and tracking from the backoffice (branch `feature/incident-manager`). It shares the `/incidents` prefix with the CSV analyzer, but they are separate pieces: the analyzer does not store incidents.
+
+### Model
+
+`Incident` uses exactly the briefing's names and values:
+
+| Field | Values |
+|---|---|
+| `id` | Integer generated by TinyDB |
+| `title` | Required, 1 to 120 characters |
+| `description` | Required, 1 to 2,000 characters |
+| `category` | `equipment_failure`, `supply_issue`, `customer_complaint`, `staff_issue`, `facility_issue`, `pos_system`, `delivery_issue`, `other` |
+| `status` | `open`, `in_progress`, `resolved`, `discarded` |
+| `origin` | `customer`, `branch`, `internal` |
+| `branch` | Required for every origin: `central` and the briefing's 14 locations (`medellin_centro` … `fort_lauderdale`) |
+| `created_at`, `updated_at` | Date and time in UTC, generated by the system |
+
+- Every new incident starts as `open`: `POST` accepts `status` only with that value.
+- Lifecycle: `open → in_progress | discarded`; `in_progress → resolved | discarded`. `resolved` and `discarded` are final.
+- It is stored in the `incidents` table of `storage/brasaland-db.json`, the same file as suppliers and with the same lock (`core/storage.lock_for`), because TinyDB rewrites the whole file on every write.
+
+### Endpoints
+
+| Method and route | Response | Errors |
+|---|---|---|
+| `POST /api/v1/incidents` | 201 with the incident | 400 `invalid_request` (with `details`) |
+| `GET /api/v1/incidents` | 200 with the list, newest first. Optional `status`, `origin`, `branch` and `category` filters, which can be combined | 400 if a filter is not valid |
+| `GET /api/v1/incidents/summary` | 200 with `total`, `by_status`, `by_category`, `by_origin` and `by_branch`; each breakdown includes every value, also at 0 | — |
+| `GET /api/v1/incidents/{id}` | 200 with the incident | 404 `incident_not_found` |
+| `PATCH /api/v1/incidents/{id}/status` | 200 with the incident; only changes `status` and `updated_at` | 400 `invalid_transition` (the message says which states are allowed) or `invalid_request`; 404 |
+
+- **Validation errors with 400:** on these routes, as their assignment requires, a missing field or a value that is not allowed returns 400, with the same body as the 422 in the rest of the API. The other routes still return 422.
+- **Empty database:** the list is `[]` and the metrics are 0.
 
 ## `suppliers` domain
 
@@ -306,7 +348,10 @@ Every error responds with the format `{"error": {"code": "...", "message": "..."
 | The account has no profile | 404 | `profile_not_found` |
 | A user with that email already exists | 409 | `duplicate_email` |
 | Sign-in body is neither JSON nor a form | 415 | `unsupported_media_type` |
-| Malformed request or data that does not match the model | 422 | `invalid_request` (with `details`) |
+| Incident does not exist | 404 | `incident_not_found` |
+| Status change the lifecycle does not allow | 400 | `invalid_transition` |
+| Malformed request or data that does not match the model | 422 (400 in the incident manager) | `invalid_request` (with `details`) |
+| Unexpected server error | 500 | `internal_error`, with a generic message; the details only go to the log |
 
 401 responses include the `WWW-Authenticate: Bearer` header.
 
@@ -330,7 +375,8 @@ The incident file type is validated by extension, not by `Content-Type`, because
 ## Who uses it
 
 - **`uis/backoffice`:** through its intermediary `app/api/[...path]/route.ts` (BFF pattern), with the server variable `API_BASE_URL=http://localhost:8000/api/v1`. The browser never calls the API directly, so no CORS is needed. The `/incidencias` and `/proveedores` tools use it, and so do the session views (`/login`, `/register`). The browser stores the token in `localStorage` and sends it in `Authorization: Bearer`; the intermediary forwards it as is (ticket AUTH-02).
-- **`scripts/incident-report/analyze.py`:** imports `incidents/service.py` directly; it does not use HTTP.
+- **`scripts/incident-report/analyze.py`:** uses the same rules as the API, from `packages/shared`; it does not use HTTP.
+- **`scripts/seed_incidents.py`:** loads the historical CSV into the incident manager through the API repository (`IncidentRepository`) on the same TinyDB file; it does not use HTTP.
 
 ## Differences from the course assignment
 

@@ -31,9 +31,11 @@ export default function Header({ minimal = false, account }: HeaderProps) {
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-red-700 md:text-base lg:text-lg">
           Backoffice
         </p>
-        {/* En móvil se navega desde la portada: FilterBar depende de la altura fija de esta cabecera. */}
+        {/* En móvil y tablet (por debajo de xl) se navega desde la portada: con 6 herramientas, los
+            enlaces no caben junto al menú de cuenta, y FilterBar depende de la altura fija de esta
+            cabecera, así que no pueden pasar a una segunda línea. */}
         {!minimal && (
-          <nav aria-label="Herramientas" className="hidden md:block">
+          <nav aria-label="Herramientas" className="hidden xl:block">
             <ul className="flex justify-end gap-1">
               {tools.map((tool) => (
                 <li key={tool.href}>

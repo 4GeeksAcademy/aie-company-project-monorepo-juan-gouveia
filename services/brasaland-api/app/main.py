@@ -10,6 +10,7 @@ from app.core.config import API_PREFIX, get_settings
 from app.core.errors import register_error_handlers
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.router import router as auth_router
+from app.domains.incidents.manager_router import router as incident_manager_router
 from app.domains.incidents.router import router as incidents_router
 from app.domains.profiles.router import router as profiles_router
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
@@ -42,6 +43,8 @@ register_error_handlers(app)
 # Rutas con datos sensibles: todas exigen un token válido (AUTH-01). Sin token, 401.
 PROTECTED = [Depends(get_current_user)]
 app.include_router(incidents_router, prefix=API_PREFIX, dependencies=PROTECTED)
+# Gestor de incidencias centralizado: mismo prefijo /incidents que el analizador del CSV.
+app.include_router(incident_manager_router, prefix=API_PREFIX, dependencies=PROTECTED)
 app.include_router(suppliers_router, prefix=API_PREFIX, dependencies=PROTECTED)
 # Autenticación (AUTH-01): login, usuarios (solo credenciales) y perfiles. AUTH-03 añade a /auth el
 # restablecimiento (público) y el cambio (protegido) de contraseña.

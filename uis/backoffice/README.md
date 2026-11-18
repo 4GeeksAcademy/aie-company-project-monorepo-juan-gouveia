@@ -63,6 +63,8 @@ How it works:
 | `/` | Home page with a card for each tool | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidates, status, stage, and notes | REST API |
 | `/incidencias` | Incident analysis: uploads the Operations CSV, shows the summary and the invalid records with their reason, and downloads `results.csv` | Brasaland API, through the intermediary |
+| `/gestor-incidencias` | Incident manager: summary (totals by status, category, origin and location, from `GET /incidents/summary`) and a list filtered by `status`, `origin` and `branch`, newest first. Each block has its own loading state and error with "Reintentar", so a summary failure does not break the list. An empty list and "no results for the filters" have their own message. Each incident changes status from the list (valid transitions only): the change shows at once and, if the API rejects it or fails, it goes back to the previous status and warns. Dates are shown in UTC, because the history was loaded as midnight UTC | Brasaland API (`incidents` domain, TinyDB), through the intermediary |
+| `/gestor-incidencias/nueva` | Register an incident (centralized incident manager): title, description, category, origin and location, with large fields for tablets. It validates the required fields before sending; with `origin = branch` it highlights the location; the location drop-down shows the briefing names ("Medellín Centro"). While sending, the button is disabled with a loading indicator; API errors appear next to their field and, after success, the form is cleared and confirms. Every new incident starts as `open` | Brasaland API (`incidents` domain, TinyDB), through the intermediary |
 | `/proveedores` | Supplier directory: list of active and suspended suppliers, country and category filters, registration, rate updates and activating or suspending | Brasaland API (`suppliers` domain, TinyDB), through the intermediary |
 | `/funciones` | Manual tests for filters, search, reports, and validations | `@repo/brasa-core` sample data |
 
@@ -84,11 +86,11 @@ Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client
 - `app/api/[...path]/route.ts`: intermediary (BFF) to the Brasaland API.
   - It forwards `GET`, `POST`, `PUT`, `PATCH` and `DELETE` on `/api/<path>` to `API_BASE_URL/<path>`, with the `Content-Type`, `Accept` and `Authorization` headers, applying no logic.
   - The API URL stays on the server and CORS is not needed.
-  - If the variable is missing it returns 500 (`api_not_configured`); if the API does not respond, 502 (`api_unavailable`).
+  - If the variable is missing it returns 500 (`api_not_configured`); if the API does not respond, 502 (`api_unavailable`); if it takes longer than 15 seconds, it cuts the request and returns 504 (`api_timeout`).
 - `components/`:
-  - reusable base components, including `PasswordField`, with a button to show the password, and `FileDropzone`, for any tool that receives files;
+  - reusable base components, including `PasswordField`, with a button to show the password, `FileDropzone`, for any tool that receives files, and `TextAreaField`. `FormField`, `TextAreaField` and `LabeledSelect` accept `size="lg"` for touch forms;
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` and the login, registration and password recovery forms) and `account/` (profile and password change);
-  - `talento/`, `funciones/`, `incidencias/` and `proveedores/`.
+  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/` and `proveedores/`.
 - `hooks/`: custom hooks, including `useSession`.
 - `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, and one folder per tool.
 - `types/`: API types (`api.ts` for errors and `auth.ts` for users and profiles).
@@ -101,6 +103,6 @@ Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client
 - **`/funciones` is temporary:** it tests the rules in `@repo/brasa-core`, a transitional package. Once those rules move to the backend, it must be retired or call the API. Do not add business calculations to the frontends.
 - **`/incidencias` downloads the API's latest analysis:** it is kept in memory, so if the API restarts the file must be uploaded again, and if two people analyze at the same time, the most recent one is downloaded.
 - **`/proveedores` writes to the API's local database:** registrations and rate or status changes are saved in `services/brasaland-api/storage/brasaland-db.json`. To go back to the initial data, delete that file and restart the API. The interface does not offer deleting suppliers: the usual flow is to suspend them.
-- **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). Tool links are hidden on mobile, where staff navigate from the home page. Below `xl`, "Mi perfil" and "Cerrar sesión" are shown as icons only.
+- **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). Tool links are hidden on mobile and tablet (below `xl`), because with 6 tools they do not fit next to the account menu; staff navigate from the home page (the logo leads there). Below `xl`, "Mi perfil" and "Cerrar sesión" are shown as icons only.
 - **Shared API:** the tracker uses a shared playground API, so avoid test writes against it. That API is a third party and does not receive the session token.
 - **After moving routes, `tsc` may fail on stale `.next` types:** delete `.next`, which is a generated artifact.

@@ -9,9 +9,9 @@ A console script that validates and summarizes Brasaland's operational incidents
 
 ## Where the logic lives
 
-The validation rules and the analysis live in the backend, in [`services/brasaland-api/app/domains/incidents/service.py`](../../services/brasaland-api/app/domains/incidents/service.py), which is their source of truth. The API uses that same service, so the script and the backoffice always give the same results.
+The validation rules and the analysis live in the shared package [`packages/shared`](../../packages/shared/README.md) (`brasaland_shared.incidents`). The API and the incident manager seed use that same package, so the script and the backoffice always give the same results.
 
-The script only handles the console: resolving the path, formatting the report, asking and exporting. It imports the service by adding `services/brasaland-api` to the Python path. Since the service only uses the standard library, nothing needs to be installed. However, the script must run inside the repository: if `analyze.py` is copied elsewhere, it cannot find the service.
+The script only handles the console: resolving the path, formatting the report, asking and exporting. It imports the package by adding `packages/shared` to the Python path. Since the package only uses the standard library, nothing needs to be installed. However, the script must run inside the repository: if `analyze.py` is copied elsewhere, it cannot find the package.
 
 ## Usage
 

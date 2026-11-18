@@ -1,0 +1,14 @@
+[project]
+name = "brasaland-shared"
+version = "0.1.0"
+description = "Lógica compartida de Brasaland entre scripts y servicios (solo librería estándar)."
+requires-python = ">=3.11"
+# Sin dependencias: los scripts lo importan sin instalar nada y la API lo instala con uv.
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["brasaland_shared*"]

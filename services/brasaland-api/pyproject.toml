@@ -17,7 +17,13 @@ dependencies = [
     # Hash de contraseñas con bcrypt. Fork mantenido de passlib: se importa como `passlib`.
     "libpass[bcrypt]>=1.9.4",
     "resend>=2.52.0",
+    # Reglas del CSV de incidentes compartidas con los scripts (packages/shared).
+    "brasaland-shared",
 ]
+
+[tool.uv.sources]
+# Paquete local del monorepo, instalado en modo editable: los cambios se ven sin reinstalar.
+brasaland-shared = { path = "../../packages/shared", editable = true }
 
 [project.scripts]
 # `uv run seed` carga los proveedores iniciales del briefing en TinyDB.
