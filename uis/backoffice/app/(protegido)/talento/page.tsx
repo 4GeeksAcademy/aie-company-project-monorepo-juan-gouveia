@@ -2,14 +2,16 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Button from "@/components/Button";
 import CandidateCard from "@/components/talento/CandidateCard";
 import FilterBar from "@/components/talento/FilterBar";
 import CandidateFormModal from "@/components/talento/CandidateFormModal";
 import EmptyMessage from "@/components/EmptyMessage";
 import ErrorMessage from "@/components/ErrorMessage";
 import LoadingMessage from "@/components/LoadingMessage";
-import { createRecord, getRecords } from "@/lib/talento/api";
+import { createRecord, getRecords, PartialSaveError } from "@/lib/talento/api";
 import type { RecordCreateInput, RecordListItem, RecordStage, RecordStatus } from "@/types/record";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchStatus = "loading" | "success" | "error";
 
@@ -53,7 +55,7 @@ function CandidateList() {
         setRecords(data);
         setStatus("success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error desconocido");
+        setError(toUserMessage(err, "No se pudieron cargar los candidatos. Vuelve a intentarlo en unos minutos."));
         setStatus("error");
       }
     }
@@ -62,7 +64,13 @@ function CandidateList() {
   }, [statusFilter, stageFilter, search, reloadKey]);
 
   async function handleCreate(input: RecordCreateInput) {
-    await createRecord(input);
+    try {
+      await createRecord(input);
+    } catch (err) {
+      // Guardado parcial: el candidato ya existe, así que la lista debe mostrarlo igualmente.
+      if (err instanceof PartialSaveError) setReloadKey((k) => k + 1);
+      throw err;
+    }
     setReloadKey((k) => k + 1);
   }
 
@@ -89,7 +97,14 @@ function CandidateList() {
 
         {status === "loading" && <LoadingMessage>Cargando candidatos...</LoadingMessage>}
 
-        {status === "error" && <ErrorMessage>{error}</ErrorMessage>}
+        {status === "error" && (
+          <div role="alert" className="flex flex-col items-start gap-3">
+            <ErrorMessage>{error}</ErrorMessage>
+            <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
+              Reintentar
+            </Button>
+          </div>
+        )}
 
         {status === "success" && records.length === 0 && (
           <EmptyMessage>

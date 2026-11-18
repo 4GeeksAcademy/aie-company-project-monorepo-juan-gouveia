@@ -59,30 +59,37 @@ export default function RegisterForm() {
     setApiFields({});
 
     const email = values.email.trim();
+    // Tras el éxito el formulario sigue bloqueado mientras navega: router.replace no se espera, y
+    // reactivarlo permitiría un segundo envío. En cualquier otro caso, finally lo libera.
+    let navigating = false;
     try {
-      // Los campos de perfil vacíos no se envían: son opcionales.
-      await register({
-        email,
-        password: values.password,
-        ...(values.name.trim() && { name: values.name.trim() }),
-        ...(values.phone.trim() && { phone: values.phone.trim() }),
-        ...(values.address.trim() && { address: values.address.trim() }),
-      });
-    } catch (err) {
-      const result = formErrorsFromApi(err, API_FIELDS, "No se pudo crear la cuenta.");
-      setApiFields(result.fields);
-      setApiMessage(result.message);
-      setSubmitting(false);
-      return;
-    }
+      try {
+        // Los campos de perfil vacíos no se envían: son opcionales.
+        await register({
+          email,
+          password: values.password,
+          ...(values.name.trim() && { name: values.name.trim() }),
+          ...(values.phone.trim() && { phone: values.phone.trim() }),
+          ...(values.address.trim() && { address: values.address.trim() }),
+        });
+      } catch (err) {
+        const result = formErrorsFromApi(err, API_FIELDS, "No se pudo crear la cuenta.");
+        setApiFields(result.fields);
+        setApiMessage(result.message);
+        return;
+      }
 
-    try {
-      const { access_token } = await login(email, values.password);
-      setToken(access_token);
-      router.replace(safeNext(next));
-    } catch {
-      setCreatedWithoutSession(true);
-      setSubmitting(false);
+      // La cuenta ya existe: si el login falla, se avisa de que hay que iniciar sesión a mano.
+      try {
+        const { access_token } = await login(email, values.password);
+        setToken(access_token);
+        navigating = true;
+        router.replace(safeNext(next));
+      } catch {
+        setCreatedWithoutSession(true);
+      }
+    } finally {
+      if (!navigating) setSubmitting(false);
     }
   }
 

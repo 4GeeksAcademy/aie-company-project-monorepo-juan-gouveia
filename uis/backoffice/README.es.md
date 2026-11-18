@@ -86,7 +86,7 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
 - `app/api/[...path]/route.ts`: intermediario (BFF) hacia la API de Brasaland.
   - Reenvía `GET`, `POST`, `PUT`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL/<ruta>`, con las cabeceras `Content-Type`, `Accept` y `Authorization`, sin aplicar lógica.
   - La URL de la API se queda en el servidor y no hace falta CORS.
-  - Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`); si tarda más de 15 segundos, corta la petición y responde 504 (`api_timeout`).
+  - Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`); si tarda más de 15 segundos, corta la petición y responde 504 (`api_timeout`). En los tres casos el usuario recibe un mensaje genérico, y el log del servidor registra una línea `[BFF]` con el método, la ruta (sin query) y la causa; nunca cabeceras ni cuerpo.
 - `components/`:
   - componentes base reutilizables, entre ellos `PasswordField`, con botón para mostrar la contraseña, `FileDropzone`, para cualquier herramienta que reciba archivos, y `TextAreaField`. `FormField`, `TextAreaField` y `LabeledSelect` admiten `size="lg"` para formularios táctiles;
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` y los formularios de login, registro y recuperación de contraseña) y `account/` (perfil y cambio de contraseña);

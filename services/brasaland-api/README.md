@@ -331,6 +331,7 @@ Every error responds with the format `{"error": {"code": "...", "message": "..."
 | It exceeds 5 MB | 413 | `file_too_large` |
 | It is not UTF-8 | 422 | `invalid_encoding` |
 | Missing columns; the message says which | 422 | `missing_columns` |
+| Malformed CSV (e.g. an unclosed quote); the message gives the line | 422 | `malformed_csv` |
 | It only has the header | 422 | `no_records` |
 | Export with no previous analysis | 404 | `no_analysis` |
 | Supplier does not exist | 404 | `supplier_not_found` |
@@ -371,6 +372,12 @@ The incident file type is validated by extension, not by `Content-Type`, because
   }
 }
 ```
+
+### Console commands
+
+`uv run seed` and `uv run create-admin` write the result to `stdout` and errors to `stderr`, without a traceback, and exit with code 0 on success and 1 on failure (`create-admin` exits with 130 when cancelled with Ctrl+C). They detect a database that cannot be opened, is not valid JSON (it is left untouched) or cannot be written.
+
+Both show the absolute path of the database they use, on purpose: only the person operating the server sees it, in their own console, and since `BRASALAND_DB_PATH` and `AUTH_DB_PATH` can point anywhere, it is how they confirm which file was changed. The API never returns that path to a client.
 
 ## Who uses it
 

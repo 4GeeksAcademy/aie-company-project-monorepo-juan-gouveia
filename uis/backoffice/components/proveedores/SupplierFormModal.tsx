@@ -11,6 +11,7 @@ import { CATEGORIES, COUNTRY_OPTIONS, CURRENCY_BY_COUNTRY, STATUS_OPTIONS } from
 import { validateSupplierForm, type SupplierFormValues } from "@/lib/proveedores/validation";
 import type { ApiFieldError } from "@/types/api";
 import type { Category, Supplier } from "@/types/supplier";
+import { toUserMessage } from "@/lib/error-message";
 
 interface SupplierFormModalProps {
   onClose: () => void;
@@ -30,6 +31,24 @@ const EMPTY_FORM: SupplierFormValues = {
 interface ApiFailure {
   message: string;
   details: ApiFieldError[];
+}
+
+// Nombre en español de cada campo que la API puede señalar en `details`.
+const FIELD_LABELS: Record<string, string> = {
+  name: "Nombre",
+  country: "País",
+  categories: "Categorías",
+  rate_per_unit: "Tarifa por unidad",
+  currency: "Moneda",
+  status: "Estado",
+  contact_email: "Email de contacto",
+  notes: "Notas internas",
+};
+
+// "categories.1" es un elemento de la lista: se nombra como el campo. Un campo desconocido no se
+// nombra (se muestra solo el mensaje) para no enseñar nombres técnicos de la API.
+function fieldLabel(field: string): string | null {
+  return FIELD_LABELS[field.split(".")[0]] ?? null;
 }
 
 export default function SupplierFormModal({ onClose, onCreated }: SupplierFormModalProps) {
@@ -79,7 +98,7 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
       onCreated(created);
     } catch (err) {
       setApiFailure({
-        message: err instanceof Error ? err.message : "No se pudo registrar el proveedor",
+        message: toUserMessage(err, "No se pudo registrar el proveedor. Inténtalo de nuevo."),
         details: err instanceof ApiError ? err.details : [],
       });
     } finally {
@@ -185,11 +204,15 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
             <p className="font-semibold">{apiFailure.message}</p>
             {apiFailure.details.length > 0 && (
               <ul className="mt-1 list-disc pl-5">
-                {apiFailure.details.map((detail) => (
-                  <li key={`${detail.field}-${detail.message}`}>
-                    <span className="font-mono">{detail.field}</span>: {detail.message}
-                  </li>
-                ))}
+                {apiFailure.details.map((detail) => {
+                  const label = fieldLabel(detail.field);
+                  return (
+                    <li key={`${detail.field}-${detail.message}`}>
+                      {label && <span className="font-semibold">{label}: </span>}
+                      {detail.message}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api-client";
+import { toUserMessage } from "@/lib/error-message";
 
 // Reparte un error de la API entre los campos del formulario y un mensaje general.
 // Los 422 traen `details` con el nombre del campo de la API (email, password, name…).
@@ -14,7 +15,7 @@ export function formErrorsFromApi<Field extends string>(
   fallback: string
 ): FormApiErrors<Field> {
   if (!(err instanceof ApiError)) {
-    return { fields: {}, message: err instanceof Error ? err.message : fallback };
+    return { fields: {}, message: toUserMessage(err, fallback) };
   }
 
   const fields: Partial<Record<Field, string>> = {};

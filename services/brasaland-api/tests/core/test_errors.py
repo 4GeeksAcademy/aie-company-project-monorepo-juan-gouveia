@@ -1,7 +1,12 @@
+from datetime import date
+from uuid import UUID
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, Field, ValidationError
 
-from app.core.errors import ApiError, register_error_handlers
+from app.core.errors import ApiError, describe_validation_errors, register_error_handlers
 
 
 def make_client() -> TestClient:
@@ -38,4 +43,45 @@ def test_framework_errors_keep_their_headers():
     response = make_client().post("/sin-cabecera")
     assert response.status_code == 405
     assert response.headers["allow"] == "GET"
-    assert response.json()["error"]["code"] == "http_405"
+    assert response.json() == {"error": {"code": "http_405", "message": "Esta ruta no admite el método POST."}}
+
+
+def test_unknown_route_answers_in_spanish():
+    response = make_client().get("/no-existe")
+    assert response.status_code == 404
+    assert response.json() == {"error": {"code": "not_found", "message": "La ruta solicitada no existe. Revisa la URL."}}
+
+
+class Sample(BaseModel):
+    score: int = Field(ge=1, le=5)
+    active: bool = True
+    day: date | None = None
+    code: str = Field("ABC", min_length=3)
+    ref: UUID | None = None
+
+
+def first_message(**data) -> str:
+    with pytest.raises(ValidationError) as caught:
+        Sample(**data)
+    return describe_validation_errors(caught.value.errors())[0]["message"]
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        ({"score": 0}, "Debe ser mayor o igual que 1."),
+        ({"score": 9}, "Debe ser menor o igual que 5."),
+        ({"score": 2.5}, "Debe ser un número entero, sin decimales."),
+        ({"score": 3, "active": "quizás"}, "Debe ser verdadero o falso."),
+        ({"score": 3, "day": "ayer"}, "Debe ser una fecha con el formato AAAA-MM-DD."),
+        ({"score": 3, "code": "AB"}, "Debe tener al menos 3 caracteres."),
+    ],
+)
+def test_validation_messages_are_in_spanish(data, message):
+    assert first_message(**data) == message
+
+
+def test_untranslated_validation_type_gets_generic_message():
+    # uuid_parsing no está en la tabla: no se muestra el msg de Pydantic, en inglés.
+    assert first_message(score=3, ref="no-es-uuid") == "El valor no es válido."
+

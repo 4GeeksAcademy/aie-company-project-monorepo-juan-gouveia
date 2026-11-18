@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listSuppliers } from "@/lib/proveedores/api";
 import type { Supplier, SupplierFilters } from "@/types/supplier";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchState =
   | { status: "loading" }
@@ -32,7 +33,7 @@ export function useSuppliers() {
         if (cancelled) return;
         setFetchState({
           status: "error",
-          message: err instanceof Error ? err.message : "Error desconocido",
+          message: toUserMessage(err, "No se pudieron cargar los proveedores."),
         });
       }
     }

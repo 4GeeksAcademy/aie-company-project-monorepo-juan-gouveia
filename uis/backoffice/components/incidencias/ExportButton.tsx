@@ -4,6 +4,7 @@ import { useState } from "react";
 import Button from "@/components/Button";
 import ErrorMessage from "@/components/ErrorMessage";
 import { downloadResults } from "@/lib/incidencias/api";
+import { toUserMessage } from "@/lib/error-message";
 
 export default function ExportButton() {
   const [downloading, setDownloading] = useState(false);
@@ -15,7 +16,7 @@ export default function ExportButton() {
       setError(null);
       await downloadResults();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
+      setError(toUserMessage(err, "No se pudo descargar el CSV. Inténtalo de nuevo."));
     } finally {
       setDownloading(false);
     }

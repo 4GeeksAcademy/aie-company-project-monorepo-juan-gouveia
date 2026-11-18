@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createNote, deleteNote, getNotes } from "@/lib/talento/api";
 import type { Note } from "@/types/record";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchStatus = "loading" | "success" | "error";
 
@@ -12,6 +13,8 @@ export function useNotes(recordId: string) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // "Reintentar" tras un error de carga: vuelve a pedir las notas.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function loadNotes() {
@@ -20,13 +23,13 @@ export function useNotes(recordId: string) {
         setNotes(await getNotes(recordId));
         setStatus("success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error desconocido");
+        setError(toUserMessage(err, "No se pudieron cargar las notas."));
         setStatus("error");
       }
     }
 
     loadNotes();
-  }, [recordId]);
+  }, [recordId, reloadKey]);
 
   // Lanza el error si falla, para que quien llama (el modal) pueda mostrarlo.
   async function create(content: string) {
@@ -70,5 +73,6 @@ export function useNotes(recordId: string) {
     create,
     toggleSelected,
     deleteSelected,
+    reload: () => setReloadKey((key) => key + 1),
   };
 }

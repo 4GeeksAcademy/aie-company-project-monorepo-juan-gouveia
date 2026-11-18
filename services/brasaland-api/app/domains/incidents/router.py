@@ -11,6 +11,7 @@ from app.domains.incidents.exceptions import (
     EmptyFileError,
     IncidentFileError,
     InvalidEncodingError,
+    MalformedCsvError,
     MissingColumnsError,
     NoRecordsError,
 )
@@ -33,6 +34,13 @@ def to_api_error(error: IncidentFileError) -> ApiError:
         )
     if isinstance(error, MissingColumnsError):
         return ApiError(422, "missing_columns", f"Faltan columnas obligatorias: {', '.join(error.missing)}.")
+    if isinstance(error, MalformedCsvError):
+        return ApiError(
+            422,
+            "malformed_csv",
+            f"El archivo no tiene un formato CSV válido cerca de la línea {error.line}. "
+            "Revisa que las comillas estén cerradas y que ningún campo sea demasiado largo.",
+        )
     if isinstance(error, NoRecordsError):
         return ApiError(422, "no_records", "El archivo solo tiene el encabezado; no hay incidentes que analizar.")
     return ApiError(422, "invalid_file", "No se pudo leer el archivo.")

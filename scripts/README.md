@@ -25,9 +25,10 @@ uv run --project services/brasaland-api python scripts/seed_incidents.py other.c
 - **Transformations (incident manager briefing):** `OPEN`/`CLOSED`/`DISCARDED` → `open`/`resolved`/`discarded`; CSV categories to the manager's (`FOOD_QUALITY` → `customer_complaint`); `title` is the first 120 characters of `description`; `date` is midnight UTC for `created_at` and `updated_at`; `location_id` → `branch` (`COL-10` and unmapped locations → `central`); `origin` is always `customer`.
 - **Invalid rows:** rows that break any analyzer rule (or cannot be transformed) are not inserted and are listed at the end with their row and reason.
 - **Idempotent:** it stores the `incident_id` of each loaded row in the `incident_seed_log` table (not in the incident). A second run inserts 0 and counts them as "already loaded".
+- **Errors:** if the CSV cannot be read, or the database cannot be opened, is not valid JSON or cannot be written (for example, a full disk), it prints the reason and exits with code 1, without a traceback. A corrupt database is left untouched; after a write failure, running it again does not duplicate anything. The final report shows the absolute path of the database on purpose, so the operator can confirm which file was changed (`BRASALAND_DB_PATH` can point anywhere).
 - **Result with the briefing CSV:** 100 rows, 96 inserted and 4 invalid (`BRS-000044`, `BRS-000049`, `BRS-000079` and `BRS-000086`). Afterwards, `/api/incidents/summary` gives `open` 32, `resolved` 50, `discarded` 14 and `customer_complaint` 48, `equipment_failure` 17, `supply_issue` 22, `staff_issue` 9, the values the briefing expects.
 
-Tests (16):
+Tests (20):
 
 ```bash
 uv run --project services/brasaland-api python -m unittest scripts/test_seed_incidents.py

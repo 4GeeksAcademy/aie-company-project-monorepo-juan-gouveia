@@ -11,6 +11,7 @@ from pathlib import Path
 from brasaland_shared.incidents.exceptions import (
     EmptyFileError,
     InvalidEncodingError,
+    MalformedCsvError,
     MissingColumnsError,
     NoRecordsError,
 )
@@ -48,12 +49,20 @@ RULE_LABELS = dict(RULES)
 
 
 def parse_records(text, source_name=None):
-    """Convierte el texto de un CSV en registros con los campos sin espacios sobrantes."""
+    """Convierte el texto de un CSV en registros con los campos sin espacios sobrantes.
+
+    Un csv.Error (no hereda de ValueError) se relanza como MalformedCsvError, para que la API y los
+    scripts lo traten como cualquier otro archivo que no se puede analizar.
+    """
     reader = csv.DictReader(io.StringIO(text, newline=""))
-    missing = [field for field in FIELDS if field not in (reader.fieldnames or [])]
-    if missing:
-        raise MissingColumnsError(missing, source_name)
-    return [{field: (row[field] or "").strip() for field in FIELDS} for row in reader]
+    try:
+        missing = [field for field in FIELDS if field not in (reader.fieldnames or [])]
+        if missing:
+            raise MissingColumnsError(missing, source_name)
+        return [{field: (row[field] or "").strip() for field in FIELDS} for row in reader]
+    except csv.Error as error:
+        # line_num cuenta las líneas de los registros ya leídos; el que falla empieza en la siguiente.
+        raise MalformedCsvError(reader.line_num + 1, str(error), source_name) from None
 
 
 def load_records(path):

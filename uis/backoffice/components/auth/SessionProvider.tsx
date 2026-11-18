@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/api";
 import { currentPath, LOGIN_PATH, loginUrl } from "@/lib/auth/navigation";
 import { clearToken, getToken, subscribeToToken } from "@/lib/auth/token";
 import type { CurrentUser } from "@/types/auth";
+import { toUserMessage } from "@/lib/error-message";
 
 export type SessionStatus = "checking" | "authenticated" | "error";
 
@@ -54,7 +55,7 @@ export default function SessionProvider({ children }: { children: React.ReactNod
         if (id !== requestId.current) return;
         // Si fue un 401, el cliente común ya está redirigiendo al login.
         if (!getToken()) return;
-        setError(err instanceof Error ? err.message : "No se pudo comprobar la sesión.");
+        setError(toUserMessage(err, "No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo."));
         setStatus("error");
       });
   }, [router]);

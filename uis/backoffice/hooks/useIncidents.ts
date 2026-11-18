@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listIncidents, updateIncidentStatus } from "@/lib/gestor-incidencias/api";
 import type { Incident, IncidentFilters, IncidentStatus } from "@/types/incident-manager";
+import { toUserMessage } from "@/lib/error-message";
 
 type FetchState =
   | { status: "loading" }
@@ -32,7 +33,7 @@ export function useIncidents() {
         if (cancelled) return;
         setFetchState({
           status: "error",
-          message: err instanceof Error ? err.message : "No se pudieron cargar las incidencias.",
+          message: toUserMessage(err, "No se pudieron cargar las incidencias."),
         });
       }
     }
@@ -60,7 +61,7 @@ export function useIncidents() {
       return null;
     } catch (err) {
       replaceIncident(incident);
-      return err instanceof Error ? err.message : "No se pudo cambiar el estado.";
+      return toUserMessage(err, "No se pudo cambiar el estado. Inténtalo de nuevo.");
     }
   }
 

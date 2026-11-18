@@ -26,6 +26,16 @@ class MissingColumnsError(IncidentFileError):
         super().__init__(f"Missing columns{where}: {', '.join(missing)}")
 
 
+class MalformedCsvError(IncidentFileError):
+    """El lector de CSV no puede seguir, por ejemplo por una comilla sin cerrar que convierte el
+    resto del archivo en un campo más largo que el límite del módulo csv."""
+
+    def __init__(self, line, reason, source_name=None):
+        self.line = line
+        where = f" in {source_name}" if source_name else ""
+        super().__init__(f"Malformed CSV{where} near line {line}: {reason}")
+
+
 class NoRecordsError(IncidentFileError):
     def __init__(self):
         super().__init__("The file has a header but no records")

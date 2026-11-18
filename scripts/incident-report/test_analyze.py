@@ -4,7 +4,9 @@ Uso (desde esta carpeta):
     python -m unittest -v
 """
 
+import contextlib
 import csv
+import io
 import tempfile
 import unittest
 from decimal import Decimal
@@ -251,6 +253,50 @@ class ExportTest(unittest.TestCase):
         for answer, expected in [("s", True), ("Sí", True), (" yes ", True), ("n", False), ("", False)]:
             with self.subTest(answer=answer), patch("builtins.input", return_value=answer):
                 self.assertIs(analyze.wants_export(), expected)
+
+    def test_main_reports_export_write_error_without_traceback(self):
+        # results.csv abierto en Excel: Windows impide escribirlo y open() lanza PermissionError.
+        locked = PermissionError(13, "Permission denied", str(analyze.EXPORT_PATH))
+        stderr = io.StringIO()
+        with (
+            patch("analyze.export_csv", side_effect=locked),
+            patch("builtins.input", return_value="y"),
+            patch("sys.stdout", io.TextIOWrapper(io.BytesIO())),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(analyze.main([str(SOURCE)]), 1)
+        self.assertIn("could not write", stderr.getvalue())
+        self.assertIn("Permission denied", stderr.getvalue())
+        self.assertIn("close it", stderr.getvalue())
+
+    def run_main_expecting_error(self, side_effect):
+        stderr = io.StringIO()
+        with patch("analyze.load_records", side_effect=side_effect), contextlib.redirect_stderr(stderr):
+            self.assertEqual(analyze.main([str(SOURCE)]), 1)
+        return stderr.getvalue()
+
+    def test_main_reports_read_error_without_traceback(self):
+        message = self.run_main_expecting_error(PermissionError(13, "Permission denied", str(SOURCE)))
+        self.assertIn("could not read", message)
+        self.assertIn("Permission denied", message)
+
+    def test_main_reports_non_utf8_file_clearly(self):
+        decode_error = UnicodeDecodeError("utf-8", b"\xf3", 0, 1, "invalid continuation byte")
+        message = self.run_main_expecting_error(decode_error)
+        self.assertIn("is not valid UTF-8", message)
+        self.assertNotIn("codec", message)
+
+    def test_main_ctrl_c_at_export_prompt_cancels_without_traceback(self):
+        stderr = io.StringIO()
+        with (
+            patch("builtins.input", side_effect=KeyboardInterrupt),
+            patch("analyze.export_csv") as export_csv,
+            patch("sys.stdout", io.TextIOWrapper(io.BytesIO())),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(analyze.main([str(SOURCE)]), 130)
+        export_csv.assert_not_called()
+        self.assertIn("Export cancelled.", stderr.getvalue())
 
     def test_wants_export_without_input(self):
         with patch("builtins.input", side_effect=EOFError), patch("builtins.print"):

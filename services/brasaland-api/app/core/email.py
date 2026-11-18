@@ -45,6 +45,12 @@ class DisabledEmailSender:
         )
 
 
+# Tiempo máximo de cada envío a Resend. El SDK ya usa 30 s por defecto (RequestsClient); se fija
+# aquí para no depender de ese valor. El envío va en segundo plano y Resend suele responder en
+# menos de un segundo, así que 10 s liberan antes el hilo si Resend no responde.
+RESEND_TIMEOUT_SECONDS = 10
+
+
 class ResendEmailSender:
     """Envía con Resend (SDK oficial `resend`).
 
@@ -57,8 +63,9 @@ class ResendEmailSender:
         self._sender = sender
 
     def send(self, message: EmailMessage) -> None:
-        # El SDK lee la clave de una variable de módulo; se fija en cada envío por si cambia la config.
+        # El SDK lee la clave y el cliente HTTP de variables de módulo; se fijan en cada envío.
         resend.api_key = self._api_key
+        resend.default_http_client = resend.RequestsClient(timeout=RESEND_TIMEOUT_SECONDS)
         params: resend.Emails.SendParams = {
             "from": self._sender,
             "to": [message.to],
@@ -69,8 +76,20 @@ class ResendEmailSender:
         try:
             resend.Emails.send(params)
         except Exception as error:  # noqa: BLE001 - errores de la API de Resend o de red
-            # Solo el tipo de error: el mensaje de Resend puede incluir el destinatario.
-            raise EmailSendError(f"Resend rechazó el envío ({type(error).__name__}).") from None
+            raise EmailSendError(f"Resend rechazó el envío ({describe_resend_error(error)}).") from None
+
+
+def describe_resend_error(error: Exception) -> str:
+    """Lo que se puede registrar de un fallo de Resend: el tipo, el estado HTTP y su tipo de error.
+
+    Nunca el mensaje: el de Resend puede incluir el destinatario (por ejemplo, en el 403 de
+    «solo puedes enviar a tu propio email»). Por eso EmailSendError se lanza `from None`: con la causa
+    encadenada, logger.exception imprimiría ese mensaje en el traceback.
+    """
+    parts = [type(error).__name__]
+    if isinstance(error, resend.exceptions.ResendError):
+        parts += [f"HTTP {error.code}", str(error.error_type)]
+    return ", ".join(parts)
 
 
 def get_email_sender() -> EmailSender:
