@@ -10,6 +10,8 @@
 - **Sin N+1:** cada listado es un número fijo de consultas, sin importar cuántas filas haya. El
   stock se suma en SQL con subconsultas agrupadas, y las órdenes se cargan con su ingrediente
   mediante un `join`. Solo se usa lo que exporta `sqlmodel` (`select`, `func`, `col`).
+- **Caché:** cada escritura confirmada limpia la caché de lecturas del inventario (`cache.py`) justo
+  después del `commit`; una escritura rechazada no la toca, porque no cambió nada.
 
 Las funciones devuelven schemas de `schemas.py`, nunca objetos ORM.
 """
@@ -17,6 +19,7 @@ Las funciones devuelven schemas de `schemas.py`, nunca objetos ORM.
 from sqlmodel import Session, col, func, select
 
 from app.core.errors import ApiError
+from app.domains.inventory.cache import invalidate_inventory
 from app.domains.inventory.models import Ingredient, IngredientEntry, IngredientExit
 from app.domains.inventory.schemas import (
     Country,
@@ -145,6 +148,7 @@ def create_ingredient(session: Session, data: IngredientCreate) -> IngredientRea
         if _sku_exists(session, data.sku):
             raise duplicate_sku(data.sku) from None
         raise
+    invalidate_inventory()
     session.refresh(ingredient)
     return _to_ingredient_read(ingredient, 0)
 
@@ -201,6 +205,7 @@ def create_entry(session: Session, data: IngredientEntryCreate, user_uuid: str) 
     entry = IngredientEntry(**data.model_dump(), user_uuid=user_uuid)
     session.add(entry)
     session.commit()
+    invalidate_inventory()
     session.refresh(entry)
     return _to_entry_read(entry, ingredient)
 
@@ -218,6 +223,7 @@ def create_exit(session: Session, data: IngredientExitCreate, user_uuid: str) ->
     exit_ = IngredientExit(**data.model_dump(mode="json"), user_uuid=user_uuid)
     session.add(exit_)
     session.commit()
+    invalidate_inventory()
     session.refresh(exit_)
     return _to_exit_read(exit_, ingredient)
 

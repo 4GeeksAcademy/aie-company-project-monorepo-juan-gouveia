@@ -1,4 +1,4 @@
-import { mergeOrders } from "@/lib/inventory-orders";
+import { filterOrders, mergeOrders, NO_ORDER_FILTERS } from "@/lib/inventory-orders";
 import type { IngredientEntry, IngredientExit } from "@/types/inventory";
 
 // Proyección plana del ingrediente que acompaña a cada orden (docs/serialization-audit.md, D4).
@@ -30,5 +30,40 @@ describe("mergeOrders", () => {
 
   it("devuelve una lista vacía si no hay órdenes", () => {
     expect(mergeOrders({ inbound: [], outbound: [] })).toEqual([]);
+  });
+});
+
+describe("filterOrders", () => {
+  const plantain = { ingredient_id: 2, ingredient_name: "Plátano maduro", ingredient_sku: "VOL-CO-PRODUCE-003", ingredient_unit: "kg" as const };
+  const rows = mergeOrders({
+    inbound: [entry(1, "2026-11-14T09:00:00Z"), { ...entry(2, "2026-11-15T09:00:00Z"), ...plantain }],
+    outbound: [exit(1, "2026-11-16T12:00:00Z"), { ...exit(2, "2026-11-17T12:00:00Z"), ...plantain }],
+  });
+
+  it("sin filtros devuelve todas las órdenes con su recuento por tipo", () => {
+    const result = filterOrders(rows, NO_ORDER_FILTERS);
+    expect(result.rows).toEqual(rows);
+    expect([result.entries, result.exits]).toEqual([2, 2]);
+  });
+
+  it("filtra por tipo", () => {
+    const result = filterOrders(rows, { kind: "exit", ingredient: "" });
+    expect(result.rows.map((row) => row.key)).toEqual(["exit-2", "exit-1"]);
+    expect([result.entries, result.exits]).toEqual([0, 2]);
+  });
+
+  it("busca el ingrediente sin distinguir mayúsculas ni tildes, y por SKU", () => {
+    expect(filterOrders(rows, { kind: "", ingredient: "  PLATANO " }).rows.map((row) => row.key)).toEqual(["exit-2", "entry-2"]);
+    expect(filterOrders(rows, { kind: "", ingredient: "brs-beef" }).rows.map((row) => row.key)).toEqual(["exit-1", "entry-1"]);
+  });
+
+  it("combina los dos filtros y conserva el orden del historial", () => {
+    const result = filterOrders(rows, { kind: "entry", ingredient: "plátano" });
+    expect(result.rows.map((row) => row.key)).toEqual(["entry-2"]);
+    expect([result.entries, result.exits]).toEqual([1, 0]);
+  });
+
+  it("devuelve una lista vacía si nada coincide", () => {
+    expect(filterOrders(rows, { kind: "", ingredient: "salmón" })).toEqual({ rows: [], entries: 0, exits: 0 });
   });
 });

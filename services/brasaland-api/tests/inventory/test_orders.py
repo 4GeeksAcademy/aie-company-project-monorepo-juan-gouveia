@@ -8,7 +8,8 @@ from sqlmodel import func, select
 from app.core.errors import ApiError
 from app.domains.inventory import models
 from app.domains.inventory.models import IngredientEntry, IngredientExit
-from app.domains.inventory.router import get_product, list_orders
+from app.domains.inventory.router import get_product
+from app.domains.inventory.service import list_orders
 from tests.helpers import raises_api_error
 
 

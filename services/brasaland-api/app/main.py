@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from app.core.config import API_PREFIX, get_settings
 from app.core.database import get_engine, init_db
 from app.core.errors import register_error_handlers
+from app.core.timing import register_timing_middleware
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.router import router as auth_router
 from app.domains.incidents.manager_router import router as incident_manager_router
@@ -49,6 +50,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Brasaland API", version="0.1.0", lifespan=lifespan)
 register_error_handlers(app)
+# Caching: una línea de log por petición con su duración (logger "api.timing"), para medir antes de cachear.
+register_timing_middleware(app)
 # Rutas con datos sensibles: todas exigen un token válido (AUTH-01). Sin token, 401.
 PROTECTED = [Depends(get_current_user)]
 app.include_router(incidents_router, prefix=API_PREFIX, dependencies=PROTECTED)

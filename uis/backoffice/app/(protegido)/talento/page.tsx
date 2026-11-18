@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CandidateCard from "@/components/talento/CandidateCard";
 import FilterBar from "@/components/talento/FilterBar";
-import CandidateFormModal from "@/components/talento/CandidateFormModal";
+import CandidateFormModal from "@/components/talento/LazyCandidateFormModal";
 import EmptyMessage from "@/components/EmptyMessage";
 import LoadingMessage from "@/components/LoadingMessage";
 import RetryableError from "@/components/RetryableError";

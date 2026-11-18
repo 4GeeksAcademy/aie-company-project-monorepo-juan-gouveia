@@ -155,7 +155,15 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
   - el OpenAPI solo cambia en lo previsto;
   - prueba manual en `/docs` de 5 endpoints, con una cuenta temporal que después se borró.
   Los 35 endpoints quedan ✅. La excepción del CSV está en `docs/BRIEFING_DIVERGENCES.md` (sección 13).
-- **PR:** pendiente de abrir contra `feature/performance-audit`.
+- **PR:** #19, abierto el 2026-11-18 contra `feature/performance-audit` mientras el #18 no se fusione (6 commits, head `9f0da00`).
+
+**Estrategia de caching completada en la rama `feature/caching-optimisation`**, creada desde `feature/serialization-audit` (`9f0da00`) el 2026-11-18 porque los PR #17, #18 y #19 siguen abiertos. Un commit por fase, hechos por el desarrollador. Informe: `docs/CACHING_REPORT.md`.
+
+- **Medición (Fases 1 y 2):** middleware de timing `app/core/timing.py` (logger `api.timing`) y seeder `scripts/seed_volume.py` (150 ingredientes y ~21 000 órdenes en Supabase, 10 000 incidencias en TinyDB, marca `VOL-`). Con volumen, `GET /inventory/orders` tarda 1,3 s y `/inventory/products` ~100 ms (ida y vuelta a Supabase); las lecturas de TinyDB, 30–230 ms por releer el archivo entero.
+- **Backend (Fase 3):** `core/cache.py` (`TTLCache`, con contador de generación) y `inventory/cache.py`: `GET /products` 60 s y `GET /orders` 5 min, JSON ya serializado y `X-Cache`. Las tres escrituras del inventario invalidan tras el `commit`. Un acierto tarda 1,4 ms. No se cachean la sesión, los perfiles, `products/{id}` ni TinyDB (la solución es migrar).
+- **Frontend (Fase 4):** `next/dynamic` para `SupplierFormModal` y `CandidateFormModal`; historial y gestor pintados de 50 en 50 (`useShowMore`): el historial pasa de 4,7 s a 0,17 s, y un cambio de estado en el gestor, de 740 ms a 11 ms. El filtro del historial usa `useMemo` (~30 ms en móvil).
+- **Verificación:** API 952 pruebas, Jest 180, `tsc`, lint y build sin errores, y prueba funcional en Chrome. Las divergencias están en `docs/BRIEFING_DIVERGENCES.md` (sección 14).
+- **Datos de volumen:** siguen cargados (`VOL-`) en Supabase y en `brasaland-db.json` local, con 4 incidencias en `in_progress` por la medición; se retiran con `scripts/seed_volume.py --clear`.
 
 **Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -174,8 +182,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #16 Navegación del backoffice | `feature/backoffice-navigation` → `main` | ✅ Fusionado (2026-11-18) |
 | #17 Contenedorización del monorepo (#infra-40) | `feature/dockerize` → `main` | ⏳ Abierto (2026-11-17) |
 | #18 Auditoría de rendimiento de ambos frontends | `feature/performance-audit` → `feature/dockerize` | ⏳ Abierto (2026-11-17) |
+| #19 Auditoría de serialización del backend | `feature/serialization-audit` → `feature/performance-audit` | ⏳ Abierto (2026-11-18) |
 
-- **Orden de merge:** del #6 al #16 ya están fusionados (el #8 a #16, el 2026-11-18). Quedan el #17 y el #18, en ese orden, con "Create a merge commit" (sin squash ni rebase), para que el PR siguiente no repita commits ni dé conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** del #6 al #16 ya están fusionados (el #8 a #16, el 2026-11-18). Quedan el #17, el #18 y el #19, en ese orden, con "Create a merge commit" (sin squash ni rebase), para que el PR siguiente no repita commits ni dé conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas (2026-11-18):** las ramas fusionadas, incluida `directorio-prov`, están borradas en local y en GitHub. Quedan `main` (al día con `origin/main`), `feature/dockerize`, `feature/performance-audit` y `feature/serialization-audit`.
 
 ### 1. Contexto y Configuración Inicial
@@ -315,13 +324,15 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. Pendiente: abrir el PR contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
+0. **Estrategia de caching (rama `feature/caching-optimisation`)** — Completada (2026-11-18): `docs/CACHING_REPORT.md` recoge la medición, los 35 endpoints evaluados, las decisiones (caché de 60 s y 5 min en el inventario, modales diferidos, listas de 50 en 50 y `useMemo`), los intercambios y lo que no se cacheó. Pendiente: abrir el PR contra `feature/serialization-audit`. Los datos `VOL-` se mantienen hasta que se revise el PR, por si hay que repetir las mediciones; después se retiran con `scripts/seed_volume.py --clear`. Trabajo futuro: paginar `GET /inventory/orders` y `GET /incidents` en la API, y Redis si la API pasa a varios workers. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Estrategia de caching"). Plan en `docs/_private/plan-caching.md`.
+
+0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. PR #19 abierto contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
 
 0. **Auditoría de rendimiento (rama `feature/performance-audit`)** — Completada (2026-11-17): `audit/AUDIT.md`, `audit/REPORT.md` y las capturas de `audit/before/` y `audit/after/`. Mejoras medidas: CLS del gestor de incidencias 0,204 → 0 y Best Practices del website 96 → 100. PR #18 abierto contra `feature/dockerize`. Cuando se fusione la cadena y se actualice Next, repetir las mediciones con la misma versión de Lighthouse. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends"). Plan en `docs/_private/plan-auditoria-rendimiento.md`.
 
 0. **Contenedorización #infra-40 (rama `feature/dockerize`)** — Completada: `docker compose up` desde la raíz levanta `uis` y `api` con recarga en caliente, verificado (2026-11-17). Un commit por fase (la última, `b1cab16`). PR #17 abierto; desde el 2026-11-18 apunta a `main`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Contenedorización del monorepo"). Plan en `docs/_private/plan-contenedorizacion.md`.
 
-0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 fusionado en `main` (2026-11-18). La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 fusionado en `main` (2026-11-18). Pendiente: cuando se fusionen el #17 y el #18, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
+0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 fusionado en `main` (2026-11-18). La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`, con el PR #16 fusionado en `main` (2026-11-18). Pendiente: cuando se fusionen el #17, el #18 y el #19, actualizar Next por seguridad en el backoffice y el website. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
 0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 fusionado en `main` (2026-11-18). Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 

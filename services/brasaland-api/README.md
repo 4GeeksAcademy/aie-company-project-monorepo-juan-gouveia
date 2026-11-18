@@ -86,7 +86,7 @@ The test plan, the suites, per-suite commands, coverage and the bugs found are i
 
 - **Authentication unit tests (147, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
 - **Supplier and incident unit tests (101, `tests/suppliers/` and `tests/incidents/`, ticket API-042):** the logic of the 6 supplier endpoints and the 5 incident manager endpoints, without HTTP, with the three levels for each. On their own, they reach 84% coverage of both domains.
-- **Inventory (80, `tests/inventory/`, Milestone 5):** models (tables, FKs and unique SKU enforced by the database), schemas with the briefing values, the 6 endpoints without HTTP (calculated stock, 400 without writing, `user_uuid` of the authenticated user), the seed and the query count (no N+1). Together with the integration and SQL connection tests, the domain reaches 97% coverage.
+- **Inventory (80, `tests/inventory/`, Milestone 5):** models (tables, FKs and unique SKU enforced by the database), schemas with the briefing values, the endpoints and the service without HTTP (calculated stock, 400 without writing, `user_uuid` of the authenticated user), the seed and the query count (no N+1). Together with the integration and SQL connection tests, the domain reaches 97% coverage.
 - **HTTP integration (334, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier, incident and inventory endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones. The serialization guard (`test_response_models.py`) requires every JSON response to be a named model (except the CSV export), no password, hash or reset token in any response, and no email in the auth flows other than `GET /auth/me` (see [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **`core` (81):** configuration from the environment (the API doesn't start without a key or without `DATABASE_URL`), the SQL connection (per-request session and psycopg2 driver), password hashing and tokens, email sending, and error headers.
 - **`incidents` (51, `tests/domains/`):** the CSV analyzer service and the incident manager (model with the exact values, and repository: lifecycle, filters, `/summary` and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
@@ -106,6 +106,8 @@ app/
 │   ├── security.py         # bcrypt hashing and JWTs: access tokens and reset tokens (purpose, jti)
 │   ├── email.py            # EmailMessage and senders: Resend, or disabled without RESEND_API_KEY
 │   ├── storage.py          # Shared brasaland-db.json: path, opening, per-file lock and insert_with_file_id
+│   ├── timing.py           # Timing middleware: one log line per request (api.timing logger)
+│   ├── cache.py            # TTLCache: thread-safe in-memory cache with TTL and invalidation
 │   └── errors.py           # Single error format
 └── domains/
     ├── auth/
@@ -144,6 +146,7 @@ app/
     │   ├── schemas.py      # Pydantic request and response schemas, separate from the models
     │   ├── service.py      # Stock calculated in SQL, negative stock rejection and lists without N+1
     │   ├── router.py       # /inventory endpoints
+    │   ├── cache.py        # Cache for GET /products (60 s) and GET /orders (5 min); writes clear it
     │   └── seed.py         # Briefing seed data (`uv run seed-inventory`)
     └── suppliers/
         ├── models.py       # Pydantic models: Supplier, SupplierCreate, RateUpdate, StatusUpdate
@@ -303,6 +306,20 @@ The exit locks the ingredient row (`SELECT ... FOR UPDATE`) while it calculates 
 
 The API only uses `sqlmodel` (`select`, `func`, `col`), with no direct SQLAlchemy. `GET /products` is a single query (ingredients with two subqueries that add up entries and exits) and `GET /orders` is two (one per table, with a `join` to the ingredient), whatever the number of rows. `tests/inventory/test_queries.py` checks this by counting the SQL statements.
 
+### Read cache
+
+`GET /products` and `GET /orders` are served from an in-memory cache (`inventory/cache.py`, on top of `core/cache.py`). The already serialized JSON is stored and the response carries the `X-Cache: HIT` or `MISS` header; the contract does not change.
+
+| Endpoint | TTL | Why |
+|---|---|---|
+| `GET /products` (one entry per country filter) | 60 s | It is the most frequent read and each one is a round trip to Supabase (~100 ms) |
+| `GET /orders` | 5 min | With ~21,000 orders it takes ~1.3 s; it is for reference and decides nothing |
+
+- **Invalidation:** every committed write (`POST /products`, `/orders/inbound` and `/orders/outbound`) clears both right after the `commit`. A rejected exit does not touch it. A read that started before a write does not store its result.
+- **What it does not see:** writes from other processes (scripts, the Supabase dashboard) or other workers. Those only show up when the TTL expires. With a single uvicorn process, as now, there are no other cases.
+- **The stock of an exit never comes from the cache:** it is recalculated in the database with a lock, so a stale stock on screen cannot drive it negative.
+- **No per-user data:** both responses are the same for any authenticated user and the token is checked before reading the cache.
+
 ### Seed
 
 `uv run --env-file .env seed-inventory` loads the briefing seed data into Supabase:
@@ -384,6 +401,16 @@ Ticket AUTH-03. Emails are sent with [Resend](https://resend.com), chosen over S
 ## `GET /health`
 
 Returns `{"status": "ok"}` (`HealthResponse`). It is outside `/api/v1` and has no authentication.
+
+## Timing log
+
+`app/core/timing.py` writes one line per request to the `api.timing` logger, with the method, the path (without the query string), the status and the duration inside the API:
+
+```
+INFO:     api.timing - GET /api/v1/inventory/products → 200 | 98.6ms
+```
+
+It is used to choose, with data, which endpoints deserve a cache. Unhandled errors are logged too, as 500. With `--no-access-log`, uvicorn leaves only these lines.
 
 ## Errors
 

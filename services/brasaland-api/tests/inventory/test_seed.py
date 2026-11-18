@@ -4,7 +4,7 @@ from sqlmodel import func, select
 
 from app.domains.inventory import seed as seed_module
 from app.domains.inventory.models import Ingredient, IngredientEntry, IngredientExit
-from app.domains.inventory.router import list_orders, list_products
+from app.domains.inventory.service import list_ingredients, list_orders
 from app.domains.inventory.seed import find_seed_user_uuid, main, seed
 from app.domains.users.models import Role, UserUpdate
 from app.domains.users import service as user_service
@@ -31,7 +31,7 @@ def test_seed_loads_the_briefing_ingredients_and_net_stock(session):
     result = seed(session, USER_UUID)
 
     assert (result.ingredients, result.entries, result.exits) == (6, 4, 3)
-    products = list_products(session=session)
+    products = list_ingredients(session)
     assert {item.sku: item.current_stock for item in products} == EXPECTED_STOCK
     assert [(item.name, item.unit, item.category, item.country) for item in products] == [
         ("Falda de ternera", "kg", "meat", "CO"),

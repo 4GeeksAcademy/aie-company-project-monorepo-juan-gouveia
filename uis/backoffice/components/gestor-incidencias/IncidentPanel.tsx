@@ -7,8 +7,10 @@ import IncidentFilters from "@/components/gestor-incidencias/IncidentFilters";
 import IncidentList from "@/components/gestor-incidencias/IncidentList";
 import IncidentSummaryPanel from "@/components/gestor-incidencias/IncidentSummaryPanel";
 import RetryableError from "@/components/RetryableError";
+import ShowMoreButton from "@/components/ShowMoreButton";
 import { useIncidentSummary } from "@/hooks/useIncidentSummary";
 import { useIncidents } from "@/hooks/useIncidents";
+import { useShowMore } from "@/hooks/useShowMore";
 import type { IncidentListItem, IncidentStatus } from "@/types/incident-manager";
 
 // Panel del gestor de incidencias: el resumen arriba y el listado con filtros debajo.
@@ -17,6 +19,12 @@ export default function IncidentPanel() {
   const { filters, updateFilter, clearFilters, hasFilters, incidents, fetchState, changeStatus, reload } =
     useIncidents();
   const summary = useIncidentSummary();
+  // Pinta 50 incidencias y 50 más por clic. Vuelve a 50 solo al cambiar los filtros (otra lista): un
+  // cambio de estado sustituye la lista entera y no debe plegarla ni hacer perder la posición.
+  const { visible, nextCount, showMore } = useShowMore(
+    incidents.length,
+    `${filters.status}|${filters.origin}|${filters.branch}`
+  );
 
   async function handleStatusChange(incident: IncidentListItem, next: IncidentStatus): Promise<string | null> {
     const failure = await changeStatus(incident, next);
@@ -77,7 +85,10 @@ export default function IncidentPanel() {
                 )}
               </EmptyMessage>
             ) : (
-              <IncidentList incidents={incidents} onStatusChange={handleStatusChange} />
+              <>
+                <IncidentList incidents={incidents.slice(0, visible)} onStatusChange={handleStatusChange} />
+                <ShowMoreButton visible={visible} total={incidents.length} nextCount={nextCount} onShowMore={showMore} />
+              </>
             )}
           </>
         )}
