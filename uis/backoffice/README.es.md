@@ -28,9 +28,13 @@ npm install
 npm run dev     # http://localhost:3001
 npm run lint
 npm run build
+npm test                # pruebas unitarias con Jest (__tests__/)
+npm run test:coverage   # lo mismo, con cobertura (informe en coverage/)
 ```
 
 `npm install` enlaza `@repo/brasa-core` desde `packages/brasa-core`, así que hay que ejecutarlo después de clonar el repositorio.
+
+Las pruebas de Jest cubren la lógica de autenticación de `lib/auth/` (`__tests__/auth/`, ticket AUTH-088) y las utilidades `lib/format.ts`, `toUserMessage` y `readJson` (`__tests__/utils/`, ticket FE-019). Cada carpeta se ejecuta sola con `npm test -- __tests__/auth` o `npm test -- __tests__/utils`. Qué prueba cada archivo y su cobertura están en [`services/brasaland-api/TESTING.es.md`](../../services/brasaland-api/TESTING.es.md#pruebas-del-backoffice-jest) y en su sección de FE-019.
 
 ## Sesión
 

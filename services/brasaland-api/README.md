@@ -72,28 +72,20 @@ The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is m
 ## Tests
 
 ```bash
-uv run pytest -v
+uv sync --extra dev    # pytest, pytest-cov and httpx
+uv run pytest          # all 806 tests
+uv run pytest --cov    # with coverage of app/ (98%)
 ```
 
-The 539 tests cover:
+The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 806 tests break down as follows:
 
-- **`core` (62):** configuration from the environment (missing or invalid variables, the API not starting without a key), password hashing and tokens (expired, signed with another key, tampered with, unsigned or missing claims; access and reset tokens), email sending, and error headers.
-- **Incident manager (71):** the exact briefing values and the lifecycle; every required field and every value that is not allowed, with 400 and its field; the filters; valid and rejected transitions; `/summary` with data and with an empty database; the 404; the generic 500 without internal details; seed loading without duplicates; and that suppliers and incidents share the file and its lock.
-- **`incidents`, analyzer (24):** file reading, the briefing values, the analysis JSON, the exported CSV, and every input error. The rules are also covered by the 32 tests of the console script (`scripts/incident-report/`), which uses the same service.
-- **`suppliers` (108):**
-  - the model, with the exact briefing fields and values, and every 422 rejection;
-  - the seeder: that it does not duplicate and that it reports the count on the console;
-  - the repository, including persistence and writes from two processes;
-  - every endpoint with its HTTP codes.
-- **`users` (79), `profiles` (30) and `auth` (71):**
-  - the briefing roles, the normalized email and the password limits;
-  - that plain text never reaches the file and that `name`, `phone` and `address` only live in the profile;
-  - the profile created with the user and deleted with it;
-  - `uv run create-admin`;
-  - sign-in with JSON and with a form, `get_current_user` (401 without a token, or with a malformed or expired one, or one for a deleted user; 403 if deactivated);
-  - every endpoint, including the 403 when a user tries to read, change or delete someone else's account or profile (an admin can read any profile, but not change it);
-  - password reset and change (AUTH-03).
-- **Protected routes (94):** the 13 `incidents` (analyzer and manager) and `suppliers` routes respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token, and work as before with a valid token. `/health` stays public, and no route is open other than the declared public ones. The existing `incidents` and `suppliers` tests send the token of a test user.
+- **Authentication unit tests (146, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
+- **Supplier and incident unit tests (101, `tests/suppliers/` and `tests/incidents/`, ticket API-042):** the logic of the 6 supplier endpoints and the 5 incident manager endpoints, without HTTP, with the three levels for each. On their own, they reach 84% coverage of both domains.
+- **HTTP integration (304, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier and incident endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
+- **`core` (72):** configuration from the environment (the API doesn't start without a key), password hashing and tokens, email sending, and error headers.
+- **`incidents` (51, `tests/domains/`):** the CSV analyzer service and the incident manager (model with the exact values, and repository: lifecycle, filters, `/summary` and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
+- **`suppliers` (67, `tests/domains/`):** the model with the briefing values, the seeder and the repository (including writes from two processes).
+- **`users`, `profiles` and `auth` (65, `tests/domains/`):** models, repositories (including writes from another process), the user service and `uv run create-admin`.
 
 Each test uses temporary TinyDB databases and its own configuration, so it never touches `storage/` or depends on `.env`.
 
@@ -149,7 +141,7 @@ app/
         ├── exceptions.py   # DuplicateSupplierError
         └── dependencies.py # Repository injection
 storage/                    # brasaland-db.json and auth-db.json (TinyDB); ignored by Git
-tests/                      # Mirrors the app/ structure
+tests/                      # Mirrors the app/ structure, plus auth/ (auth unit tests) and integration/ (HTTP; see TESTING.md)
 ```
 
 The incidents CSV rules live in the shared package [`packages/shared`](../../packages/shared/README.md) (`brasaland_shared.incidents`), which `scripts/incident-report/analyze.py` and `scripts/seed_incidents.py` also use. The API installs it as a local dependency (`[tool.uv.sources]` in `pyproject.toml`), so `uv sync` is enough; `incidents/service.py` only re-exports what the analyzer uses.
@@ -305,7 +297,7 @@ Ticket AUTH-03. Emails are sent with [Resend](https://resend.com), chosen over S
 - **`forgot-password`** takes `{email}`. If the email belongs to an active account, it creates a `<FRONTEND_URL>/reset-password?token=...` link and sends it **after responding** (`BackgroundTasks`). That way the response, and its timing, are the same whether or not the account exists. If the provider fails, it only goes to the log, without recipient or link. At most **3 links per account per hour** are sent; the rest are silently ignored.
 - **Link token:** a JWT signed with `SECRET_KEY`, with `sub`, `jti`, `iat`, `exp` and `purpose: "password_reset"`. It expires after `PASSWORD_RESET_EXPIRE_MINUTES` minutes. Its `jti` has a row in `password_resets`: once used, it is marked and stops working. Using a link also voids the user's other pending links. A reset token does not work as a session, and a session token does not work as a reset token.
 - **Inputs:** `reset-password` takes `{token, new_password}` and `change-password` takes `{current_password, new_password}`. The new password follows the same rules as sign-up.
-- **Sessions:** resetting or changing the password stores `password_changed_at`, and access tokens issued before it get 401 `session_revoked`. `change-password` returns a new token to stay in the current session and voids pending reset links. `iat` is in seconds, so a token issued in the same second as the change remains valid.
+- **Sessions:** resetting or changing the password (including through `PUT /users/{id}`) stores `password_changed_at`, and access tokens issued before it get 401 `session_revoked`. `change-password` returns a new token to stay in the current session; `PUT /users/{id}` doesn't, so whoever changes their own password there logs in again. Both void pending reset links. `iat` is in seconds, so a token issued in the same second as the change remains valid.
 - **Email:** HTML with inline styles, a single column of at most 600 px and a large button (readable on mobile), plus a plain-text version.
 - **Trying it without your own domain:** register a user with your Resend account's email, add `RESEND_API_KEY` to `.env` and call `forgot-password` with that email.
 
