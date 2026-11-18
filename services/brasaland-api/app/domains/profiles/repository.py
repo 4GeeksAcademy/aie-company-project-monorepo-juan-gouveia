@@ -9,6 +9,7 @@ from threading import RLock
 
 from tinydb import Query, TinyDB
 
+from app.core.storage import insert_with_file_id
 from app.domains.profiles.models import Profile, ProfileFields, ProfileUpdate
 
 PROFILES_TABLE = "profiles"
@@ -30,7 +31,8 @@ class ProfileRepository:
         values = (fields or ProfileFields()).model_dump(include={"name", "phone", "address"})
         profile = Profile(id=str(uuid.uuid4()), user_id=user_id, **values)
         with self._lock:
-            self._table.insert(profile.model_dump(mode="json"))
+            # doc_id desde el archivo: `uv run create-admin` puede insertar desde otro proceso.
+            insert_with_file_id(self._table, profile.model_dump(mode="json"))
         return profile
 
     def update_for_user(self, user_id: str, changes: ProfileUpdate) -> Profile | None:

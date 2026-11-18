@@ -28,6 +28,12 @@
   - **Rutas:** `/api/v1/auth`, `/api/v1/users` (registro público; el resto, la propia cuenta o admin; `GET /users`, `role` e `is_active` solo admin) y `/api/v1/profiles` (`/me`, y `/{user_id}`: leer el dueño o un admin, modificar solo el dueño; 403 en otro caso).
   - **Almacenamiento:** TinyDB en `storage/auth-db.json`, una instancia con un `RLock` compartido por los repositorios de usuarios y perfiles. Por directiva del briefing, usuarios y perfiles se quedan en TinyDB aunque llegue PostgreSQL; otros módulos guardan el `id` como `user_uuid`.
   - **Protección:** `main.py` registra `incidents` y `suppliers` con `dependencies=[Depends(get_current_user)]`. Solo son públicas `POST /auth/login`, `POST /users` y `GET /health`; `tests/test_protected_routes.py` lo comprueba sobre el esquema OpenAPI.
+- **Contraseñas y correo (ticket AUTH-03, rama `feature/password-reset`):**
+  - **Endpoints:** `POST /auth/forgot-password`, `/auth/reset-password/validate`, `/auth/reset-password` y `/auth/change-password`.
+  - **Token del enlace:** JWT `purpose: "password_reset"` con `jti`, más la tabla `password_resets` en `auth-db.json` (un solo uso; anula los pendientes). `decode_access_token_claims` rechaza JWT con `purpose`. `User.password_changed_at` revoca los tokens con `iat` anterior (401 `session_revoked`).
+  - **Correo:** `app/core/email.py` (`EmailSender`; `ResendEmailSender` con el SDK `resend`; `DisabledEmailSender` sin `RESEND_API_KEY`; `send_safely` en `BackgroundTasks`). Variables opcionales: `RESEND_API_KEY`, `EMAIL_FROM` (por defecto `onboarding@resend.dev`, que sin dominio solo entrega al email de la cuenta de Resend), `FRONTEND_URL` y `PASSWORD_RESET_EXPIRE_MINUTES` (15–60, por defecto 30).
+  - **Pruebas:** usan un emisor falso autouse (`conftest.py`).
+  - **TinyDB:** `app/core/storage.py` (`insert_with_file_id`) calcula el `doc_id` desde el archivo en `users`, `profiles` y `password_resets`, para no chocar con escrituras de otro proceso.
 - **Dominio `suppliers` (directorio de proveedores, milestone 09).**
   - **Rutas:** `POST/GET /api/v1/suppliers` (filtros `country` y `category`), `GET/DELETE /suppliers/{id}`, `PATCH /suppliers/{id}/rate` y `PATCH /suppliers/{id}/status`.
   - **Modelos (`models.py`):** Pydantic con enums que tienen los valores exactos del briefing. La moneda debe corresponder al país, `extra="forbid"`, y la tarifa es estricta y mayor que 0.
@@ -54,6 +60,7 @@
   - **`lib/api-client.ts`:** `apiFetch`/`apiJson` añaden `Authorization: Bearer` y convierten los errores en `ApiError` (`status`, `code`, `message`, `details`). Ante un 401, o un 403 `inactive_user`, borran el token y redirigen a `/login?next=&reason=`, salvo con `endSessionOnAuthError: false` (login y registro).
   - **Rutas:** grupos `app/(protegido)/` (portada y herramientas) y `app/(publico)/` (`/login`, `/register`); las URL no cambian. El layout protegido usa `SessionProvider`, un guard en el cliente: sin token redirige y con token valida con `GET /auth/me` antes de mostrar nada. `ProtectedShell` y `AccountMenu` completan la cabecera; `useSession()` da acceso al usuario.
   - **Sin `proxy.ts`:** el servidor no puede leer `localStorage`.
+  - **Recuperación de contraseña (AUTH-03, rama `feature/password-reset`):** `/forgot-password` y `/reset-password` en `(publico)`. `/reset-password` comprueba el enlace al abrirse y declara `referrer: no-referrer`. `lib/auth/validation.ts` reúne las reglas de contraseña (`passwordError`, `validateNewPassword`) y `mergeFieldErrors`. Pendiente: `/account/change-password`.
   - **Perfil:** `/account/profile` (`components/account/`) usa el usuario de `useSession()` y guarda con `PUT /profiles/me`, enviando solo los campos cambiados (vacío → `null`). Después actualiza la sesión con `setUser`.
 - **Sigue pendiente:** la base de datos definitiva (TinyDB es provisional) y el resto de dominios. El website leerá locales y menú desde el servidor y el alta de Brasa Points se conectará a `POST /loyalty/enrollments`. No describir estas integraciones como implementadas.
 
@@ -212,4 +219,4 @@ Se usa `eslint-config-next` con las variantes `core-web-vitals` y `typescript`, 
 
 ---
 
-_Actualizado: 2026-11-04_
+_Actualizado: 2026-11-06_

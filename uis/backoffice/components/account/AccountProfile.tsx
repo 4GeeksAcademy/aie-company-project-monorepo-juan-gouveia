@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import ProfileForm from "@/components/account/ProfileForm";
 import FormAlert from "@/components/auth/FormAlert";
 import { useSession } from "@/hooks/useSession";
@@ -25,6 +26,12 @@ export default function AccountProfile() {
           <dt className="font-semibold text-red-700">Email</dt>
           <dd className="break-all">{user.email}</dd>
         </dl>
+        <Link
+          href="/account/change-password"
+          className="mt-4 inline-block text-sm font-semibold text-red-700 underline hover:text-red-800"
+        >
+          Cambiar contraseña
+        </Link>
       </section>
 
       <section aria-labelledby="profile-heading" className="rounded-lg border border-red-200 bg-white p-4 shadow-md md:p-6">

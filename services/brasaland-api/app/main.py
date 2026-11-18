@@ -23,7 +23,10 @@ logger = logging.getLogger("uvicorn.error")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Sin SECRET_KEY ni ACCESS_TOKEN_EXPIRE_MINUTES válidas, la API no arranca (ConfigError dice cuál falta).
-    get_settings()
+    settings = get_settings()
+    if not settings.email_enabled:
+        # AUTH-03: sin clave de Resend la API funciona, pero no envía los enlaces de restablecimiento.
+        logger.warning("Envío de correos desactivado: falta RESEND_API_KEY. /auth/forgot-password no enviará enlaces.")
 
     # El directorio de proveedores nunca arranca vacío: si la tabla no tiene datos, se siembra.
     # Se respeta dependency_overrides para que las pruebas usen su propia base temporal.
@@ -40,7 +43,8 @@ register_error_handlers(app)
 PROTECTED = [Depends(get_current_user)]
 app.include_router(incidents_router, prefix=API_PREFIX, dependencies=PROTECTED)
 app.include_router(suppliers_router, prefix=API_PREFIX, dependencies=PROTECTED)
-# Autenticación (AUTH-01): login, usuarios (solo credenciales) y perfiles.
+# Autenticación (AUTH-01): login, usuarios (solo credenciales) y perfiles. AUTH-03 añade a /auth el
+# restablecimiento (público) y el cambio (protegido) de contraseña.
 app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(profiles_router, prefix=API_PREFIX)

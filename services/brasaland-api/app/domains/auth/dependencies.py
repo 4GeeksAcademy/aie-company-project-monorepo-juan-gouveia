@@ -3,8 +3,8 @@
 `get_current_user` es la pieza reutilizable que protege una ruta: basta con declararla como
 dependencia (en el endpoint o al registrar un router) para que la ruta exija un token válido.
 
-- Sin token, token mal formado, firma incorrecta, caducado o de un usuario que ya no existe → 401,
-  con la cabecera `WWW-Authenticate: Bearer`.
+- Sin token, token mal formado, firma incorrecta, caducado, de un usuario que ya no existe o
+  emitido antes del último cambio de contraseña → 401, con la cabecera `WWW-Authenticate: Bearer`.
 - Token válido de un usuario desactivado, o acceso a un recurso ajeno → 403.
 """
 
@@ -13,7 +13,8 @@ from fastapi.security import OAuth2PasswordBearer
 
 from app.core.config import API_PREFIX
 from app.core.errors import ApiError
-from app.core.security import InvalidTokenError, TokenExpiredError, decode_access_token
+from app.core.security import InvalidTokenError, TokenExpiredError, decode_access_token_claims
+from app.domains.auth.passwords import is_token_revoked
 from app.domains.users.database import AuthStore
 from app.domains.users.dependencies import get_auth_store
 from app.domains.users.models import Role, User
@@ -42,16 +43,19 @@ def get_current_user(
             "not_authenticated", "Inicia sesión: falta el token de acceso (cabecera Authorization: Bearer <token>)."
         )
     try:
-        user_id = decode_access_token(token)
+        claims = decode_access_token_claims(token)
     except TokenExpiredError:
         raise unauthorized("token_expired", "La sesión caducó. Inicia sesión de nuevo.") from None
     except InvalidTokenError:
         raise unauthorized("invalid_token", "El token de acceso no es válido.") from None
 
-    user = store.users.get(user_id)
+    user = store.users.get(claims.subject)
     if user is None:
         # Firma válida, pero el usuario se eliminó después de emitir el token.
         raise unauthorized("invalid_token", "El token de acceso no es válido.")
+    if is_token_revoked(user, claims.issued_at):
+        # La contraseña cambió después de emitir el token (AUTH-03): esa sesión ya no vale.
+        raise unauthorized("session_revoked", "Tu contraseña cambió. Inicia sesión de nuevo.")
     if not user.is_active:
         raise ApiError(403, "inactive_user", "Esta cuenta está desactivada. Contacta con un administrador.")
     return user

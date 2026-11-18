@@ -7,6 +7,7 @@ from threading import RLock
 
 from tinydb import Query, TinyDB
 
+from app.core.storage import insert_with_file_id
 from app.domains.users.models import User
 
 USERS_TABLE = "users"
@@ -36,8 +37,10 @@ class UserRepository:
         return None if document is None else User(**document)
 
     def insert(self, user: User) -> None:
+        # Sin campos None: `password_changed_at` solo aparece cuando la contraseña cambia (AUTH-03).
         with self._lock:
-            self._table.insert(user.model_dump(mode="json"))
+            # doc_id desde el archivo: `uv run create-admin` puede insertar desde otro proceso.
+            insert_with_file_id(self._table, user.model_dump(mode="json", exclude_none=True))
 
     def update(self, user_id: str, changes: dict) -> User | None:
         """Aplica cambios ya validados y serializados. None si el usuario no existe."""

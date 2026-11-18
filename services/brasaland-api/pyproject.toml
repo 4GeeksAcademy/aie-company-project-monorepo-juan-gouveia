@@ -16,6 +16,7 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     # Hash de contraseñas con bcrypt. Fork mantenido de passlib: se importa como `passlib`.
     "libpass[bcrypt]>=1.9.4",
+    "resend>=2.52.0",
 ]
 
 [project.scripts]

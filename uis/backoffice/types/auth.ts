@@ -19,6 +19,12 @@ export interface Token {
   token_type: "bearer";
 }
 
+// Respuesta de POST /auth/change-password (AUTH-03): los tokens anteriores dejan de valer y este
+// los sustituye.
+export interface PasswordChanged extends Token {
+  message: string;
+}
+
 // Respuesta de GET /auth/me.
 export interface CurrentUser {
   id: string;

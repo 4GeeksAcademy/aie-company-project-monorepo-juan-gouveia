@@ -98,9 +98,12 @@ class User(UserPublic):
     """Usuario guardado en TinyDB. Solo lo usan el repositorio, los servicios y la autenticación."""
 
     hashed_password: str
+    # Último cambio o restablecimiento de contraseña (AUTH-03), en segundos enteros. Los tokens de
+    # acceso emitidos antes dejan de valer. None en las cuentas que nunca la han cambiado.
+    password_changed_at: datetime | None = None
 
     def to_public(self) -> UserPublic:
-        return UserPublic(**self.model_dump(exclude={"hashed_password"}))
+        return UserPublic(**self.model_dump(exclude={"hashed_password", "password_changed_at"}))
 
 
 class UserWithProfile(UserPublic):

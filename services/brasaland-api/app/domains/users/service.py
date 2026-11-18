@@ -2,7 +2,8 @@
 
 Reglas que aplica:
 - La contraseña se hashea aquí, antes de llegar al repositorio; el texto plano nunca se guarda.
-- Crear un usuario crea su perfil en la misma operación, y borrarlo borra también su perfil.
+- Crear un usuario crea su perfil en la misma operación, y borrarlo borra también su perfil y sus
+  enlaces de restablecimiento de contraseña.
 - El email es único (409 en el router).
 
 Los permisos (quién puede cambiar qué) los comprueba el router: estas funciones solo aplican cambios.
@@ -78,6 +79,7 @@ def delete_user(store: AuthStore, user_id: str) -> User | None:
         user = store.users.delete(user_id)
         if user is not None:
             store.profiles.delete_for_user(user_id)
+            store.password_resets.delete_for_user(user_id)
     return user
 
 

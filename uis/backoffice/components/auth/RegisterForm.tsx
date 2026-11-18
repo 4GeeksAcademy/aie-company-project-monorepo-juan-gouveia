@@ -16,6 +16,7 @@ import {
   MAX_NAME_LENGTH,
   MAX_PHONE_LENGTH,
   MIN_PASSWORD_LENGTH,
+  mergeFieldErrors,
   validateRegister,
   type FieldErrors,
   type RegisterValues,
@@ -41,7 +42,7 @@ export default function RegisterForm() {
   const [createdWithoutSession, setCreatedWithoutSession] = useState(false);
 
   const errors = attempted ? validateRegister(values) : {};
-  const shown = { ...errors, ...apiFields };
+  const shown = mergeFieldErrors(errors, apiFields);
 
   function setField(field: keyof RegisterValues, value: string) {
     setValues((prev) => ({ ...prev, [field]: value }));

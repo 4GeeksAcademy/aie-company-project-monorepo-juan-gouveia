@@ -12,6 +12,7 @@ from threading import RLock
 
 from tinydb import TinyDB
 
+from app.domains.auth.repository import PasswordResetRepository
 from app.domains.profiles.repository import ProfileRepository
 from app.domains.users.repository import UserRepository
 
@@ -31,7 +32,8 @@ def open_auth_db(path: Path) -> TinyDB:
 
 
 class AuthStore:
-    """Un archivo, un bloqueo y los dos repositorios que lo comparten."""
+    """Un archivo, un bloqueo y los repositorios que lo comparten: usuarios, perfiles y enlaces de
+    restablecimiento de contraseña."""
 
     def __init__(self, db: TinyDB):
         self._db = db
@@ -40,6 +42,7 @@ class AuthStore:
         self.lock = RLock()
         self.users = UserRepository(db, self.lock)
         self.profiles = ProfileRepository(db, self.lock)
+        self.password_resets = PasswordResetRepository(db, self.lock)
 
     @classmethod
     def from_path(cls, path: Path) -> "AuthStore":

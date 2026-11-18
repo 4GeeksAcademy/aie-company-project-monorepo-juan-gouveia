@@ -21,6 +21,17 @@ export interface RegisterValues extends LoginValues {
 
 export type FieldErrors<T> = Partial<Record<keyof T, string>>;
 
+// Errores que se muestran: los de la validación local y, encima, los de la API. Solo cuentan los
+// errores de la API que tienen texto: al editar un campo, su error de la API queda en undefined y
+// no debe tapar el error local de ese campo.
+export function mergeFieldErrors<T>(local: FieldErrors<T>, api: FieldErrors<T>): FieldErrors<T> {
+  const merged: FieldErrors<T> = { ...local };
+  for (const key of Object.keys(api) as (keyof T)[]) {
+    if (api[key]) merged[key] = api[key];
+  }
+  return merged;
+}
+
 // Comprobación básica; la definitiva la hace la API.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,20 +42,58 @@ export function validateLogin(values: LoginValues): FieldErrors<LoginValues> {
   return errors;
 }
 
+// Error del email, o null si es válido.
+export function emailError(value: string): string | null {
+  const email = value.trim();
+  if (!email) return "Escribe tu email.";
+  if (!EMAIL_PATTERN.test(email)) return "No es un email válido.";
+  return null;
+}
+
+// Mismas reglas que la API para una contraseña nueva (registro, restablecimiento y cambio).
+export function passwordError(password: string): string | null {
+  if (!password) return "Escribe una contraseña.";
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+  }
+  if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {
+    return `La contraseña no puede superar ${MAX_PASSWORD_BYTES} bytes.`;
+  }
+  return null;
+}
+
 export function validateRegister(values: RegisterValues): FieldErrors<RegisterValues> {
   const errors: FieldErrors<RegisterValues> = {};
-  const email = values.email.trim();
+  const email = emailError(values.email);
+  if (email) errors.email = email;
+  const password = passwordError(values.password);
+  if (password) errors.password = password;
+  return errors;
+}
 
-  if (!email) errors.email = "Escribe tu email.";
-  else if (!EMAIL_PATTERN.test(email)) errors.email = "No es un email válido.";
+// Contraseña nueva con confirmación (restablecimiento y cambio, AUTH-03). Se comprueba que
+// coinciden antes de llamar a la API, como pide el ticket.
+export interface NewPasswordValues {
+  newPassword: string;
+  confirmPassword: string;
+}
 
-  if (!values.password) {
-    errors.password = "Escribe una contraseña.";
-  } else if (values.password.length < MIN_PASSWORD_LENGTH) {
-    errors.password = `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`;
-  } else if (new TextEncoder().encode(values.password).length > MAX_PASSWORD_BYTES) {
-    errors.password = `La contraseña no puede superar ${MAX_PASSWORD_BYTES} bytes.`;
-  }
+export function validateNewPassword(values: NewPasswordValues): FieldErrors<NewPasswordValues> {
+  const errors: FieldErrors<NewPasswordValues> = {};
+  const password = passwordError(values.newPassword);
+  if (password) errors.newPassword = password;
+  if (!values.confirmPassword) errors.confirmPassword = "Repite la contraseña nueva.";
+  else if (values.confirmPassword !== values.newPassword) errors.confirmPassword = "Las contraseñas no coinciden.";
+  return errors;
+}
 
+// Cambio de contraseña con sesión: la actual, más la nueva con su confirmación.
+export interface ChangePasswordValues extends NewPasswordValues {
+  currentPassword: string;
+}
+
+export function validateChangePassword(values: ChangePasswordValues): FieldErrors<ChangePasswordValues> {
+  const errors: FieldErrors<ChangePasswordValues> = validateNewPassword(values);
+  if (!values.currentPassword) errors.currentPassword = "Escribe tu contraseña actual.";
   return errors;
 }

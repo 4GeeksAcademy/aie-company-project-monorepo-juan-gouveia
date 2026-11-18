@@ -11,11 +11,13 @@ Brasaland's central API, built with FastAPI and organized by domain as described
 ## Status
 
 - **Implemented:** the `incidents` and `suppliers` domains, authentication (`/auth`, `/users`, `/profiles`) and `GET /health`.
-- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up) and `GET /health`. That includes the 2 `incidents` routes and the 6 `suppliers` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
+- **Passwords (AUTH-03, branch `feature/password-reset`):** reset by email (Resend) and change while signed in. See [Password reset and change](#password-reset-and-change).
+- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03) and `GET /health`. That includes the 2 `incidents` routes and the 6 `suppliers` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
 - **Storage:**
   - The latest incident analysis is kept in memory and is lost when the API restarts.
   - Suppliers are stored in a TinyDB file, `storage/brasaland-db.json`, which survives restarts. TinyDB is temporary for them until Postgres with an ORM exists.
-  - Users and profiles are stored in another TinyDB file, `storage/auth-db.json`. As the briefing requires, they will stay in TinyDB even after PostgreSQL arrives.
+  - Users, profiles and password reset links (`password_resets`) are stored in another TinyDB file, `storage/auth-db.json`. As the briefing requires, users and profiles will stay in TinyDB even after PostgreSQL arrives.
+  - Inserts into that file compute the document ID by reading the file, so they do not clash with writes from another process (for example, `uv run create-admin` while the API is running).
   - In every domain, only `repository.py` and `database.py` know about storage.
 
 ## Requirements
@@ -61,6 +63,10 @@ The API **does not start** if `SECRET_KEY` or `ACCESS_TOKEN_EXPIRE_MINUTES` is m
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Yes | Minutes an access token is valid (integer greater than 0) |
 | `AUTH_DB_PATH` | No | TinyDB file for users and profiles; defaults to `storage/auth-db.json` |
 | `BRASALAND_DB_PATH` | No | TinyDB file for suppliers; defaults to `storage/brasaland-db.json` |
+| `RESEND_API_KEY` | No | [Resend](https://resend.com/api-keys) API key with "Sending access". **It is a secret: it only goes in `.env`.** Without it, the API starts, logs a warning and does not send password reset emails |
+| `EMAIL_FROM` | No | Sender of the emails; defaults to `Brasaland <onboarding@resend.dev>`. Without a verified domain in Resend, that sender only delivers to the Resend account's email |
+| `FRONTEND_URL` | No | Backoffice address, used for the `<FRONTEND_URL>/reset-password?token=...` link; defaults to `http://localhost:3001` |
+| `PASSWORD_RESET_EXPIRE_MINUTES` | No | Minutes a reset link stays valid, between 15 and 60; defaults to 30. With a value outside that range, the API does not start |
 
 ## Tests
 
@@ -94,14 +100,20 @@ Each test uses temporary TinyDB databases and its own configuration, so it never
 app/
 ├── main.py                 # Creates the app, GET /health, registers routers under /api/v1, validates configuration and seeds on startup
 ├── core/
-│   ├── config.py           # Environment variables (SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES) and API_PREFIX
-│   ├── security.py         # bcrypt password hashing and JWT signing/validation
+│   ├── config.py           # Environment variables (JWT, email and password reset) and API_PREFIX
+│   ├── security.py         # bcrypt hashing and JWTs: access tokens and reset tokens (purpose, jti)
+│   ├── email.py            # EmailMessage and senders: Resend, or disabled without RESEND_API_KEY
+│   ├── storage.py          # insert_with_file_id: TinyDB doc_id computed from the file
 │   └── errors.py           # Single error format
 └── domains/
     ├── auth/
-    │   ├── router.py       # POST /auth/login and GET /auth/me
+    │   ├── router.py       # Login, /auth/me and forgot/reset/change-password
     │   ├── dependencies.py # get_current_user, require_admin and the "your own account or admin" rule
-    │   └── schemas.py      # LoginRequest, Token, CurrentUser
+    │   ├── schemas.py      # LoginRequest, Token, CurrentUser and password inputs
+    │   ├── passwords.py    # Password reset and change; hourly limit
+    │   ├── emails.py       # Password reset email (HTML and text)
+    │   ├── models.py       # PasswordReset
+    │   └── repository.py   # password_resets table
     ├── users/
     │   ├── models.py       # Role, User, UserCreate, UserUpdate, UserPublic
     │   ├── database.py     # TinyDB for users and profiles (auth-db.json) with a shared lock
@@ -237,6 +249,24 @@ No route that exposes or changes sensitive data may respond without a valid sess
 - **403 between users:** a non-admin user gets 403 when accessing another account, whether or not that ID exists, so that existing IDs are not revealed.
 - **First administrator:** `uv run create-admin` asks for the email and the password (without showing it) and creates the admin. If the email already exists, it makes that user an admin and reactivates them without changing their password. After that, an admin changes roles with `PUT /users/{id}`.
 
+### Password reset and change
+
+Ticket AUTH-03. Emails are sent with [Resend](https://resend.com), chosen over SendGrid because its free plan does not expire and it lets you complete the flow without your own domain. The full reasons are in `docs/BRIEFING_DIVERGENCES.md`.
+
+| Endpoint | Access | Success | Errors |
+|---|---|---|---|
+| `POST /api/v1/auth/forgot-password` | Public | Always 200, with the same message | 422 if the email is not valid |
+| `POST /api/v1/auth/reset-password/validate` | Public | 200 if the link works (it is not consumed) | 400 `invalid_reset_token`, `reset_token_expired` or `reset_token_used`; 422 |
+| `POST /api/v1/auth/reset-password` | Public | 200 | 400 (same codes); 422 if the new password breaks the rules |
+| `POST /api/v1/auth/change-password` | Token | 200 with a new access token | 400 `invalid_current_password`, 401, 422 |
+
+- **`forgot-password`** takes `{email}`. If the email belongs to an active account, it creates a `<FRONTEND_URL>/reset-password?token=...` link and sends it **after responding** (`BackgroundTasks`). That way the response, and its timing, are the same whether or not the account exists. If the provider fails, it only goes to the log, without recipient or link. At most **3 links per account per hour** are sent; the rest are silently ignored.
+- **Link token:** a JWT signed with `SECRET_KEY`, with `sub`, `jti`, `iat`, `exp` and `purpose: "password_reset"`. It expires after `PASSWORD_RESET_EXPIRE_MINUTES` minutes. Its `jti` has a row in `password_resets`: once used, it is marked and stops working. Using a link also voids the user's other pending links. A reset token does not work as a session, and a session token does not work as a reset token.
+- **Inputs:** `reset-password` takes `{token, new_password}` and `change-password` takes `{current_password, new_password}`. The new password follows the same rules as sign-up.
+- **Sessions:** resetting or changing the password stores `password_changed_at`, and access tokens issued before it get 401 `session_revoked`. `change-password` returns a new token to stay in the current session and voids pending reset links. `iat` is in seconds, so a token issued in the same second as the change remains valid.
+- **Email:** HTML with inline styles, a single column of at most 600 px and a large button (readable on mobile), plus a plain-text version.
+- **Trying it without your own domain:** register a user with your Resend account's email, add `RESEND_API_KEY` to `.env` and call `forgot-password` with that email.
+
 ### Try it in `/docs`
 
 1. `POST /api/v1/users` with `{"email": "...", "password": "..."}`.
@@ -266,6 +296,9 @@ Every error responds with the format `{"error": {"code": "...", "message": "..."
 | The access token is missing | 401 | `not_authenticated` |
 | Malformed token, signed with another key, or for a deleted user | 401 | `invalid_token` |
 | Expired token | 401 | `token_expired` |
+| Token issued before the last password change | 401 | `session_revoked` |
+| Password reset link not valid, expired or already used | 400 | `invalid_reset_token`, `reset_token_expired`, `reset_token_used` |
+| Wrong current password in `change-password` | 400 | `invalid_current_password` |
 | Wrong email or password at sign-in | 401 | `invalid_credentials` |
 | Deactivated account | 403 | `inactive_user` |
 | Access to another account, or an admin-only operation | 403 | `forbidden` |
