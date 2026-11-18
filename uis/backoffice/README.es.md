@@ -64,7 +64,7 @@ Cómo funciona:
 
 | Ruta | Herramienta | Datos |
 |---|---|---|
-| `/` | Portada con una tarjeta por herramienta | `lib/tools.ts` |
+| `/` | Portada con las herramientas agrupadas en las mismas secciones que el menú (Inventario, Proveedores, Incidencias y Herramientas), una tarjeta por herramienta | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidatos, status, stage y notas | API REST |
 | `/incidencias` | Análisis de incidencias: sube el CSV de Operaciones, muestra el resumen y los registros inválidos con su motivo, y descarga `results.csv` | API de Brasaland, a través del intermediario |
 | `/gestor-incidencias` | Gestor de incidencias: resumen (totales por estado, categoría, origen y sede, de `GET /incidents/summary`) y listado con filtros por `status`, `origin` y `branch`, de la más reciente a la más antigua. Cada bloque tiene su propia carga y su error con "Reintentar", así que un fallo del resumen no rompe el listado. Lista vacía y "sin resultados con los filtros" tienen su mensaje. Cada incidencia cambia de estado desde el listado (solo las transiciones válidas): el cambio se ve al momento y, si la API lo rechaza o falla, vuelve al estado anterior y avisa. Las fechas se muestran en UTC, porque el histórico se cargó como medianoche UTC | API de Brasaland (dominio `incidents`, TinyDB), a través del intermediario |
@@ -80,7 +80,7 @@ Cómo funciona:
 
 1. Crea su ruta en `app/(protegido)/<herramienta>/`, para que exija sesión. El grupo no cambia la URL.
 2. Pon sus archivos propios en `components/<herramienta>/` y `lib/<herramienta>/`. Las piezas reutilizables van directamente en `components/`.
-3. Añade una entrada en `lib/tools.ts`. La portada y la navegación se generan desde esa lista.
+3. Añade una entrada en `lib/tools.ts`, dentro de su sección de `toolSections`. La portada y la navegación se generan desde esa lista: una sección con una sola herramienta es un enlace directo en la cabecera; con varias, un desplegable (`components/NavDropdown.tsx`).
 
 Las áreas internas, incluida la formación, se incorporan aquí como herramientas, no como aplicaciones aparte. Más adelante, cada entrada de `lib/tools.ts` podrá declarar el permiso que necesita y la lista se filtrará con `GET /auth/me`. Ese filtro solo afectará a la interfaz: la autorización real está en la API.
 
@@ -112,6 +112,6 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
 - **`/incidencias` descarga el último análisis de la API:** se guarda en memoria, así que si la API se reinicia hay que volver a subir el archivo, y si dos personas analizan a la vez, se descarga el más reciente.
 - **`/proveedores` escribe en la base local de la API:** las altas y los cambios de tarifa o estado se guardan en `services/brasaland-api/storage/brasaland-db.json`. Para volver a los datos iniciales, borra ese archivo y reinicia la API. La interfaz no ofrece borrar proveedores: el flujo habitual es suspenderlos.
 - **`/inventario` escribe en la base de la API:** con la API configurada contra Supabase, cada entrada o salida cambia el stock real y no se puede borrar (se corrige con una orden compensatoria). Para probar, arranca la API con una `DATABASE_URL` temporal (por ejemplo, SQLite). El stock de la salida se refresca al elegir el ingrediente y tras cada envío, no en tiempo real: la API aplica la regla con el stock del momento.
-- **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). En móvil y tablet (por debajo de `xl`) no se muestran los enlaces a herramientas, porque con 7 herramientas no caben junto al menú de cuenta; se navega desde la portada (el logo lleva a ella). Por debajo de `xl`, "Mi perfil" y "Cerrar sesión" se muestran solo como iconos.
+- **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). Desde `xl`, la cabecera muestra el menú por secciones; por debajo no cabe junto a la cuenta, así que se usa un menú hamburguesa (`components/MobileNav.tsx`) cuyo panel se superpone a la página bajo la cabecera, sin cambiar su altura. "Mi perfil" y "Cerrar sesión" se muestran solo como iconos en todos los tamaños; en escritorio, un tooltip (`components/Tooltip.tsx`) muestra el nombre del usuario (o su email) y "Cerrar sesión" al pasar el ratón o llegar con el teclado.
 - **API compartida:** el tracker usa una API de playground compartida, así que evita escrituras de prueba. Esa API es de terceros y no recibe el token de sesión.
 - **Tras mover rutas, `tsc` puede fallar con tipos antiguos de `.next`:** se arregla borrando `.next`, que es un artefacto generado.

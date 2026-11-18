@@ -64,7 +64,7 @@ How it works:
 
 | Route | Tool | Data |
 |---|---|---|
-| `/` | Home page with a card for each tool | `lib/tools.ts` |
+| `/` | Home page with the tools grouped in the same sections as the menu (Inventario, Proveedores, Incidencias and Herramientas), one card per tool | `lib/tools.ts` |
 | `/talento` | Talent Pipeline Tracker: candidates, status, stage, and notes | REST API |
 | `/incidencias` | Incident analysis: uploads the Operations CSV, shows the summary and the invalid records with their reason, and downloads `results.csv` | Brasaland API, through the intermediary |
 | `/gestor-incidencias` | Incident manager: summary (totals by status, category, origin and location, from `GET /incidents/summary`) and a list filtered by `status`, `origin` and `branch`, newest first. Each block has its own loading state and error with "Reintentar", so a summary failure does not break the list. An empty list and "no results for the filters" have their own message. Each incident changes status from the list (valid transitions only): the change shows at once and, if the API rejects it or fails, it goes back to the previous status and warns. Dates are shown in UTC, because the history was loaded as midnight UTC | Brasaland API (`incidents` domain, TinyDB), through the intermediary |
@@ -80,7 +80,7 @@ How it works:
 
 1. Create its route in `app/(protegido)/<tool>/`, so it requires a session. The group does not change the URL.
 2. Put its own files in `components/<tool>/` and `lib/<tool>/`. Reusable pieces stay directly in `components/`.
-3. Add an entry to `lib/tools.ts`. The home page and navigation are generated from that list.
+3. Add an entry to `lib/tools.ts`, inside its section in `toolSections`. The home page and navigation are generated from that list: a section with a single tool is a direct link in the header; one with several is a dropdown (`components/NavDropdown.tsx`).
 
 Internal areas, including training, join this project as tools, not as separate applications. Later on, each `lib/tools.ts` entry may declare the permission it needs, and the list will be filtered with `GET /auth/me`. That filter will only affect the interface: real authorization lives in the API.
 
@@ -112,6 +112,6 @@ Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client
 - **`/incidencias` downloads the API's latest analysis:** it is kept in memory, so if the API restarts the file must be uploaded again, and if two people analyze at the same time, the most recent one is downloaded.
 - **`/proveedores` writes to the API's local database:** registrations and rate or status changes are saved in `services/brasaland-api/storage/brasaland-db.json`. To go back to the initial data, delete that file and restart the API. The interface does not offer deleting suppliers: the usual flow is to suspend them.
 - **`/inventario` writes to the API's database:** with the API configured against Supabase, every inbound or outbound order changes the real stock and cannot be deleted (it is corrected with a compensating order). For testing, start the API with a temporary `DATABASE_URL` (for example, SQLite). The outbound stock refreshes when the ingredient is chosen and after each submission, not in real time: the API applies the rule with the stock at that moment.
-- **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). Tool links are hidden on mobile and tablet (below `xl`), because with 7 tools they do not fit next to the account menu; staff navigate from the home page (the logo leads there). Below `xl`, "Mi perfil" and "Cerrar sesión" are shown as icons only.
+- **Header height:** `FilterBar` depends on the fixed header height (57 px on mobile and 89 px from `md`). From `xl`, the header shows the menu by sections; below that it does not fit next to the account, so a hamburger menu (`components/MobileNav.tsx`) is used, whose panel overlays the page under the header without changing its height. "Mi perfil" and "Cerrar sesión" are shown as icons only at every size; on desktop, a tooltip (`components/Tooltip.tsx`) shows the user's name (or email) and "Cerrar sesión" on hover or keyboard focus.
 - **Shared API:** the tracker uses a shared playground API, so avoid test writes against it. That API is a third party and does not receive the session token.
 - **After moving routes, `tsc` may fail on stale `.next` types:** delete `.next`, which is a generated artifact.

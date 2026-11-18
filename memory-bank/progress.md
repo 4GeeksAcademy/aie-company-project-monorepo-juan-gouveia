@@ -105,9 +105,16 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Verificación:** `npm test` 159 pasan (69 de inventario); `tsc`, `lint` y `build` pasan. En vivo contra una API temporal (SQLite y TinyDB fuera del repositorio), sin tocar Supabase.
 - **Documentación:** `docs/BRIEFING_DIVERGENCES.md`, sección "Inventario en el backoffice" (divergencias, decisiones y tabla de los 10 criterios); README del backoffice.
 - **Ajustes tras el plan (commit aparte):** pestañas del inventario en dos líneas en móvil, y Proveedor de la entrada como lista de los proveedores activos del directorio, filtrada por el país y la categoría equivalente del ingrediente (`lib/inventory-suppliers.ts`).
-- **Siguiente:** abrir el PR contra `feature/inventory-orm`. Los cambios de cabecera y menú (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) van en una rama aparte, creada desde esta.
+- **PR:** #15, abierto el 2026-11-16 contra `feature/inventory-orm` mientras el #14 no se fusione. Los cambios de cabecera y menú (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) van en la rama `feature/backoffice-navigation`, creada desde esta.
 
-**Pull requests (comprobados en GitHub el 2026-11-14).** Forman una cadena: cada PR parte de la rama del anterior.
+**Navegación del backoffice completada en la rama `feature/backoffice-navigation`**, creada desde `feature/inventory-frontend` (`3c7fe3d`) el 2026-11-16 porque el PR #15 sigue abierto. Sin ticket; un commit por cambio:
+
+- **Cuenta:** "Mi perfil" y "Cerrar sesión" solo con iconos en todos los tamaños, con un tooltip propio (`components/Tooltip.tsx`) al pasar el ratón o llegar con el teclado.
+- **Menú por secciones:** `lib/tools.ts` agrupa las herramientas en `toolSections` (Inventario, Proveedores, Incidencias y Herramientas). En la cabecera, las secciones con varias herramientas son desplegables (`components/NavDropdown.tsx`), y la portada muestra las mismas secciones.
+- **Menú hamburguesa** por debajo de `xl` (`components/MobileNav.tsx`): panel superpuesto bajo la cabecera, sin cambiar su altura. Ya se puede navegar desde cualquier página en móvil y tablet, así que la divergencia del menú del gestor de incidencias queda resuelta (`docs/BRIEFING_DIVERGENCES.md`).
+- **Siguiente:** abrir el PR contra `feature/inventory-frontend`.
+
+**Pull requests (comprobados en GitHub el 2026-11-16).** Forman una cadena: cada PR parte de la rama del anterior.
 
 | PR | Rama → destino | Estado |
 |---|---|---|
@@ -120,8 +127,9 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 | #12 Auditoría de gestión de errores | `feature/error-handling-audit` → `feature/incident-manager` | ⏳ Abierto |
 | #13 AUTH-088 (pruebas, API-042 y FE-019) | `feature/auth-tests` → `feature/error-handling-audit` | ⏳ Abierto (2026-11-10) |
 | #14 Hito 5: inventario con SQLModel y Supabase | `feature/inventory-orm` → `feature/auth-tests` | ⏳ Abierto (2026-11-14) |
+| #15 Hito 5, fase frontend: inventario en el backoffice | `feature/inventory-frontend` → `feature/inventory-orm` | ⏳ Abierto (2026-11-16) |
 
-- **Orden de merge:** #8, #9, #10, #11, #12, #13 y #14, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
+- **Orden de merge:** #8, #9, #10, #11, #12, #13, #14 y #15, con "Create a merge commit" (sin squash ni rebase), para que los PR siguientes no repitan commits ni den conflictos. Al fusionar cada uno hay que borrar su rama de origen ("Delete branch"): así GitHub cambia a `main` el destino del siguiente PR.
 - **Ramas:** `features/csv-reader` ya está borrada (local y GitHub). `directorio-prov` sigue en ambos sitios; ya no la usa ningún PR y puede borrarse cuando el desarrollador decida. El `main` local va por detrás de `origin/main`.
 
 ### 1. Contexto y Configuración Inicial
@@ -257,7 +265,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). Queda abrir el PR contra `feature/inventory-orm`. Después, en una rama aparte: iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
+0. **Hito 5, fase frontend: inventario en el backoffice (rama `feature/inventory-frontend`)** — Fases 0 a 5 y ajustes (pestañas en móvil y Proveedor como lista del directorio) completados y verificados contra una API temporal (2026-11-16). PR #15 abierto contra `feature/inventory-orm`. La navegación del backoffice (iconos de la cuenta, menú agrupado y hamburguesa en móvil y tablet) está completa en `feature/backoffice-navigation`; queda abrir su PR contra `feature/inventory-frontend`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Inventario en el backoffice").
 
 0. **Hito 5: gestión de inventario con ORM (rama `feature/inventory-orm`)** — Completado y verificado en vivo contra Supabase (2026-11-14): dominio `inventory`, semilla cargada y 916 pruebas. PR #14 abierto contra `feature/auth-tests` mientras el #13 no se fusione. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Gestión de inventario con ORM").
 

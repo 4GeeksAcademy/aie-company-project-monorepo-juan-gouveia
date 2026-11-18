@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { tools } from "@/lib/tools";
+import MobileNav from "@/components/MobileNav";
+import NavDropdown, { NAV_ITEM } from "@/components/NavDropdown";
+import { toolSections } from "@/lib/tools";
 
 interface HeaderProps {
   // Sin navegación ni cuenta: para el login, el registro y mientras se comprueba la sesión.
@@ -31,20 +33,23 @@ export default function Header({ minimal = false, account }: HeaderProps) {
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-red-700 md:text-base lg:text-lg">
           Backoffice
         </p>
-        {/* En móvil y tablet (por debajo de xl) se navega desde la portada: con 7 herramientas, los
-            enlaces no caben junto al menú de cuenta, y FilterBar depende de la altura fija de esta
-            cabecera, así que no pueden pasar a una segunda línea. */}
+        {/* Desde xl, el menú por secciones en la cabecera. Por debajo no cabe junto a la cuenta, y
+            FilterBar depende de la altura fija de esta cabecera, así que no puede pasar a una segunda
+            línea: ahí se usa el menú hamburguesa (MobileNav), cuyo panel se superpone a la página. */}
+        {!minimal && <MobileNav />}
         {!minimal && (
           <nav aria-label="Herramientas" className="hidden xl:block">
-            <ul className="flex justify-end gap-1">
-              {tools.map((tool) => (
-                <li key={tool.href}>
-                  <Link
-                    href={tool.href}
-                    className="block rounded px-3 py-2 text-sm text-red-800 hover:bg-red-100"
-                  >
-                    {tool.name}
-                  </Link>
+            <ul className="flex items-center justify-end gap-1">
+              {toolSections.map((section) => (
+                <li key={section.name}>
+                  {section.tools.length === 1 ? (
+                    // Una sola herramienta: enlace directo con el nombre de la sección.
+                    <Link href={section.tools[0].href} className={NAV_ITEM}>
+                      {section.name}
+                    </Link>
+                  ) : (
+                    <NavDropdown section={section} />
+                  )}
                 </li>
               ))}
             </ul>
