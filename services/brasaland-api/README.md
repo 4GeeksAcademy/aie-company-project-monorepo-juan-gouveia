@@ -78,16 +78,16 @@ The API **does not start** if `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` or `DA
 
 ```bash
 uv sync --extra dev    # pytest, pytest-cov and httpx
-uv run pytest          # all 916 tests
+uv run pytest          # all 926 tests
 uv run pytest --cov    # with coverage of app/
 ```
 
-The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 916 tests break down as follows:
+The test plan, the suites, per-suite commands, coverage and the bugs found are in [TESTING.md](./TESTING.md). The 926 tests break down as follows:
 
-- **Authentication unit tests (146, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
+- **Authentication unit tests (147, `tests/auth/`, ticket AUTH-088):** the logic of the 15 `auth`, `users` and `profiles` endpoints and of the tokens, without HTTP: happy path, edge case and failure mode for each. On their own, they reach 88% coverage of authentication.
 - **Supplier and incident unit tests (101, `tests/suppliers/` and `tests/incidents/`, ticket API-042):** the logic of the 6 supplier endpoints and the 5 incident manager endpoints, without HTTP, with the three levels for each. On their own, they reach 84% coverage of both domains.
 - **Inventory (80, `tests/inventory/`, Milestone 5):** models (tables, FKs and unique SKU enforced by the database), schemas with the briefing values, the 6 endpoints without HTTP (calculated stock, 400 without writing, `user_uuid` of the authenticated user), the seed and the query count (no N+1). Together with the integration and SQL connection tests, the domain reaches 97% coverage.
-- **HTTP integration (325, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier, incident and inventory endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones.
+- **HTTP integration (334, `tests/integration/`, `integration` marker):** the contract with the backoffice. Every authentication, supplier, incident and inventory endpoint over HTTP (sign-in with JSON and with a form, CSV upload, status codes, error format and headers), and the 13 `incidents` and `suppliers` routes, which respond 401 without a token, or with a malformed, unsigned, expired or foreign-key token. No route is open other than the declared public ones. The serialization guard (`test_response_models.py`) requires every JSON response to be a named model (except the CSV export), no password, hash or reset token in any response, and no email in the auth flows other than `GET /auth/me` (see [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **`core` (81):** configuration from the environment (the API doesn't start without a key or without `DATABASE_URL`), the SQL connection (per-request session and psycopg2 driver), password hashing and tokens, email sending, and error headers.
 - **`incidents` (51, `tests/domains/`):** the CSV analyzer service and the incident manager (model with the exact values, and repository: lifecycle, filters, `/summary` and the seed without duplicates). The console script (`scripts/incident-report/`) also tests the CSV rules.
 - **`suppliers` (67, `tests/domains/`):** the model with the briefing values, the seeder and the repository (including writes from two processes).

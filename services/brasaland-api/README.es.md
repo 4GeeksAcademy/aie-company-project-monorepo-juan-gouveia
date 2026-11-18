@@ -78,16 +78,16 @@ La API **no arranca** si falta `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` o `DA
 
 ```bash
 uv sync --extra dev    # pytest, pytest-cov y httpx
-uv run pytest          # las 916 pruebas
+uv run pytest          # las 926 pruebas
 uv run pytest --cov    # con cobertura de app/
 ```
 
-El plan de pruebas, las suites, los comandos por suite, la cobertura y los bugs encontrados están en [TESTING.es.md](./TESTING.es.md). Las 916 pruebas se reparten así:
+El plan de pruebas, las suites, los comandos por suite, la cobertura y los bugs encontrados están en [TESTING.es.md](./TESTING.es.md). Las 926 pruebas se reparten así:
 
-- **Unitarias de autenticación (146, `tests/auth/`, ticket AUTH-088):** la lógica de los 15 endpoints de `auth`, `users` y `profiles` y de los tokens, sin HTTP: camino feliz, caso límite y modo de fallo de cada uno. Con ellas solas, la cobertura de autenticación es del 88 %.
+- **Unitarias de autenticación (147, `tests/auth/`, ticket AUTH-088):** la lógica de los 15 endpoints de `auth`, `users` y `profiles` y de los tokens, sin HTTP: camino feliz, caso límite y modo de fallo de cada uno. Con ellas solas, la cobertura de autenticación es del 88 %.
 - **Unitarias de proveedores e incidencias (101, `tests/suppliers/` y `tests/incidents/`, ticket API-042):** la lógica de los 6 endpoints de proveedores y los 5 del gestor de incidencias, sin HTTP, con los tres niveles de cada uno. Con ellas solas, la cobertura de los dos dominios es del 84 %.
 - **Inventario (80, `tests/inventory/`, Hito 5):** modelos (tablas, FK y SKU único aplicados por la base), schemas con los valores del briefing, los 6 endpoints sin HTTP (stock calculado, 400 sin escritura, `user_uuid` del usuario autenticado), la semilla y el recuento de consultas (sin N+1). Con las de integración y las de la conexión SQL, la cobertura del dominio es del 97 %.
-- **Integración HTTP (325, `tests/integration/`, marker `integration`):** el contrato con el backoffice. Cada endpoint de autenticación, de proveedores, de incidencias y de inventario a través de HTTP (login en JSON y en formulario, subida del CSV, códigos de estado, formato de error y cabeceras), y las 13 rutas de `incidents` y `suppliers`, que responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave. Ninguna ruta queda abierta salvo las públicas declaradas.
+- **Integración HTTP (334, `tests/integration/`, marker `integration`):** el contrato con el backoffice. Cada endpoint de autenticación, de proveedores, de incidencias y de inventario a través de HTTP (login en JSON y en formulario, subida del CSV, códigos de estado, formato de error y cabeceras), y las 13 rutas de `incidents` y `suppliers`, que responden 401 sin token, con un token mal formado, sin firma, caducado o firmado con otra clave. Ninguna ruta queda abierta salvo las públicas declaradas. La guarda de serialización (`test_response_models.py`) exige que toda respuesta JSON sea un modelo con nombre (salvo la exportación CSV), que ninguna respuesta lleve contraseñas, hashes ni tokens de restablecimiento, y que los flujos de auth no devuelvan el email salvo `GET /auth/me` (ver [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **`core` (81):** la configuración desde el entorno (la API no arranca sin clave ni sin `DATABASE_URL`), la conexión SQL (sesión por petición y driver psycopg2), el hash de contraseñas y los tokens, el envío de correo y las cabeceras de los errores.
 - **`incidents` (51, `tests/domains/`):** el servicio del analizador del CSV y el gestor de incidencias (modelo con los valores exactos y repositorio: ciclo de vida, filtros, `/summary` y el seed sin duplicados). Las reglas del CSV también las prueba el script de consola (`scripts/incident-report/`).
 - **`suppliers` (67, `tests/domains/`):** el modelo con los valores del briefing, el seeder y el repositorio (incluida la escritura desde dos procesos).

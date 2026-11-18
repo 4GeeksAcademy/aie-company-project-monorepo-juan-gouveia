@@ -1150,7 +1150,7 @@ Revisión de los 35 endpoints de `services/brasaland-api` para que cada uno teng
 
 Las decisiones se tomaron con el desarrollador el 18 de noviembre de 2026.
 
-> **Estado:** en curso. Fase 1 (auditoría) y subfases 2a a 2c hechas. La verificación final se registra en `docs/serialization-audit.md` (sección 8).
+> **Estado:** completada (2026-11-18), un commit por fase y subfase, hechos por el desarrollador. Los 35 endpoints quedan ✅. La verificación (pruebas, comparación del OpenAPI y prueba manual en `/docs`) está en [`docs/serialization-audit.md`](serialization-audit.md#8-verificación).
 
 | Qué | Briefing | Implementación | Motivo principal |
 | --- | --- | --- | --- |

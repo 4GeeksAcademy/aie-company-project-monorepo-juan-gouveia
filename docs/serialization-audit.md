@@ -11,7 +11,7 @@ La clasificación de partida se conserva. Después se registran los cambios apli
 
 - **Rama:** `feature/serialization-audit`.
 - **Fecha de la auditoría inicial:** 2026-11-18.
-- **Estado:** Fase 1 completada (auditoría). La implementación (Fase 2) y la verificación (Fase 3) se registran en las secciones 7 y 8 a medida que avanzan.
+- **Estado:** completada (2026-11-18). La auditoría inicial (Fase 1) se conserva en las secciones 2 a 6; los cambios aplicados (Fase 2) están en la sección 7 y la verificación (Fase 3) en la sección 8. Los 35 endpoints quedan ✅.
 
 ## 1. Método
 
@@ -45,6 +45,8 @@ La clasificación de partida se conserva. Después se registran los cambios apli
 | Excepción documentada (archivo CSV) | 1 | 3 % |
 | **Total** | **35** | |
 
+**Estado final (Fase 3, 2026-11-18):** los 35 endpoints quedan ✅. 34 tienen un esquema de respuesta con nombre y la exportación CSV (I2) declara `response_model=None` como excepción documentada. La guarda `tests/integration/test_response_models.py` lo mantiene (sección 7, 2d).
+
 Conclusiones principales:
 
 - **Ningún endpoint devuelve un objeto ORM en crudo.**
@@ -62,48 +64,50 @@ Conclusiones principales:
 
 ## 3. Tabla general
 
+La tabla conserva el estado original de la auditoría y añade, en las dos últimas columnas, el esquema y el estado tras la Fase 2.
+
 **Leyenda:**
 
 - **Auth:** `—` = pública; `JWT` = requiere token; `admin` = solo administradores.
 - **Consumidor:** el archivo del backoffice que llama a la ruta. "API" significa que no hay pantalla que la use (clientes de la API, administración o pruebas).
 
-| # | Método y ruta | Propósito | Auth | Entrada | `response_model` actual | Consumidor | Estado original |
-|---|---|---|---|---|---|---|---|
-| A1 | `POST /api/v1/auth/login` | Iniciar sesión | — | `LoginRequest` | `Token` | `lib/auth/api.ts` | ✅ |
-| A2 | `GET /api/v1/auth/me` | Usuario de la sesión y su perfil | JWT | — | `CurrentUser` | `AccountMenu`, `AccountProfile`, `OrdersPanel` | ⚠️ |
-| A3 | `POST /api/v1/auth/forgot-password` | Pedir el enlace de restablecimiento | — | `ForgotPasswordRequest` | `MessageResponse` | `lib/auth/api.ts` | ✅ |
-| A4 | `POST /api/v1/auth/reset-password/validate` | Validar el enlace antes de pintar el formulario | — | `ResetTokenCheck` | `MessageResponse` | `lib/auth/api.ts` | ✅ |
-| A5 | `POST /api/v1/auth/reset-password` | Fijar una contraseña nueva con el enlace | — | `ResetPasswordRequest` | `MessageResponse` | `lib/auth/api.ts` | ✅ |
-| A6 | `POST /api/v1/auth/change-password` | Cambiar la contraseña con la sesión iniciada | JWT | `ChangePasswordRequest` | `PasswordChanged` | `ChangePasswordForm` | ✅ |
-| U1 | `POST /api/v1/users` | Registro | — | `UserCreate` | `UserWithProfile` | `RegisterForm` | ⚠️ |
-| U2 | `GET /api/v1/users` | Listar cuentas | admin | — | `list[UserPublic]` | API | ✅ |
-| U3 | `GET /api/v1/users/{user_id}` | Ver una cuenta | JWT (propia o admin) | — | `UserPublic` | API | ✅ |
-| U4 | `PUT /api/v1/users/{user_id}` | Cambiar credenciales, rol o estado | JWT (propia o admin) | `UserUpdate` | `UserPublic` | API | ✅ |
-| U5 | `DELETE /api/v1/users/{user_id}` | Borrar una cuenta y su perfil | JWT (propia o admin) | — | `UserPublic` | API | ✅ |
-| P1 | `GET /api/v1/profiles/me` | Perfil propio | JWT | — | `Profile` | API | ⚠️ |
-| P2 | `PUT /api/v1/profiles/me` | Editar el perfil propio | JWT | `ProfileUpdate` | `Profile` | `ProfileForm` | ⚠️ |
-| P3 | `GET /api/v1/profiles/{user_id}` | Perfil de una cuenta | JWT (propio o admin) | — | `Profile` | API | ⚠️ |
-| P4 | `PUT /api/v1/profiles/{user_id}` | Editar un perfil por usuario | JWT (dueño) | `ProfileUpdate` | `Profile` | API | ⚠️ |
-| I1 | `POST /api/v1/incidents/analyze` | Analizar el CSV de incidentes | JWT | `multipart` (`file`) | `AnalysisResponse` | `IncidentAnalysisPanel` y subcomponentes | ✅ |
-| I2 | `GET /api/v1/incidents/results/export` | Descargar `results.csv` | JWT | — | ninguno (`response_class=Response`, `text/csv`) | `lib/incidencias/api.ts` | Excepción |
-| I3 | `POST /api/v1/incidents` | Registrar una incidencia | JWT | `IncidentCreate` | `Incident` | `IncidentForm` | ✅ |
-| I4 | `GET /api/v1/incidents` | Listar incidencias con filtros | JWT | query `status`, `origin`, `branch`, `category` | `list[Incident]` | `IncidentList` | ⚠️ |
-| I5 | `GET /api/v1/incidents/summary` | Métricas del gestor | JWT | — | `IncidentSummary` | `IncidentSummaryPanel` | ✅ |
-| I6 | `GET /api/v1/incidents/{incident_id}` | Detalle de una incidencia | JWT | — | `Incident` | API | ✅ |
-| I7 | `PATCH /api/v1/incidents/{incident_id}/status` | Cambiar el estado | JWT | `StatusUpdate` | `Incident` | `IncidentStatusControl` | ✅ |
-| S1 | `POST /api/v1/suppliers` | Alta de proveedor | JWT | `SupplierCreate` | `Supplier` | `SupplierFormModal` | ✅ |
-| S2 | `GET /api/v1/suppliers` | Directorio con filtros | JWT | query `country`, `category` | `list[Supplier]` | `SupplierList`, `lib/inventory-suppliers.ts` | ✅ |
-| S3 | `GET /api/v1/suppliers/{supplier_id}` | Detalle de un proveedor | JWT | — | `Supplier` | API | ✅ |
-| S4 | `DELETE /api/v1/suppliers/{supplier_id}` | Borrar un proveedor | JWT | — | `Supplier` | API | ✅ |
-| S5 | `PATCH /api/v1/suppliers/{supplier_id}/rate` | Actualizar la tarifa | JWT | `RateUpdate` | `Supplier` | `RateEditor` | ✅ |
-| S6 | `PATCH /api/v1/suppliers/{supplier_id}/status` | Activar o suspender | JWT | `StatusUpdate` | `Supplier` | `StatusToggle` | ✅ |
-| N1 | `GET /api/v1/inventory/products` | Catálogo con stock calculado | JWT | query `country` | `list[IngredientRead]` | `IngredientTable`, `IngredientSelect` | ✅ |
-| N2 | `POST /api/v1/inventory/products` | Alta de ingrediente | JWT | `IngredientCreate` | `IngredientRead` | API | ✅ |
-| N3 | `GET /api/v1/inventory/products/{ingredient_id}` | Stock de un ingrediente | JWT | — | `IngredientRead` | `useIngredientStock` | ✅ |
-| N4 | `POST /api/v1/inventory/orders/inbound` | Registrar una entrada | JWT | `IngredientEntryCreate` | `IngredientEntryRead` | `EntryForm` | ⚠️ |
-| N5 | `POST /api/v1/inventory/orders/outbound` | Registrar una salida | JWT | `IngredientExitCreate` | `IngredientExitRead` | `ExitForm` | ⚠️ |
-| N6 | `GET /api/v1/inventory/orders` | Historial de entradas y salidas | JWT | — | `OrdersRead` | `OrderHistory` | ⚠️ |
-| H1 | `GET /health` | Comprobación de vida | — | — | ninguno (`dict[str, str]`) | Docker / supervisión | ❌ |
+| # | Método y ruta | Propósito | Auth | Entrada | `response_model` original | Consumidor | Estado original | `response_model` final | Estado final |
+|---|---|---|---|---|---|---|---|---|---|
+| A1 | `POST /api/v1/auth/login` | Iniciar sesión | — | `LoginRequest` | `Token` | `lib/auth/api.ts` | ✅ | sin cambios | ✅ |
+| A2 | `GET /api/v1/auth/me` | Usuario de la sesión y su perfil | JWT | — | `CurrentUser` | `AccountMenu`, `AccountProfile`, `OrdersPanel` | ⚠️ | `CurrentUser` (perfil `ProfileRead`) — 2a | ✅ |
+| A3 | `POST /api/v1/auth/forgot-password` | Pedir el enlace de restablecimiento | — | `ForgotPasswordRequest` | `MessageResponse` | `lib/auth/api.ts` | ✅ | sin cambios | ✅ |
+| A4 | `POST /api/v1/auth/reset-password/validate` | Validar el enlace antes de pintar el formulario | — | `ResetTokenCheck` | `MessageResponse` | `lib/auth/api.ts` | ✅ | sin cambios | ✅ |
+| A5 | `POST /api/v1/auth/reset-password` | Fijar una contraseña nueva con el enlace | — | `ResetPasswordRequest` | `MessageResponse` | `lib/auth/api.ts` | ✅ | sin cambios | ✅ |
+| A6 | `POST /api/v1/auth/change-password` | Cambiar la contraseña con la sesión iniciada | JWT | `ChangePasswordRequest` | `PasswordChanged` | `ChangePasswordForm` | ✅ | sin cambios | ✅ |
+| U1 | `POST /api/v1/users` | Registro | — | `UserCreate` | `UserWithProfile` | `RegisterForm` | ⚠️ | `UserCreated` — 2a | ✅ |
+| U2 | `GET /api/v1/users` | Listar cuentas | admin | — | `list[UserPublic]` | API | ✅ | sin cambios | ✅ |
+| U3 | `GET /api/v1/users/{user_id}` | Ver una cuenta | JWT (propia o admin) | — | `UserPublic` | API | ✅ | sin cambios | ✅ |
+| U4 | `PUT /api/v1/users/{user_id}` | Cambiar credenciales, rol o estado | JWT (propia o admin) | `UserUpdate` | `UserPublic` | API | ✅ | sin cambios | ✅ |
+| U5 | `DELETE /api/v1/users/{user_id}` | Borrar una cuenta y su perfil | JWT (propia o admin) | — | `UserPublic` | API | ✅ | sin cambios | ✅ |
+| P1 | `GET /api/v1/profiles/me` | Perfil propio | JWT | — | `Profile` | API | ⚠️ | `ProfileRead` — 2a | ✅ |
+| P2 | `PUT /api/v1/profiles/me` | Editar el perfil propio | JWT | `ProfileUpdate` | `Profile` | `ProfileForm` | ⚠️ | `ProfileRead` — 2a | ✅ |
+| P3 | `GET /api/v1/profiles/{user_id}` | Perfil de una cuenta | JWT (propio o admin) | — | `Profile` | API | ⚠️ | `ProfileRead` — 2a | ✅ |
+| P4 | `PUT /api/v1/profiles/{user_id}` | Editar un perfil por usuario | JWT (dueño) | `ProfileUpdate` | `Profile` | API | ⚠️ | `ProfileRead` — 2a | ✅ |
+| I1 | `POST /api/v1/incidents/analyze` | Analizar el CSV de incidentes | JWT | `multipart` (`file`) | `AnalysisResponse` | `IncidentAnalysisPanel` y subcomponentes | ✅ | sin cambios | ✅ |
+| I2 | `GET /api/v1/incidents/results/export` | Descargar `results.csv` | JWT | — | ninguno (`response_class=Response`, `text/csv`) | `lib/incidencias/api.ts` | Excepción | `None` explícito, `text/csv` — 2c | ✅ (excepción documentada) |
+| I3 | `POST /api/v1/incidents` | Registrar una incidencia | JWT | `IncidentCreate` | `Incident` | `IncidentForm` | ✅ | sin cambios | ✅ |
+| I4 | `GET /api/v1/incidents` | Listar incidencias con filtros | JWT | query `status`, `origin`, `branch`, `category` | `list[Incident]` | `IncidentList` | ⚠️ | `list[IncidentListItem]` — 2c | ✅ |
+| I5 | `GET /api/v1/incidents/summary` | Métricas del gestor | JWT | — | `IncidentSummary` | `IncidentSummaryPanel` | ✅ | sin cambios | ✅ |
+| I6 | `GET /api/v1/incidents/{incident_id}` | Detalle de una incidencia | JWT | — | `Incident` | API | ✅ | sin cambios | ✅ |
+| I7 | `PATCH /api/v1/incidents/{incident_id}/status` | Cambiar el estado | JWT | `StatusUpdate` | `Incident` | `IncidentStatusControl` | ✅ | sin cambios | ✅ |
+| S1 | `POST /api/v1/suppliers` | Alta de proveedor | JWT | `SupplierCreate` | `Supplier` | `SupplierFormModal` | ✅ | sin cambios | ✅ |
+| S2 | `GET /api/v1/suppliers` | Directorio con filtros | JWT | query `country`, `category` | `list[Supplier]` | `SupplierList`, `lib/inventory-suppliers.ts` | ✅ | sin cambios | ✅ |
+| S3 | `GET /api/v1/suppliers/{supplier_id}` | Detalle de un proveedor | JWT | — | `Supplier` | API | ✅ | sin cambios | ✅ |
+| S4 | `DELETE /api/v1/suppliers/{supplier_id}` | Borrar un proveedor | JWT | — | `Supplier` | API | ✅ | sin cambios | ✅ |
+| S5 | `PATCH /api/v1/suppliers/{supplier_id}/rate` | Actualizar la tarifa | JWT | `RateUpdate` | `Supplier` | `RateEditor` | ✅ | sin cambios | ✅ |
+| S6 | `PATCH /api/v1/suppliers/{supplier_id}/status` | Activar o suspender | JWT | `StatusUpdate` | `Supplier` | `StatusToggle` | ✅ | sin cambios | ✅ |
+| N1 | `GET /api/v1/inventory/products` | Catálogo con stock calculado | JWT | query `country` | `list[IngredientRead]` | `IngredientTable`, `IngredientSelect` | ✅ | sin cambios | ✅ |
+| N2 | `POST /api/v1/inventory/products` | Alta de ingrediente | JWT | `IngredientCreate` | `IngredientRead` | API | ✅ | sin cambios | ✅ |
+| N3 | `GET /api/v1/inventory/products/{ingredient_id}` | Stock de un ingrediente | JWT | — | `IngredientRead` | `useIngredientStock` | ✅ | sin cambios | ✅ |
+| N4 | `POST /api/v1/inventory/orders/inbound` | Registrar una entrada | JWT | `IngredientEntryCreate` | `IngredientEntryRead` | `EntryForm` | ⚠️ | `IngredientEntryRead` plano — 2b | ✅ |
+| N5 | `POST /api/v1/inventory/orders/outbound` | Registrar una salida | JWT | `IngredientExitCreate` | `IngredientExitRead` | `ExitForm` | ⚠️ | `IngredientExitRead` plano — 2b | ✅ |
+| N6 | `GET /api/v1/inventory/orders` | Historial de entradas y salidas | JWT | — | `OrdersRead` | `OrderHistory` | ⚠️ | `OrdersRead` plano — 2b | ✅ |
+| H1 | `GET /health` | Comprobación de vida | — | — | ninguno (`dict[str, str]`) | Docker / supervisión | ❌ | `HealthResponse` — 2c | ✅ |
 
 ## 4. Fichas por dominio
 
@@ -454,9 +458,59 @@ La suite falló con exactamente esas dos rutas (`('GET', '/health')` y `('POST',
 - API: `uv run pytest` → 916 pruebas superadas.
 - Backoffice: `npx jest` → 170 pruebas superadas (14 suites); `npm run lint` sin errores.
 
-_El resultado final, la comparación del OpenAPI y las pruebas manuales en `/docs` se completan en la Fase 3._
+**Resultado final** (2026-11-18, tras la subfase 2d):
+
+| Comprobación | Antes | Después |
+|---|---|---|
+| `uv run pytest` (API) | 916 superadas | **926 superadas**, ninguna fallida: 10 nuevas (1 en 2a, 1 en 2b, 2 en 2c y 6 de la guarda en 2d) |
+| Backoffice `npx jest` | 170 superadas | **170 superadas** |
+| Backoffice `npx tsc --noEmit` | sin errores | **sin errores** |
+| Backoffice `npm run lint` | sin errores | **sin errores** |
+| Backoffice `npm run build` (producción) | — | **compila**, con las 25 rutas |
+
+Por suite, la API pasa de 916 a 926: `tests/auth` sube de 146 a 147 (REG-F2) y `tests/integration` de 325 a 334 (3 de 2b y 2c, y 6 de la guarda). El resto de suites no cambia. Los README y TESTING de la API (en y es) recogen estos recuentos.
+
+**Comparación del OpenAPI.** Se compararon el esquema de antes (generado con `app.openapi()` antes de cualquier cambio) y el de después:
+
+- **Operaciones:** 35 antes y 35 después, sin altas ni bajas.
+- **Entradas:** ningún cuerpo de petición cambió.
+- **Respuestas 2xx que cambiaron:** las 8 previstas:
+  - `POST /users`;
+  - las 4 de `/profiles`;
+  - `GET /incidents`;
+  - `GET /health`;
+  - la documentación `text/csv` de la exportación.
+- **Esquemas:**
+  - añadidos: `HealthResponse`, `IncidentListItem`, `ProfileRead` y `UserCreated`;
+  - eliminados: `IngredientSummary`, `Profile` y `UserWithProfile`;
+  - modificados: `IngredientEntryRead` e `IngredientExitRead` (`ingredient` → `ingredient_name`, `ingredient_sku` e `ingredient_unit`); `CurrentUser`, cuyo `profile` apunta a `ProfileRead`; e `Incident`, que solo cambia de descripción.
+- `GET /auth/me` no aparece entre las respuestas cambiadas porque sigue apuntando a `CurrentUser`. Lo que cambia es ese esquema.
+- No hay ningún cambio fuera de lo planificado en la sección 6.
+
+**Prueba manual en `/docs`** (2026-11-18, API local con Supabase; capturas del desarrollador):
+
+| # | Endpoint | Forma comprobada | Resultado |
+|---|---|---|---|
+| 1 | `POST /api/v1/users` | Registro de la cuenta temporal `serializacion-temp@example.com`: 201 con solo `{id, message}` | ✅ (201 en el log de la API) |
+| 2 | `GET /api/v1/auth/me` | `id`, `email` (el propio), `role: "user"` y `profile: {name: "Prueba Serialización", phone: null, address: null}`, sin `id` ni `user_id` en el perfil | ✅ |
+| 3 | `GET /api/v1/inventory/orders` | Cada orden con `ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`, `quantity`, `location_id`, `created_at`, `user_uuid` y `supplier_name`/`reason`, sin objeto `ingredient` | ✅ |
+| 4 | `GET /health` | `{"status": "ok"}` | ✅ |
+| 5 | `GET /api/v1/incidents` | Filas con `id`, `title`, `description`, `category`, `status`, `origin`, `branch` y `created_at`, sin `updated_at` | ✅ |
+
+La cuenta temporal se borró al terminar con `DELETE /api/v1/users/{id}` (200). Después no queda rastro de su email ni de su `id` en `storage/auth-db.json`. Un segundo `DELETE` con el mismo token respondió 401, porque el token de una cuenta borrada deja de valer.
 
 ## 9. Fuera de alcance y mejoras futuras
 
 - **Paginación** de `GET /incidents` y `GET /inventory/orders`: los dos devuelven la colección completa. Con usuarios reales y más volumen convendrá añadir `limit`/`offset` o un cursor. Cambia el contrato de consulta y no la forma de cada elemento, así que no forma parte de esta auditoría.
 - **Herramienta de talento** (`lib/talento/api.ts`): consume una API externa, no `brasaland-api`.
+
+## 10. Criterios de evaluación
+
+| Criterio del briefing | Cumplimiento | Evidencia |
+|---|---|---|
+| Cada endpoint tiene un `response_model` explícito declarado | ✅ | 34 de 35 con un modelo con nombre; la exportación CSV declara `response_model=None` como excepción documentada (4.4, I2; `BRIEFING_DIVERGENCES.md`, sección 13). Lo impone `test_every_json_response_is_a_named_model_except_the_named_exceptions` |
+| Esquemas de entrada y salida definidos y sin confundirse | ✅ | Cada escritura tiene su `*Create`/`*Update`/`StatusUpdate` con `extra="forbid"` (sección 4); `test_writes_do_not_reuse_the_response_schema_as_input` lo comprueba sobre OpenAPI |
+| Los listados devuelven solo lo necesario, sin anidado ni over-fetching | ✅ | `IncidentListItem` (I4); órdenes con proyección plana (N4–N6); los listados de proveedores y productos ya devolvían solo campos usados (4.6, 4.7); relaciones en la sección 5 |
+| Ninguna respuesta expone contraseñas hasheadas ni tokens internos; los flujos de auth no autenticados no reenvían el email; `/auth/me` sí puede | ✅ | Registro → `{id, message}` (U1); login y forgot/validate/reset sin email (4.1); `test_no_response_exposes_passwords_hashes_or_reset_tokens` y `test_auth_flows_do_not_echo_the_email_but_me_does` |
+| `docs/serialization-audit.md` lista todos los endpoints, su estado original y los cambios | ✅ | Tabla general con estado original y final (sección 3), fichas (4), registro de cambios por subfase (7) |
+| La aplicación sigue funcionando sin regresiones | ✅ | 926 pruebas de la API, Jest 170, `tsc`, lint y build del backoffice; OpenAPI sin cambios fuera de lo previsto; prueba manual en `/docs` (sección 8) |

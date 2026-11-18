@@ -141,10 +141,21 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 - **Informe:** `audit/REPORT.md` (comparativa, valoración y criterios). Divergencias en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends").
 - **PR:** #18, abierto el 2026-11-17 contra `feature/dockerize` mientras el #17 no se fusione.
 
-**Auditoría de serialización del backend en curso en la rama `feature/serialization-audit`**, creada desde `feature/performance-audit` (`cd078c9`) el 2026-11-18 porque los PR #17 y #18 siguen abiertos. El objetivo es que cada endpoint de `services/brasaland-api` tenga un `response_model` explícito y ajustado a lo que usa su consumidor, sin campos sensibles ni email en las rutas de auth no autenticadas. Decisiones D1 a D5 aprobadas (en `docs/_private/plan-auditoria-serializacion.md`).
+**Auditoría de serialización del backend completada en la rama `feature/serialization-audit`**, creada desde `feature/performance-audit` (`cd078c9`) el 2026-11-18 porque los PR #17 y #18 siguen abiertos. El objetivo es que cada endpoint de `services/brasaland-api` tenga un `response_model` explícito y ajustado a lo que usa su consumidor, sin campos sensibles ni email en las rutas de auth no autenticadas. Decisiones D1 a D5 aprobadas (en `docs/_private/plan-auditoria-serializacion.md`); un commit por fase y subfase, hechos por el desarrollador.
 
 - **Auditoría (Fase 1):** `docs/serialization-audit.md`. Hay 35 endpoints: 23 ✅, 10 ⚠️, 1 ❌ (`GET /health`) y 1 excepción documentada (la exportación CSV). Ningún endpoint devuelve un ORM en crudo ni contraseñas. El trabajo pendiente está en el registro (reenvía el email), en los perfiles (exponen `id` y `user_id`), en el listado de incidencias (usa el esquema de detalle) y en las órdenes del inventario (ingrediente anidado junto a su clave foránea).
-- **Pendiente:** Fase 2 (subfases 2a a 2d, adaptando el backoffice en el mismo commit) y Fase 3 (verificación).
+- **Implementación (Fase 2), con el backoffice adaptado en el mismo commit:**
+  - 2a `d618a8a`: el registro devuelve `{id, message}`, y los perfiles y `/auth/me` usan `ProfileRead` (sin `id` ni `user_id`);
+  - 2b `857802f`: las órdenes del inventario llevan el ingrediente aplanado (`ingredient_name`, `ingredient_sku`, `ingredient_unit`);
+  - 2c `ad55908`: el listado de incidencias usa `IncidentListItem` (sin `updated_at`), `/health` usa `HealthResponse` y la exportación CSV declara `response_model=None` como excepción documentada;
+  - 2d `1c19ca5`: la guarda `tests/integration/test_response_models.py` exige, sobre OpenAPI, modelos con nombre, ninguna contraseña ni token en las respuestas, ningún email en los flujos de auth salvo `/auth/me` y entradas separadas de las salidas.
+- **Verificación (Fase 3):**
+  - `uv run pytest`: 926 pasan (916 + 10);
+  - backoffice: Jest 170, `tsc`, lint y build sin errores;
+  - el OpenAPI solo cambia en lo previsto;
+  - prueba manual en `/docs` de 5 endpoints, con una cuenta temporal que después se borró.
+  Los 35 endpoints quedan ✅. La excepción del CSV está en `docs/BRIEFING_DIVERGENCES.md` (sección 13).
+- **PR:** pendiente de abrir contra `feature/performance-audit`.
 
 **Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -304,7 +315,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Fase 1 completada (2026-11-18): `docs/serialization-audit.md` clasifica los 35 endpoints y fija el payload objetivo de cada uno. Siguiente: Fase 2, en 4 subfases (auth y perfiles, órdenes del inventario, incidencias y `/health`, prueba de guarda), y Fase 3 de verificación. Plan en `docs/_private/plan-auditoria-serializacion.md`.
+0. **Auditoría de serialización (rama `feature/serialization-audit`)** — Completada (2026-11-18): `docs/serialization-audit.md` recoge los 35 endpoints con su estado original y final (todos ✅), los cambios y la verificación. 926 pruebas en la API y una guarda que impide regresiones. Pendiente: abrir el PR contra `feature/performance-audit`. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de serialización del backend"). Plan en `docs/_private/plan-auditoria-serializacion.md`.
 
 0. **Auditoría de rendimiento (rama `feature/performance-audit`)** — Completada (2026-11-17): `audit/AUDIT.md`, `audit/REPORT.md` y las capturas de `audit/before/` y `audit/after/`. Mejoras medidas: CLS del gestor de incidencias 0,204 → 0 y Best Practices del website 96 → 100. PR #18 abierto contra `feature/dockerize`. Cuando se fusione la cadena y se actualice Next, repetir las mediciones con la misma versión de Lighthouse. Las justificaciones están en `docs/BRIEFING_DIVERGENCES.md` (sección "Auditoría de rendimiento de ambos frontends"). Plan en `docs/_private/plan-auditoria-rendimiento.md`.
 
