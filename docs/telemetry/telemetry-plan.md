@@ -4,7 +4,7 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 
 - **Entregables:** este documento y [`event-schemas.json`](event-schemas.json) (los esquemas de cada evento).
 - **Fuentes:** el briefing de Brasaland (métricas obligatorias, entidades y restricciones), el enunciado del RFI y el código actual del monorepo.
-- **Estado:** en redacción, por fases. Esta versión contiene el catálogo (secciones 1 a 6). El envelope, las fichas por evento, la estrategia de entrega, y los riesgos y exclusiones llegan en las fases siguientes.
+- **Estado:** en redacción, por fases. Esta versión contiene el catálogo (secciones 1 a 6), el envelope, los datos sensibles y las fichas de los 44 eventos (secciones 7 a 9). La estrategia de entrega, los riesgos y exclusiones, y las brechas con el modelo actual llegan en la fase siguiente.
 
 ## Índice
 
@@ -14,6 +14,9 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 4. [Flujo de gestión de inventario](#4-flujo-de-gestión-de-inventario)
 5. [Catálogo de oportunidades identificadas](#5-catálogo-de-oportunidades-identificadas)
 6. [Resumen del catálogo](#6-resumen-del-catálogo)
+7. [Event Envelope](#7-event-envelope)
+8. [Datos sensibles y PII](#8-datos-sensibles-y-pii)
+9. [Fichas de los eventos](#9-fichas-de-los-eventos)
 
 ## 1. Propósito y alcance
 
@@ -293,3 +296,1079 @@ Por emisor: 32 de la API, 8 del navegador, 1 del BFF y 3 de procesos (la tarea d
 | ¿Cuántos intentos de login fallidos hay por día? | `login_failed` |
 | ¿Qué secciones visitan más los operadores? | `page_viewed` |
 | ¿Hay flujos que se abandonan a la mitad? | `form_abandoned` |
+
+## 7. Event Envelope
+
+Todo evento, sea cual sea su emisor, es un objeto JSON con los campos siguientes. **Ningún campo puede faltar:** cuando un dato no aplica, su valor es `null`.
+
+| Campo | Tipo | Valor |
+|---|---|---|
+| `eventId` | string (UUID v4) | Identificador único del evento, generado por el emisor. El almacenamiento descarta los duplicados por este campo. |
+| `timestamp` | string (ISO 8601) | Momento del hecho, en UTC y con milisegundos: `2026-11-18T17:36:46.123Z`. Lo pone el emisor cuando ocurre el hecho, no cuando se envía. |
+| `sessionId` | string (UUID v4) o `null` | Sesión del navegador: un UUID que el backoffice crea al abrirse y guarda en `sessionStorage` (uno por pestaña). Viaja en la cabecera `X-Session-Id`. Es `null` en los procesos y en las peticiones que no vienen del backoffice. |
+| `userId` | string (UUID) o `null` | La cuenta que actúa: el `sub` del token (`User.id` en TinyDB). Es un identificador seudónimo, nunca el email ni el nombre. Es `null` si no hay usuario autenticado. Cada ficha (sección 9) indica qué valor lleva. |
+| `event_type` | string | El tipo del evento, con la taxonomía de la sección 2.3. Cada esquema de `event-schemas.json` lo fija con `const`. |
+| `schemaVersion` | string (SemVer) | Versión del esquema **de ese evento**. Todos empiezan en `1.0.0`. Sube la versión menor al añadir una propiedad opcional, y la mayor al quitar o renombrar una propiedad, cambiar su tipo o hacer obligatoria una que no lo era. |
+| `requestId` | string (UUID v4) o `null` | Correlación entre el frontend, el backend y los logs. Lo crea el navegador por cada llamada a la API, en la cabecera `X-Request-Id`; el BFF lo reenvía; la API lo crea si falta, lo devuelve en la respuesta y lo pone en sus eventos y en su línea de `api.timing`. Es `null` si el evento no nace de una petición, como una vista o un proceso. |
+| `properties` | object | Los datos propios del evento. **Solo admite las claves del allowlist de su ficha**: el esquema lo impone con `additionalProperties: false`. |
+| `source` | string | Emisor: `api`, `bff`, `browser` o `process`. Es un añadido de este plan. |
+| `environment` | string | `development`, `staging` o `production`. Es un añadido de este plan, para que los datos de prueba, como las semillas de volumen `VOL-`, no se mezclen con los de producción. |
+
+**Nombres de los campos.** Los ocho primeros llevan exactamente los nombres del enunciado, así que el envelope mezcla camelCase (`eventId`, `sessionId`, `schemaVersion`…) con `event_type` en snake_case. Se respetan tal cual porque el enunciado los fija como identificadores. Todo lo demás sigue snake_case, como el briefing: los `event_type` y todas las claves de `properties`. Los dos campos añadidos (`source` y `environment`) son de una sola palabra, así que no suman otra convención.
+
+**Ejemplo completo** (`stock_waste_registered`):
+
+```json
+{
+  "eventId": "5b2e8f4a-1c3d-4e6f-9a7b-8c9d0e1f2a3b",
+  "timestamp": "2026-11-18T17:36:46.123Z",
+  "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
+  "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
+  "event_type": "stock_waste_registered",
+  "schemaVersion": "1.0.0",
+  "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "properties": {
+    "order_id": 13319,
+    "location_id": 3,
+    "country": "CO",
+    "product_id": 12,
+    "product_category": "proteína",
+    "quantity": 1.2,
+    "unit": "kg",
+    "currency": "COP",
+    "reason": "expired",
+    "stock_after": 30.4
+  },
+  "source": "api",
+  "environment": "production"
+}
+```
+
+### 7.1 Reglas para quien instrumente
+
+1. **Validar antes de emitir.** El emisor valida cada evento contra `event-schemas.json`. Un evento que no cumple su esquema, por ejemplo porque lleva una clave fuera del allowlist, **no se emite**: se descarta y se cuenta en el log del emisor. Nunca se recorta ni se corrige en silencio.
+2. **Las propiedades opcionales se omiten.** Si una propiedad opcional no tiene valor, la clave no se envía. Los `null` son solo para los campos del envelope.
+3. **Correlación de extremo a extremo.** Para que `requestId` y `sessionId` lleguen a la API, el navegador añade `X-Request-Id` y `X-Session-Id` a cada llamada (`lib/api-client.ts`). El BFF debe reenviarlas, porque hoy solo copia `Content-Type`, `Accept` y `Authorization`. La API debe leerlas y crear `X-Request-Id` si falta.
+4. **Los eventos de negocio de la API se emiten después del `commit`** (sección 2.4). Los rechazos se emiten al construir la respuesta de error.
+5. **Las rutas siempre van como plantilla:** `/api/v1/incidents/{incident_id}` o `/talento/candidates/[id]`, nunca con ids reales ni query string.
+
+### 7.2 Cómo está organizado `event-schemas.json`
+
+Es un JSON Schema **draft-07** válido. Un evento es válido si cumple exactamente uno de los 44 esquemas de `oneOf`. El campo `event_type` lo dirige al suyo.
+
+| Ruta | Contenido |
+|---|---|
+| `definitions/envelope` | Los campos de la tabla anterior, con `additionalProperties: false` |
+| `definitions/properties` | Las propiedades que comparten varios eventos (`location_id`, `country`, `product_category`, `route`, `account_fingerprint`…), con su tipo y su dominio |
+| `definitions/events/<event_type>` | Un esquema por evento: el envelope (`allOf`), `event_type`, `schemaVersion` y `source` fijos con `const`, y `properties` con sus obligatorias y su allowlist (`additionalProperties: false`). Incluye un ejemplo válido en `examples`. |
+| Claves `x-*` de cada evento | Anotaciones documentales que los validadores ignoran: `x-classification` (`obligatorio` u `oportunidad`), `x-category`, `x-emitter`, `x-trigger` y `x-pii` |
+
+## 8. Datos sensibles y PII
+
+Estos eventos describen productos, locales y el uso del sistema, no a las personas. El allowlist es la primera defensa: una clave que no está en el esquema no puede viajar. Sobre lo que sí viaja se aplican estas reglas.
+
+### 8.1 Lo que nunca se emite
+
+- Emails, nombres, teléfonos y direcciones: los de los perfiles, los de los proveedores y los de los destinatarios de correo.
+- Contraseñas, tokens JWT, enlaces o tokens de recuperación y claves de configuración.
+- Texto libre escrito por un usuario: títulos y descripciones de incidencias, notas, textos de búsqueda y valores escritos en formularios. De los formularios solo viajan los **nombres** de los campos.
+- Cuerpos de petición y de respuesta, y mensajes de las excepciones de la API.
+- La IP completa y el user agent completo.
+- Datos de la herramienta de talento (candidatos de una API externa): ni sus ids reales, porque `page_viewed` usa la plantilla `/talento/candidates/[id]`.
+
+### 8.2 Niveles y técnicas
+
+| Nivel | Qué es | Técnica | Dónde |
+|---|---|---|---|
+| **Ninguno** | Datos de negocio y técnicos sin relación con una persona | — | La mayoría de las propiedades |
+| **Seudónimo** | Identifica una cuenta sin revelar quién es | UUID internos: `userId` (envelope), `new_user_id`, `target_user_id` | Autenticación y cualquier evento con usuario |
+| **Sanitizado** | Dato personal transformado antes de salir del emisor | `account_fingerprint`: HMAC-SHA256 del email normalizado con la clave `TELEMETRY_HASH_KEY` (distinta de `SECRET_KEY`), truncado a 16 caracteres hexadecimales. `client_network`: IP truncada a /24 (IPv4) o /48 (IPv6). `message_sanitized`: mensaje recortado a 200 caracteres, con emails, números de 4 o más cifras y UUID sustituidos por `[redacted]`. | `login_failed`, `password_reset_requested`, `frontend_error_captured` |
+
+**Por qué HMAC y no un hash simple:** el email tiene pocas variantes probables, así que un SHA-256 sin clave se podría revertir probando emails conocidos. Con una clave secreta del servidor no se puede. Si la clave se rota, las huellas anteriores dejan de agruparse con las nuevas. Es aceptable, porque solo se usan para detectar ráfagas en ventanas cortas.
+
+**Por qué `userId` es `null` en `login_failed` aunque la cuenta exista:** con el `userId` relleno, la telemetría revelaría qué emails tienen cuenta, que es justo lo que la respuesta neutra de la API oculta. La agrupación por cuenta la da `account_fingerprint`.
+
+## 9. Fichas de los eventos
+
+Una ficha por evento, en el mismo orden y con las mismas propiedades que `event-schemas.json`. **El allowlist de cada evento son exactamente las propiedades de su tabla:** cualquier otra clave hace que el evento no se emita. "Obligatoria: sí" significa que la clave debe estar siempre; las opcionales se omiten cuando no hay valor.
+
+### Inventario
+
+#### `inbound_order_created`
+
+Un local registra la llegada de mercancía de un proveedor.
+
+| | |
+|---|---|
+| **Clasificación** | Obligatorio |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras el `commit` de `POST /api/v1/inventory/orders/inbound`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `order_id` | integer (≥ 1) | sí | Id de la orden registrada. |
+| `location_id` | integer (1–14) | sí | Local (1–14) donde ocurre el hecho. |
+| `country` | enum: `CO`, `US` | sí | País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz. |
+| `product_id` | integer (≥ 1) | sí | Id del producto (hoy `Ingredient.id`). |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | sí | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `quantity` | number (> 0) | sí | Cantidad de la orden, en `unit`. |
+| `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `supplier_id` | integer (≥ 1) | sí | Id del proveedor en el directorio. |
+| `unit_cost` | number (> 0) | sí | Coste por unidad de la entrega, en `currency`. |
+
+#### `outbound_order_created`
+
+Un local registra consumo de ingredientes en la preparación de un plato.
+
+| | |
+|---|---|
+| **Clasificación** | Obligatorio |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de consumo. Una salida de merma emite `stock_waste_registered` en su lugar. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `order_id` | integer (≥ 1) | sí | Id de la orden registrada. |
+| `location_id` | integer (1–14) | sí | Local (1–14) donde ocurre el hecho. |
+| `country` | enum: `CO`, `US` | sí | País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz. |
+| `product_id` | integer (≥ 1) | sí | Id del producto (hoy `Ingredient.id`). |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | sí | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `quantity` | number (> 0) | sí | Cantidad de la orden, en `unit`. |
+| `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `stock_after` | number (≥ 0) | no | Stock del producto tras la salida, en `unit`. |
+
+#### `stock_waste_registered`
+
+Un local registra merma (producto vencido, error de cocina, o pérdida/robo).
+
+| | |
+|---|---|
+| **Clasificación** | Obligatorio |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de merma. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `order_id` | integer (≥ 1) | sí | Id de la orden registrada. |
+| `location_id` | integer (1–14) | sí | Local (1–14) donde ocurre el hecho. |
+| `country` | enum: `CO`, `US` | sí | País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz. |
+| `product_id` | integer (≥ 1) | sí | Id del producto (hoy `Ingredient.id`). |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | sí | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `quantity` | number (> 0) | sí | Cantidad de la orden, en `unit`. |
+| `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `reason` | enum: `expired`, `kitchen_error`, `theft_suspected` | sí | Motivo de la merma, con los valores del briefing. |
+| `stock_after` | number (≥ 0) | no | Stock del producto tras la merma, en `unit`. |
+
+#### `stock_threshold_triggered`
+
+El stock de un producto cae por debajo del mínimo configurado para ese local.
+
+| | |
+|---|---|
+| **Clasificación** | Obligatorio |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras el `commit` de una salida que hace cruzar el mínimo: stock antes ≥ `threshold_quantity` y después < `threshold_quantity`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `location_id` | integer (1–14) | sí | Local (1–14) donde ocurre el hecho. |
+| `country` | enum: `CO`, `US` | sí | País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz. |
+| `product_id` | integer (≥ 1) | sí | Id del producto (hoy `Ingredient.id`). |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | sí | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `quantity` | number (≥ 0) | sí | Stock resultante tras la salida que cruzó el mínimo, en `unit`. |
+| `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `threshold_quantity` | number (> 0) | sí | Mínimo configurado para ese producto y local, en `unit`. |
+| `trigger_order_id` | integer (≥ 1) | sí | Id de la salida que provocó el cruce. |
+
+#### `direct_stock_edit_rejected`
+
+Un usuario intenta modificar el stock directamente (fuera de una orden) y el sistema lo rechaza.
+
+| | |
+|---|---|
+| **Clasificación** | Obligatorio |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Al responder 405 a un `PUT`/`PATCH`/`DELETE` sobre una ruta del inventario, o 422 a un `POST` del inventario cuyo cuerpo incluye `current_stock` o `stock`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. No se guarda el cuerpo de la petición ni el valor de stock que se intentó escribir. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `location_id` | integer (1–14) | no | Local, si la petición lo indica (cuerpo de una orden). Una edición sobre `/products/{id}` no lleva local. |
+| `country` | enum: `CO`, `US` | no | País del producto, si se identifica uno. |
+| `product_id` | integer (≥ 1) | no | Producto, si la ruta o el cuerpo lo identifican. |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | no | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `quantity` | number (> 0) | no | Cantidad de la orden, si la petición era una orden. |
+| `unit` | enum: `kg`, `unidad`, `litro` | no | Unidad de medida del producto. |
+| `currency` | enum: `COP`, `USD` | no | Moneda del local, si se conoce el local. |
+| `method` | enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | sí | Método HTTP. |
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `rejection_type` | enum: `method_not_allowed`, `forbidden_field` | sí | `method_not_allowed` (405) o `forbidden_field` (422 por un campo de stock en el cuerpo). |
+| `status_code` | enum: `405`, `422` | sí | 405 o 422. |
+| `user_role` | enum: `admin`, `manager`, `user` | sí | Rol de la cuenta. |
+
+#### `ingredient_price_variance_detected`
+
+El costo unitario de una orden de entrada varía más de un umbral (ej. 10%) respecto al histórico del mismo producto/proveedor.
+
+| | |
+|---|---|
+| **Clasificación** | Obligatorio |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras el `commit` de una entrada cuyo `unit_cost` se desvía más de `threshold_pct` de la media de los últimos `history_window_days` días del mismo producto y proveedor, con al menos 3 entradas en esa ventana. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `order_id` | integer (≥ 1) | sí | Id de la orden registrada. |
+| `location_id` | integer (1–14) | sí | Local (1–14) donde ocurre el hecho. |
+| `country` | enum: `CO`, `US` | sí | País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz. |
+| `product_id` | integer (≥ 1) | sí | Id del producto (hoy `Ingredient.id`). |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | sí | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `quantity` | number (> 0) | sí | Cantidad de la orden, en `unit`. |
+| `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `supplier_id` | integer (≥ 1) | sí | Id del proveedor en el directorio. |
+| `unit_cost` | number (> 0) | sí | Coste por unidad de la entrega, en `currency`. |
+| `historical_avg_unit_cost` | number (> 0) | sí | Media del coste unitario en la ventana, en `currency`. |
+| `variance_pct` | number | sí | Desviación en porcentaje: (unit_cost − media) / media × 100. Positiva si sube. |
+| `threshold_pct` | number (> 0) | sí | Umbral configurado, en porcentaje (10 por defecto). |
+| `history_window_days` | integer (≥ 1) | sí | Días de histórico usados (90 por defecto). |
+| `history_sample_size` | integer (≥ 3) | sí | Entradas del histórico usadas para la media (≥ 3). |
+
+#### `order_validation_failed`
+
+La API rechaza una orden de entrada o de salida por datos inválidos.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Al responder 422 `invalid_request` o 404 `ingredient_not_found` a `POST /api/v1/inventory/orders/inbound` u `/outbound`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. Solo nombres de campo, nunca los valores enviados. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `order_type` | enum: `inbound`, `outbound` | sí | Tipo de orden. |
+| `product_id` | integer (≥ 1) | no | Producto, si el cuerpo trae un `ingredient_id` legible. |
+| `location_id` | integer (1–14) | no | Local, si el cuerpo trae un `location_id` válido. |
+| `error_code` | enum: `invalid_request`, `ingredient_not_found` | sí | Código de la respuesta. |
+| `invalid_fields` | array de string | sí | Campos señalados en `details` (vacío en un 404). |
+| `status_code` | enum: `404`, `422` | sí | 422 o 404. |
+
+#### `outbound_order_rejected`
+
+La API rechaza una salida porque supera el stock disponible.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Al responder 400 `insufficient_stock` a `POST /api/v1/inventory/orders/outbound` (no se escribe nada). |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `location_id` | integer (1–14) | sí | Local (1–14) donde ocurre el hecho. |
+| `country` | enum: `CO`, `US` | sí | País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz. |
+| `product_id` | integer (≥ 1) | sí | Id del producto (hoy `Ingredient.id`). |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | sí | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `quantity` | number (> 0) | sí | Cantidad que se intentó sacar, en `unit`. |
+| `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `available_quantity` | number (≥ 0) | sí | Stock disponible en ese momento, en `unit`. |
+| `outbound_type` | enum: `consumption`, `waste` | sí | Tipo de salida intentada. |
+
+#### `product_created`
+
+Se da de alta un producto en el catálogo de inventario.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras el `commit` de `POST /api/v1/inventory/products`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. El nombre de un ingrediente no es un dato personal. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `product_id` | integer (≥ 1) | sí | Id del producto (hoy `Ingredient.id`). |
+| `product_category` | enum: `proteína`, `vegetal`, `salsa`, `bebida`, `empaque`, `limpieza` | sí | Categoría del producto, con los valores del briefing (hoy `meat`→`proteína`, `produce`→`vegetal`, `sauce`→`salsa`, `beverage`→`bebida`, `packaging`→`empaque`, `cleaning`→`limpieza`). |
+| `country` | enum: `CO`, `US` | sí | País del local: `CO` (Colombia) o `US` (Florida). Nunca el idioma de la interfaz. |
+| `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
+| `product_name` | string (máx. 120) | sí | Nombre del producto, para detectar duplicados. |
+
+### Autenticación y sesión
+
+#### `login_succeeded`
+
+Un usuario inicia sesión.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Cuando `POST /api/v1/auth/login` emite un token. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | `userId` es un identificador seudónimo (UUID). No se guarda el email. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `user_role` | enum: `admin`, `manager`, `user` | sí | Rol de la cuenta. |
+
+#### `login_failed`
+
+Un intento de inicio de sesión falla.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Cuando `POST /api/v1/auth/login` responde 401 `invalid_credentials` o 403 `inactive_user`. |
+| **`userId`** | `null`: la petición no está autenticada. |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | **Sí (sanitizado).** El email nunca se emite: va como `account_fingerprint` (HMAC truncado). La IP va truncada (`client_network`). `userId` es `null` aunque la cuenta exista, para no revelar qué emails tienen cuenta. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `failure_reason` | enum: `invalid_credentials`, `inactive_user` | sí | Motivo del rechazo. |
+| `account_fingerprint` | string | sí | HMAC-SHA256 del email normalizado (minúsculas, sin espacios) con la clave `TELEMETRY_HASH_KEY`, truncado a 16 caracteres hexadecimales. Permite agrupar intentos por cuenta sin guardar el email. **[sanitizado]** |
+| `client_network` | string (máx. 43) | sí | IP de origen truncada: /24 en IPv4 (`203.0.113.0/24`) o /48 en IPv6. Nunca la IP completa. **[sanitizado]** |
+
+#### `session_expired`
+
+Una petición llega con una sesión caducada.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Cuando la dependencia de autenticación responde 401 `token_expired`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | `userId` sale del `sub` del token caducado (la firma es válida). No se guarda el token. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `token_age_minutes` | integer (≥ 0) | sí | Minutos desde la emisión del token (`iat`). |
+
+#### `auth_token_rejected`
+
+Una petición llega con un token inválido o revocado.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Cuando la dependencia de autenticación responde 401 `invalid_token` o `session_revoked`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | `userId` es el `sub` solo si el token está revocado (firma válida); con `invalid_token` es `null`. No se guarda el token. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `rejection_reason` | enum: `invalid_token`, `session_revoked` | sí | Motivo del rechazo. |
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+
+#### `logout_completed`
+
+El usuario cierra sesión.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al pulsar "Cerrar sesión" en el menú de la cuenta, antes de borrar el token. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no hay petición a la API. |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `route` | string | sí | Vista desde la que se cerró la sesión. |
+| `session_duration_seconds` | integer (≥ 0) | sí | Segundos desde el inicio de la sesión del navegador. |
+
+#### `user_registered`
+
+Se crea una cuenta por autorregistro.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras crear la cuenta con `POST /api/v1/users`. |
+| **`userId`** | `null`: la petición no está autenticada. |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | `userId` es `null` (la petición no está autenticada); la cuenta nueva va como `new_user_id` (seudónimo). No se guarda el email. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `new_user_id` | string (UUID) | sí | UUID de la cuenta creada. **[seudónimo]** |
+| `user_role` | enum: `admin`, `manager`, `user` | sí | Rol asignado (siempre `user` en el autorregistro). |
+
+#### `user_access_changed`
+
+Cambia el acceso de una cuenta.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `PUT /api/v1/users/{id}` que cambia `role` o `is_active`, o tras `DELETE /api/v1/users/{id}`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | `target_user_id` es seudónimo (UUID). No se guardan emails. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `target_user_id` | string (UUID) | sí | UUID de la cuenta afectada. **[seudónimo]** |
+| `change` | enum: `role_changed`, `activated`, `deactivated`, `deleted` | sí | Qué cambió. |
+| `previous_role` | enum: `admin`, `manager`, `user` | no | Rol anterior (en `role_changed`). |
+| `new_role` | enum: `admin`, `manager`, `user` | no | Rol nuevo (en `role_changed`). |
+| `actor_role` | enum: `admin`, `manager`, `user` | sí | Rol de quien hace el cambio. |
+| `self_change` | boolean | sí | `true` si la cuenta afectada es la del propio actor. |
+
+#### `password_reset_requested`
+
+Se solicita un enlace de recuperación de contraseña.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Al recibir `POST /api/v1/auth/forgot-password`, exista o no la cuenta (la respuesta al usuario es neutra). |
+| **`userId`** | `null`: la petición no está autenticada. |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | **Sí (sanitizado).** El email va como `account_fingerprint`; la IP, truncada. `account_found` solo se usa internamente y nunca llega al usuario. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `account_fingerprint` | string | sí | HMAC-SHA256 del email normalizado (minúsculas, sin espacios) con la clave `TELEMETRY_HASH_KEY`, truncado a 16 caracteres hexadecimales. Permite agrupar intentos por cuenta sin guardar el email. **[sanitizado]** |
+| `account_found` | boolean | sí | `true` si el email tiene cuenta activa. |
+| `client_network` | string (máx. 43) | sí | IP de origen truncada: /24 en IPv4 (`203.0.113.0/24`) o /48 en IPv6. Nunca la IP completa. **[sanitizado]** |
+
+#### `password_reset_completed`
+
+Una contraseña se restablece con un enlace de recuperación.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras el cambio de contraseña de `POST /api/v1/auth/reset-password`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | `userId` es el dueño del enlace. No se guarda el enlace ni el token. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `link_age_minutes` | integer (≥ 0) | sí | Minutos desde que se emitió el enlace. |
+
+#### `password_reset_link_rejected`
+
+Un enlace de recuperación se rechaza.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Cuando `POST /api/v1/auth/reset-password/validate` o `/reset-password` responde con `invalid_reset_token`, `reset_token_expired` o `reset_token_used`. |
+| **`userId`** | `null`: la petición no está autenticada. |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. No se guarda el token ni el email. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `rejection_reason` | enum: `invalid_reset_token`, `reset_token_expired`, `reset_token_used` | sí | Motivo del rechazo. |
+| `stage` | enum: `validate`, `reset` | sí | `validate` (al abrir el enlace) o `reset` (al enviar la contraseña). |
+
+#### `password_changed`
+
+Un usuario cambia su propia contraseña.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `POST /api/v1/auth/change-password` (también al editar `password` con `PUT /api/v1/users/{id}`). |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `days_since_last_change` | integer (≥ 0) | no | Días desde el cambio anterior (`password_changed_at`); ausente si nunca cambió. |
+| `channel` | enum: `change_password`, `user_update` | sí | Ruta usada. |
+
+### Navegación y abandono
+
+#### `page_viewed`
+
+El backoffice muestra una vista.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al mostrar una ruta del backoffice, en la carga inicial y en cada navegación sin recarga. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no está ligado a una petición a la API. |
+| **Datos sensibles** | Ninguno. La ruta va como plantilla (`/talento/candidates/[id]`), sin ids reales ni query string. `userId` es `null` en las vistas públicas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `previous_route` | string | no | Ruta anterior (plantilla); ausente en la carga inicial. |
+| `navigation_type` | enum: `initial`, `client` | sí | `initial` (carga completa) o `client` (sin recarga). |
+| `user_role` | enum: `admin`, `manager`, `user` | no | Rol del usuario en las vistas protegidas. |
+
+#### `form_validation_failed`
+
+Un formulario bloquea el envío por errores de validación.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al pulsar enviar con campos inválidos según la validación del navegador. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no está ligado a una petición a la API. |
+| **Datos sensibles** | Ninguno. Solo nombres de campo, nunca los valores escritos. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `form_id` | enum: `login`, `register`, `forgot_password`, `reset_password`, `change_password`, `profile`, `inbound_order`, `outbound_order`, `supplier`, `supplier_rate`, `incident`, `incident_upload`, `candidate`, `candidate_note` | sí | Formulario del backoffice. |
+| `invalid_fields` | array de string | sí | Campos con error. |
+| `error_count` | integer (≥ 1) | sí | Número de campos con error. |
+
+#### `form_abandoned`
+
+Un formulario empezado se abandona sin enviar.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al salir de la vista, cerrar el modal o cerrar la pestaña con al menos un campo modificado y sin envío correcto. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no está ligado a una petición a la API. |
+| **Datos sensibles** | Ninguno. Solo nombres de campo. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `form_id` | enum: `login`, `register`, `forgot_password`, `reset_password`, `change_password`, `profile`, `inbound_order`, `outbound_order`, `supplier`, `supplier_rate`, `incident`, `incident_upload`, `candidate`, `candidate_note` | sí | Formulario del backoffice. |
+| `last_field` | string | sí | Último campo modificado. |
+| `filled_field_count` | integer (≥ 1) | sí | Campos modificados. |
+| `time_in_form_seconds` | integer (≥ 0) | sí | Segundos desde el primer cambio. |
+| `exit` | enum: `navigation`, `modal_closed`, `tab_closed` | sí | Cómo se salió. |
+
+#### `list_filter_applied`
+
+Se cambia un filtro de una lista.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al aplicarse un filtro (en el texto, cuando deja de escribirse durante 500 ms). |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no está ligado a una petición a la API. |
+| **Datos sensibles** | Ninguno. El texto de búsqueda no se emite: solo su longitud. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `list_id` | enum: `order_history`, `incident_manager`, `supplier_directory` | sí | Lista del backoffice. |
+| `filter_name` | enum: `kind`, `ingredient`, `status`, `origin`, `branch`, `country`, `category` | sí | Filtro cambiado. |
+| `filter_value` | string | no | Valor elegido en los filtros de lista cerrada (p. ej. `exit`, `open`); ausente en los de texto y al quitar el filtro. |
+| `query_length` | integer (≥ 0) | no | Longitud del texto en los filtros de texto. |
+| `result_count` | integer (≥ 0) | sí | Filas que quedan con los filtros activos. |
+
+#### `list_page_extended`
+
+Se piden más filas de una lista larga.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al pulsar "Mostrar más". |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no está ligado a una petición a la API. |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `list_id` | enum: `order_history`, `incident_manager`, `supplier_directory` | sí | Lista del backoffice. |
+| `visible_rows` | integer (≥ 1) | sí | Filas visibles tras el clic. |
+| `total_rows` | integer (≥ 1) | sí | Filas de la lista con los filtros activos. |
+| `filters_active` | boolean | sí | `true` si hay algún filtro aplicado. |
+
+### Rendimiento
+
+#### `api_latency_recorded`
+
+Duración de una petición a la API.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Al terminar cada petición, en el middleware de timing (`app/core/timing.py`), con el muestreo de la estrategia de entrega. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. La ruta va como plantilla. `userId` es `null` en las rutas públicas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `method` | enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | sí | Método HTTP. |
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `status_code` | integer (100–599) | sí | Código HTTP de la respuesta. |
+| `duration_ms` | number (≥ 0) | sí | Duración en milisegundos. |
+| `cache` | enum: `HIT`, `MISS` | no | Resultado de la caché en las rutas cacheadas (`X-Cache`). |
+
+#### `page_performance_recorded`
+
+Métricas de carga de una vista.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al ocultarse la vista o salir de ella (cuando las métricas son definitivas). |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no está ligado a una petición a la API. |
+| **Datos sensibles** | Ninguno. No se emite el user agent completo: solo la clase de dispositivo. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `lcp_ms` | number (≥ 0) | no | Largest Contentful Paint, en ms. |
+| `cls` | number (≥ 0) | no | Cumulative Layout Shift. |
+| `inp_ms` | number (≥ 0) | no | Interaction to Next Paint, en ms (si hubo interacción). |
+| `data_ready_ms` | number (≥ 0) | no | Ms desde la navegación hasta que la vista muestra sus datos (fin de la carga de `useAsyncData`). |
+| `device_class` | enum: `mobile`, `tablet`, `desktop` | sí | Clase por ancho de pantalla: `mobile` (< 768 px), `tablet` (768–1023 px) o `desktop`. |
+| `effective_connection` | enum: `slow-2g`, `2g`, `3g`, `4g` | no | `navigator.connection.effectiveType`, si el navegador lo ofrece. |
+
+#### `cache_stats_recorded`
+
+Resumen de aciertos y fallos de una caché.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Cada 5 minutos por cada caché del inventario, con los contadores de esa ventana. |
+| **`userId`** | `null`: lo emite un proceso, no un usuario. |
+| **`sessionId`** | `null`: es un resumen del proceso. |
+| **`requestId`** | `null`: agrega muchas peticiones. |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `cache_name` | enum: `inventory_products`, `inventory_orders` | sí | Caché. |
+| `hits` | integer (≥ 0) | sí | Aciertos en la ventana. |
+| `misses` | integer (≥ 0) | sí | Fallos en la ventana. |
+| `invalidations` | integer (≥ 0) | sí | Invalidaciones en la ventana. |
+| `window_seconds` | integer (≥ 1) | sí | Duración de la ventana. |
+
+### Errores
+
+#### `api_error_returned`
+
+La API responde con un error 4xx.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Al responder cualquier 4xx con el formato `{"error": {"code", "message"}}`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. No se guarda el `message` ni el cuerpo; solo el código. `userId` es `null` si la petición no estaba autenticada. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `method` | enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | sí | Método HTTP. |
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `status_code` | integer (400–499) | sí | Código 4xx. |
+| `error_code` | string | sí | `error.code` de la respuesta (p. ej. `duplicate_sku`, `http_405`). |
+
+#### `server_error_occurred`
+
+Una excepción no controlada produce un 500.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Al responder 500 `internal_error`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. No se emite el mensaje de la excepción (puede contener datos): solo su tipo y una huella. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `method` | enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | sí | Método HTTP. |
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `exception_type` | string | sí | Clase de la excepción (p. ej. `OperationalError`). |
+| `error_fingerprint` | string | sí | SHA-256 truncado del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo. |
+
+#### `frontend_error_captured`
+
+Un error de JavaScript no controlado en el backoffice.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `window.onerror`, en `unhandledrejection` y al mostrarse la pantalla de error de una vista (`error.tsx`). |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador. |
+| **`requestId`** | `null`: no está ligado a una petición a la API. |
+| **Datos sensibles** | **Posible (sanitizado).** El mensaje se recorta a 200 caracteres y se le sustituyen emails, números de 4 o más cifras y UUID por `[redacted]` antes de emitirlo. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
+| `error_name` | string (máx. 60) | sí | Tipo de error (p. ej. `TypeError`). |
+| `message_sanitized` | string (máx. 200) | sí | Mensaje recortado y saneado. **[sanitizado]** |
+| `error_fingerprint` | string | sí | SHA-256 truncado del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo. |
+| `source` | enum: `window_error`, `unhandled_rejection`, `error_boundary` | sí | Dónde se capturó. |
+
+#### `api_connection_failed`
+
+El backoffice no llega a la API.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | BFF (`source: bff`) |
+| **Se emite** | Cuando el intermediario `app/api/[...path]/route.ts` responde 502 `api_unavailable` o 500 `api_not_configured`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera recibida). |
+| **`requestId`** | Id de la petición que no llegó a la API. |
+| **Datos sensibles** | Ninguno. `userId` es `null`: el BFF no decodifica el token. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `method` | enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | sí | Método HTTP. |
+| `route` | string | sí | Plantilla de la ruta de la API que se intentó. |
+| `failure` | enum: `api_unavailable`, `api_not_configured` | sí | Motivo. |
+| `status_code` | enum: `500`, `502` | sí | 502 o 500. |
+| `duration_ms` | number (≥ 0) | sí | Ms hasta el fallo. |
+
+#### `email_delivery_failed`
+
+Un correo no sale.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Proceso (`source: process`) |
+| **Se emite** | En la tarea en segundo plano de envío (`send_safely`) cuando el proveedor falla o el envío está desactivado (falta `RESEND_API_KEY`). |
+| **`userId`** | `null`: lo emite un proceso, no un usuario. |
+| **`sessionId`** | `null`: corre fuera de la petición. |
+| **`requestId`** | Id de la petición que pidió el correo. |
+| **Datos sensibles** | Ninguno. Nunca se emiten el destinatario, el asunto ni el enlace. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `email_kind` | enum: `password_reset` | sí | Tipo de correo. |
+| `failure` | enum: `provider_error`, `disabled` | sí | `provider_error` (Resend respondió con error) o `disabled` (sin clave). |
+| `provider_status` | integer (100–599) | no | Código HTTP del proveedor, si respondió. |
+
+### Otras áreas del negocio
+
+#### `supplier_created`
+
+Se da de alta un proveedor.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `POST /api/v1/suppliers`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. No se emiten los datos de contacto del proveedor. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `supplier_id` | integer (≥ 1) | sí | Id del proveedor en el directorio. |
+| `country` | enum: `CO`, `US` | sí | País del proveedor (`Colombia`→`CO`, `USA`→`US`). |
+| `categories` | array de enum: `carne`, `verduras_y_hortalizas`, `salsas_y_condimentos`, `bebidas`, `packaging`, `productos_limpieza`, `lacteos`, `carbon_y_combustible` | sí | Categorías del proveedor en el directorio. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `status` | enum: `active`, `suspended` | sí | Estado del proveedor. |
+
+#### `supplier_rate_updated`
+
+Cambia la tarifa de un proveedor.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `PATCH /api/v1/suppliers/{id}/rate`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `supplier_id` | integer (≥ 1) | sí | Id del proveedor en el directorio. |
+| `country` | enum: `CO`, `US` | sí | País del proveedor. |
+| `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
+| `previous_rate` | number (> 0) | sí | Tarifa anterior por unidad, en `currency`. |
+| `new_rate` | number (> 0) | sí | Tarifa nueva por unidad, en `currency`. |
+| `change_pct` | number | sí | (new_rate − previous_rate) / previous_rate × 100. |
+
+#### `supplier_status_changed`
+
+Un proveedor se suspende o se reactiva.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `PATCH /api/v1/suppliers/{id}/status` que cambia el estado. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `supplier_id` | integer (≥ 1) | sí | Id del proveedor en el directorio. |
+| `country` | enum: `CO`, `US` | sí | País del proveedor. |
+| `categories` | array de enum: `carne`, `verduras_y_hortalizas`, `salsas_y_condimentos`, `bebidas`, `packaging`, `productos_limpieza`, `lacteos`, `carbon_y_combustible` | sí | Categorías del proveedor en el directorio. |
+| `previous_status` | enum: `active`, `suspended` | sí | Estado del proveedor. |
+| `new_status` | enum: `active`, `suspended` | sí | Estado del proveedor. |
+
+#### `supplier_deleted`
+
+Se borra un proveedor.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `DELETE /api/v1/suppliers/{id}`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `supplier_id` | integer (≥ 1) | sí | Id del proveedor en el directorio. |
+| `country` | enum: `CO`, `US` | sí | País del proveedor. |
+| `categories` | array de enum: `carne`, `verduras_y_hortalizas`, `salsas_y_condimentos`, `bebidas`, `packaging`, `productos_limpieza`, `lacteos`, `carbon_y_combustible` | sí | Categorías del proveedor en el directorio. |
+| `status_at_deletion` | enum: `active`, `suspended` | sí | Estado del proveedor. |
+
+#### `incident_created`
+
+Se registra una incidencia.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `POST /api/v1/incidents`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. No se emiten el título ni la descripción (texto libre). |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `incident_id` | integer (≥ 1) | sí | Id de la incidencia. |
+| `category` | enum: `equipment_failure`, `supply_issue`, `customer_complaint`, `staff_issue`, `facility_issue`, `pos_system`, `delivery_issue`, `other` | sí | Categoría de la incidencia. |
+| `origin` | enum: `customer`, `branch`, `internal` | sí | Origen del reporte. |
+| `branch` | enum: `central`, `medellin_centro`, `medellin_laureles`, `medellin_envigado`, `medellin_bello`, `medellin_itagui`, `bogota_chapinero`, `bogota_usaquen`, `cali_granada`, `barranquilla_norte`, `miami_doral`, `miami_hialeah`, `miami_kendall`, `orlando_international`, `fort_lauderdale` | sí | Sede del gestor de incidencias (`central` si no es un local). |
+| `status` | enum: `open`, `in_progress`, `resolved`, `discarded` | sí | Estado de la incidencia. |
+
+#### `incident_status_changed`
+
+Cambia el estado de una incidencia.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `PATCH /api/v1/incidents/{id}/status`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `incident_id` | integer (≥ 1) | sí | Id de la incidencia. |
+| `category` | enum: `equipment_failure`, `supply_issue`, `customer_complaint`, `staff_issue`, `facility_issue`, `pos_system`, `delivery_issue`, `other` | sí | Categoría de la incidencia. |
+| `branch` | enum: `central`, `medellin_centro`, `medellin_laureles`, `medellin_envigado`, `medellin_bello`, `medellin_itagui`, `bogota_chapinero`, `bogota_usaquen`, `cali_granada`, `barranquilla_norte`, `miami_doral`, `miami_hialeah`, `miami_kendall`, `orlando_international`, `fort_lauderdale` | sí | Sede del gestor de incidencias (`central` si no es un local). |
+| `previous_status` | enum: `open`, `in_progress`, `resolved`, `discarded` | sí | Estado de la incidencia. |
+| `new_status` | enum: `open`, `in_progress`, `resolved`, `discarded` | sí | Estado de la incidencia. |
+| `minutes_since_created` | integer (≥ 0) | sí | Minutos desde `created_at`. |
+| `minutes_in_previous_status` | integer (≥ 0) | sí | Minutos desde el cambio de estado anterior (`updated_at`). |
+
+#### `incident_transition_rejected`
+
+Se rechaza un cambio de estado no permitido.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Cuando `PATCH /api/v1/incidents/{id}/status` responde 400 `invalid_transition`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `incident_id` | integer (≥ 1) | sí | Id de la incidencia. |
+| `current_status` | enum: `open`, `in_progress`, `resolved`, `discarded` | sí | Estado de la incidencia. |
+| `requested_status` | enum: `open`, `in_progress`, `resolved`, `discarded` | sí | Estado de la incidencia. |
+
+#### `incident_report_analyzed`
+
+Se analiza un CSV de incidentes.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras un análisis correcto de `POST /api/v1/incidents/analyze`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. No se emite el contenido del archivo ni su nombre. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `total_rows` | integer (≥ 1) | sí | Filas del CSV. |
+| `valid_rows` | integer (≥ 0) | sí | Filas válidas. |
+| `invalid_rows` | integer (≥ 0) | sí | Filas inválidas. |
+| `invalid_by_rule` | objeto: `missing_location`, `invalid_category`, `empty_description`, `missing_reporter`, `invalid_status`, `closed_without_score`, `score_out_of_range` (enteros ≥ 0) | sí | Filas inválidas por regla del analizador. |
+| `file_size_bytes` | integer (1–5242880) | sí | Tamaño del archivo. |
+
+#### `incident_report_exported`
+
+Se descarga el resumen del último análisis.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | API (`source: api`) |
+| **Se emite** | Tras `GET /api/v1/incidents/results/export`. |
+| **`userId`** | Usuario autenticado (`sub` del token). |
+| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
+| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **Datos sensibles** | Ninguno. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `analysis_age_minutes` | integer (≥ 0) | sí | Minutos desde el análisis que se exporta. |
+
+### Procesos internos
+
+#### `api_instance_started`
+
+La API termina de arrancar.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Proceso (`source: process`) |
+| **Se emite** | Al final del `lifespan` de `app/main.py`. |
+| **`userId`** | `null`: lo emite un proceso, no un usuario. |
+| **`sessionId`** | `null`. |
+| **`requestId`** | `null`. |
+| **Datos sensibles** | Ninguno. No se emite ningún valor de configuración, solo si cada función está activa. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `app_version` | string | sí | Versión de la API (`FastAPI.version`). |
+| `email_enabled` | boolean | sí | `true` si hay `RESEND_API_KEY`. |
+| `suppliers_seeded` | integer (≥ 0) | sí | Proveedores sembrados al arrancar (0 si la tabla ya tenía datos). |
+
+#### `data_seed_executed`
+
+Un script carga o retira datos fuera de la API.
+
+| | |
+|---|---|
+| **Clasificación** | Oportunidad identificada |
+| **Emisor** | Proceso (`source: process`) |
+| **Se emite** | Al terminar `uv run seed`, `uv run seed-inventory`, `scripts/seed_incidents.py` o `scripts/seed_volume.py`. |
+| **`userId`** | `null`: lo emite un proceso, no un usuario. |
+| **`sessionId`** | `null`. |
+| **`requestId`** | `null`. |
+| **Datos sensibles** | Ninguno. No se emiten las filas cargadas. |
+
+| Propiedad | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `script` | enum: `seed_suppliers`, `seed_inventory`, `seed_incidents`, `seed_volume` | sí | Script ejecutado. |
+| `mode` | enum: `load`, `clear` | sí | `load` o `clear` (`--clear`). |
+| `target` | enum: `tinydb`, `supabase`, `tinydb_and_supabase` | sí | Almacenamiento afectado. |
+| `affected_rows` | integer (≥ 0) | sí | Filas insertadas o borradas. |
+| `succeeded` | boolean | sí | `false` si terminó con error. |
