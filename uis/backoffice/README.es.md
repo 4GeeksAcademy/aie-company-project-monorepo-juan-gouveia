@@ -34,7 +34,7 @@ npm run test:coverage   # lo mismo, con cobertura (informe en coverage/)
 
 `npm install` enlaza `@repo/brasa-core` desde `packages/brasa-core`, así que hay que ejecutarlo después de clonar el repositorio.
 
-Las pruebas de Jest cubren la lógica de autenticación de `lib/auth/` (`__tests__/auth/`, ticket AUTH-088) y las utilidades `lib/format.ts`, `toUserMessage` y `readJson` (`__tests__/utils/`, ticket FE-019). Cada carpeta se ejecuta sola con `npm test -- __tests__/auth` o `npm test -- __tests__/utils`. Qué prueba cada archivo y su cobertura están en [`services/brasaland-api/TESTING.es.md`](../../services/brasaland-api/TESTING.es.md#pruebas-del-backoffice-jest) y en su sección de FE-019.
+Las pruebas de Jest cubren la lógica de autenticación de `lib/auth/` (`__tests__/auth/`, ticket AUTH-088), las utilidades `lib/format.ts`, `toUserMessage` y `readJson` (`__tests__/utils/`, ticket FE-019) y la sección de inventario (`__tests__/inventory/`, ticket BRD-0512): llamadas de `lib/inventory.ts` con `fetch` simulado, niveles de stock, validación de los formularios y unión del historial. Cada carpeta se ejecuta sola con `npm test -- __tests__/auth`, `__tests__/utils` o `__tests__/inventory`. Qué prueba cada archivo y su cobertura están en [`services/brasaland-api/TESTING.es.md`](../../services/brasaland-api/TESTING.es.md#pruebas-del-backoffice-jest) y en su sección de FE-019.
 
 ## Sesión
 
@@ -70,6 +70,10 @@ Cómo funciona:
 | `/gestor-incidencias` | Gestor de incidencias: resumen (totales por estado, categoría, origen y sede, de `GET /incidents/summary`) y listado con filtros por `status`, `origin` y `branch`, de la más reciente a la más antigua. Cada bloque tiene su propia carga y su error con "Reintentar", así que un fallo del resumen no rompe el listado. Lista vacía y "sin resultados con los filtros" tienen su mensaje. Cada incidencia cambia de estado desde el listado (solo las transiciones válidas): el cambio se ve al momento y, si la API lo rechaza o falla, vuelve al estado anterior y avisa. Las fechas se muestran en UTC, porque el histórico se cargó como medianoche UTC | API de Brasaland (dominio `incidents`, TinyDB), a través del intermediario |
 | `/gestor-incidencias/nueva` | Registrar incidencia (gestor de incidencias centralizado): título, descripción, categoría, origen y sede, con campos grandes para tablet. Valida los obligatorios antes de enviar; con `origin = branch` resalta la sede; el desplegable de sedes muestra los nombres del briefing ("Medellín Centro"). Durante el envío, el botón queda deshabilitado con un indicador de carga; los errores de la API aparecen junto a su campo y, tras el éxito, el formulario se limpia y confirma. Toda incidencia nueva empieza en `open` | API de Brasaland (dominio `incidents`, TinyDB), a través del intermediario |
 | `/proveedores` | Directorio de proveedores: listado de activos y suspendidos, filtros por país y categoría, alta, actualización de tarifa y activar o suspender | API de Brasaland (dominio `suppliers`, TinyDB), a través del intermediario |
+| `/inventario/ingredientes` | Inventario (Hito 5): ingredientes con SKU, categoría, país, unidad y stock actual, con su nivel (sin stock, bajo o saludable; umbrales por unidad en `lib/inventory-stock-level.ts`) y una leyenda. Cada fila abre la entrada o la salida con el ingrediente elegido (`?ingredient_id=`). `/inventario` redirige aquí | API de Brasaland (dominio `inventory`, Supabase), a través del intermediario |
+| `/inventario/ordenes/entrada` | Registrar entrada: ingrediente (por nombre, con SKU y unidad), cantidad, proveedor (de los activos del directorio con el país y la categoría del ingrediente; si no hay ninguno, un aviso enlaza al directorio) y local. Valida antes de enviar; los errores de la API aparecen junto a su campo o en un aviso; tras el éxito confirma y se limpia | Ídem |
+| `/inventario/ordenes/salida` | Registrar salida: ingrediente, cantidad, motivo (`consumption` o `waste`) y local. Muestra el stock actual al elegir el ingrediente, avisa sin bloquear si la cantidad lo supera y muestra el 400 de stock insuficiente junto a la cantidad | Ídem |
+| `/inventario/ordenes` | Historial de órdenes, solo lectura: entradas y salidas juntas, de la más reciente a la más antigua, con tipo, ingrediente, cantidad, proveedor o motivo, local, fecha y usuario (`user_uuid`, con "Tú" en las propias) | Ídem |
 | `/funciones` | Pruebas manuales de filtros, búsquedas, reportes y validaciones | Datos de ejemplo de `@repo/brasa-core` |
 
 ## Añadir una herramienta
@@ -94,9 +98,9 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
 - `components/`:
   - componentes base reutilizables, entre ellos `PasswordField`, con botón para mostrar la contraseña, `FileDropzone`, para cualquier herramienta que reciba archivos, y `TextAreaField`. `FormField`, `TextAreaField` y `LabeledSelect` admiten `size="lg"` para formularios táctiles;
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` y los formularios de login, registro y recuperación de contraseña) y `account/` (perfil y cambio de contraseña);
-  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/` y `proveedores/`.
+  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/` e `inventario/`.
 - `hooks/`: hooks personalizados, entre ellos `useSession`.
-- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/` y una carpeta por herramienta.
+- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/` y una carpeta por herramienta. El inventario usa archivos `lib/inventory*.ts`: `inventory.ts` es su módulo de integración, el único que llama a `/api/inventory/...`.
 - `types/`: tipos de la API (`api.ts` para los errores y `auth.ts` para usuarios y perfiles).
 
 ## Limitaciones conocidas
@@ -107,6 +111,7 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
 - **`/funciones` es temporal:** prueba las reglas de `@repo/brasa-core`, un paquete transitorio. Cuando esas reglas pasen al backend, debe retirarse o llamar a la API. No añadas cálculos de negocio a los frontends.
 - **`/incidencias` descarga el último análisis de la API:** se guarda en memoria, así que si la API se reinicia hay que volver a subir el archivo, y si dos personas analizan a la vez, se descarga el más reciente.
 - **`/proveedores` escribe en la base local de la API:** las altas y los cambios de tarifa o estado se guardan en `services/brasaland-api/storage/brasaland-db.json`. Para volver a los datos iniciales, borra ese archivo y reinicia la API. La interfaz no ofrece borrar proveedores: el flujo habitual es suspenderlos.
-- **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). En móvil y tablet (por debajo de `xl`) no se muestran los enlaces a herramientas, porque con 6 herramientas no caben junto al menú de cuenta; se navega desde la portada (el logo lleva a ella). Por debajo de `xl`, "Mi perfil" y "Cerrar sesión" se muestran solo como iconos.
+- **`/inventario` escribe en la base de la API:** con la API configurada contra Supabase, cada entrada o salida cambia el stock real y no se puede borrar (se corrige con una orden compensatoria). Para probar, arranca la API con una `DATABASE_URL` temporal (por ejemplo, SQLite). El stock de la salida se refresca al elegir el ingrediente y tras cada envío, no en tiempo real: la API aplica la regla con el stock del momento.
+- **Altura de la cabecera:** `FilterBar` depende de su altura fija (57 px en móvil y 89 px desde `md`). En móvil y tablet (por debajo de `xl`) no se muestran los enlaces a herramientas, porque con 7 herramientas no caben junto al menú de cuenta; se navega desde la portada (el logo lleva a ella). Por debajo de `xl`, "Mi perfil" y "Cerrar sesión" se muestran solo como iconos.
 - **API compartida:** el tracker usa una API de playground compartida, así que evita escrituras de prueba. Esa API es de terceros y no recibe el token de sesión.
 - **Tras mover rutas, `tsc` puede fallar con tipos antiguos de `.next`:** se arregla borrando `.next`, que es un artefacto generado.

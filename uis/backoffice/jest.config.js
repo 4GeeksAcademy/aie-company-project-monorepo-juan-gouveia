@@ -23,8 +23,13 @@ module.exports = {
   },
   // Mismo alias que tsconfig.json ("@/*" → raíz del proyecto).
   moduleNameMapper: { "^@/(.*)$": "<rootDir>/$1" },
-  // Lógica de autenticación cubierta por AUTH-088 y utilidades cubiertas por FE-019.
+  // Lógica de autenticación cubierta por AUTH-088, utilidades cubiertas por FE-019 y la capa de
+  // integración y las reglas del inventario (Hito 5, fase frontend).
   collectCoverageFrom: [
+    "lib/inventory.ts",
+    "lib/inventory-labels.ts",
+    "lib/inventory-stock-level.ts",
+    "lib/inventory-validation.ts",
     "lib/auth/validation.ts",
     "lib/auth/navigation.ts",
     "lib/auth/token.ts",

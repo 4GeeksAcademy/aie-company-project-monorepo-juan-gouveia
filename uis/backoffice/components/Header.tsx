@@ -31,7 +31,7 @@ export default function Header({ minimal = false, account }: HeaderProps) {
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-red-700 md:text-base lg:text-lg">
           Backoffice
         </p>
-        {/* En móvil y tablet (por debajo de xl) se navega desde la portada: con 6 herramientas, los
+        {/* En móvil y tablet (por debajo de xl) se navega desde la portada: con 7 herramientas, los
             enlaces no caben junto al menú de cuenta, y FilterBar depende de la altura fija de esta
             cabecera, así que no pueden pasar a una segunda línea. */}
         {!minimal && (
