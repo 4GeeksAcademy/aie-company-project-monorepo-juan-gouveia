@@ -105,7 +105,7 @@ Cubre `core/security.py` (crear y decodificar) y `get_current_user`, la dependen
 
 | ID | Caso | Decisión esperada |
 |---|---|---|
-| ME-F1 | Usuario con perfil | ID, email, rol y perfil del usuario del token |
+| ME-F1 | Usuario con perfil | ID, email, rol y perfil del usuario del token; el perfil solo lleva `name`, `phone` y `address` |
 | ME-L1 | Usuario sin perfil | `profile` vacío, sin error |
 | ME-X1 | Token de un usuario borrado | No llega a la ruta: 401 `invalid_token` |
 
@@ -152,6 +152,7 @@ Cubre `core/security.py` (crear y decodificar) y `get_current_user`, la dependen
 | ID | Caso | Decisión esperada | Por qué |
 |---|---|---|---|
 | REG-F1 | Datos válidos con perfil | Usuario `user`, activo, email en minúsculas, contraseña solo como hash bcrypt verificable; perfil con los datos enviados | |
+| REG-F2 | Respuesta de un registro correcto | Exactamente `{id, message}`: sin email, credenciales ni perfil | Auditoría de serialización (U1): las rutas de auth no autenticadas no reenvían el email |
 | REG-L1 | Sin datos de perfil | Perfil creado con los campos vacíos | Siempre hay un perfil por usuario |
 | REG-L2 | Contraseña de 8 caracteres y de 72 bytes; de 7 y de 73 bytes | Las primeras valen; las otras, no | |
 | REG-L3 | Email ya registrado con otra capitalización o con espacios | 409 `duplicate_email` y no se crea nada | "Usuario duplicado" del ticket |

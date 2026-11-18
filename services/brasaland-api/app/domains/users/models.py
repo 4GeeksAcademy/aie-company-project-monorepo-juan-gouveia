@@ -11,7 +11,7 @@ from typing import Annotated, Any
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, EmailStr, Field, model_validator
 
 from app.core.security import BCRYPT_MAX_BYTES
-from app.domains.profiles.models import Profile, ProfileFields
+from app.domains.profiles.models import ProfileFields
 
 
 class Role(StrEnum):
@@ -106,7 +106,15 @@ class User(UserPublic):
         return UserPublic(**self.model_dump(exclude={"hashed_password", "password_changed_at"}))
 
 
-class UserWithProfile(UserPublic):
-    """Respuesta de POST /users: el usuario creado y su perfil vinculado."""
+USER_CREATED_MESSAGE = "Cuenta creada."
 
-    profile: Profile | None
+
+class UserCreated(BaseModel):
+    """Salida de POST /users (registro público): el identificador de la cuenta y una confirmación.
+
+    No reenvía el email ni los datos de perfil que el cliente acaba de enviar, ni detalles internos
+    de la cuenta (`role`, `is_active`, `created_at`). Ver docs/serialization-audit.md (4.1, U1).
+    """
+
+    id: str = Field(description="UUID de la cuenta creada")
+    message: str = Field(description="Confirmación del registro")

@@ -30,8 +30,23 @@ class ProfileUpdate(ProfileFields):
         return self
 
 
+class ProfileRead(BaseModel):
+    """Salida de las rutas de perfil y del perfil anidado en GET /auth/me: solo nombre y contacto.
+
+    No incluye `id` ni `user_id`: el primero es interno (ninguna ruta lo acepta) y el segundo ya lo
+    conoce quien llama (es él mismo o el `user_id` de la URL). Ver docs/serialization-audit.md (4.3).
+    """
+
+    name: str | None = Field(description="Nombre visible")
+    phone: str | None = Field(description="Teléfono de contacto")
+    address: str | None = Field(description="Dirección de contacto")
+
+
 class Profile(ProfileFields):
-    """Perfil guardado, vinculado uno a uno con su usuario mediante `user_id`."""
+    """Perfil guardado, vinculado uno a uno con su usuario mediante `user_id`. No sale de la API tal cual."""
 
     id: str = Field(description="UUID del perfil")
     user_id: str = Field(description="UUID del usuario dueño del perfil")
+
+    def to_read(self) -> ProfileRead:
+        return ProfileRead(name=self.name, phone=self.phone, address=self.address)

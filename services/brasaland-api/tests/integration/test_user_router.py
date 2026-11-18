@@ -17,19 +17,20 @@ def test_register_creates_user_with_role_user_and_profile(api, auth_store):
     response = api.post(USERS, json=payload)
     assert response.status_code == 201
     body = response.json()
-    assert body["email"] == "ana@brasaland.com"
-    assert body["role"] == "user" and body["is_active"] is True
-    assert body["profile"]["user_id"] == body["id"]
-    assert body["profile"]["name"] == "Ana" and body["profile"]["address"] is None
-    assert "password" not in body and "hashed_password" not in body
+    # Solo el id y una confirmación: ni email, ni credenciales, ni perfil (docs/serialization-audit.md, U1).
+    assert body == {"id": body["id"], "message": "Cuenta creada."}
+    stored = auth_store.users.get(body["id"])
+    assert (stored.email, stored.role, stored.is_active) == ("ana@brasaland.com", Role.USER, True)
+    profile = auth_store.profiles.get_by_user_id(body["id"])
+    assert (profile.name, profile.phone, profile.address) == ("Ana", "+57 300", None)
     # El registro sirve para iniciar sesión.
     assert api.post(LOGIN, json={"email": "ana@brasaland.com", "password": "parrilla-segura"}).status_code == 200
 
 
-def test_register_without_profile_data(api):
+def test_register_without_profile_data(api, auth_store):
     response = api.post(USERS, json={"email": "ana@brasaland.com", "password": "parrilla-segura"})
     assert response.status_code == 201
-    assert response.json()["profile"]["name"] is None
+    assert auth_store.profiles.get_by_user_id(response.json()["id"]).name is None
 
 
 def test_register_rejects_role_so_nobody_self_promotes(api, auth_store):

@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domains.profiles.models import Profile
+from app.domains.profiles.models import ProfileRead
 from app.domains.users.models import Email, Password, Role
 
 
@@ -24,12 +24,16 @@ class Token(BaseModel):
 
 
 class CurrentUser(BaseModel):
-    """Respuesta de GET /auth/me: credenciales visibles del usuario y su perfil."""
+    """Respuesta de GET /auth/me: datos visibles de la propia cuenta y su perfil.
+
+    Es la única respuesta de auth que incluye el email, porque es el del propio usuario autenticado
+    y la vista de cuenta lo muestra. El perfil va anidado sin `id` ni `user_id` (`ProfileRead`).
+    """
 
     id: str = Field(description="UUID del usuario (`user_uuid` en otros módulos)")
-    email: str
-    role: Role
-    profile: Profile | None = Field(description="Nombre visible y datos de contacto")
+    email: str = Field(description="Email de la propia cuenta")
+    role: Role = Field(description="Rol de la cuenta: admin, manager o user")
+    profile: ProfileRead | None = Field(description="Nombre visible y datos de contacto; null si no tiene perfil")
 
 
 # --- Restablecimiento y cambio de contraseña (AUTH-03) ----------------------------------------

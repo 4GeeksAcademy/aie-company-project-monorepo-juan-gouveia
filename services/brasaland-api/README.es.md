@@ -325,7 +325,7 @@ Ninguna ruta que exponga o modifique datos sensibles debe responder sin una sesi
 
 - **`User`** guarda solo credenciales: `id` (UUID4), `email` (único, en minúsculas), `hashed_password` (bcrypt), `is_active`, `role` y `created_at`. El hash nunca sale en una respuesta.
 - **`role`** solo admite `admin`, `manager` o `user`. El registro siempre crea `user`.
-- **`Profile`** guarda el nombre visible y el contacto: `id`, `user_id`, `name`, `phone` y `address`. Se crea con el usuario y se borra con él.
+- **`Profile`** guarda el nombre visible y el contacto: `id`, `user_id`, `name`, `phone` y `address`. Se crea con el usuario y se borra con él. Las respuestas solo llevan `name`, `phone` y `address` (`ProfileRead`): `id` es interno y quien llama ya conoce el `user_id` (ver [`docs/serialization-audit.md`](../../docs/serialization-audit.md)).
 - **Contraseña:** de 8 caracteres a 72 bytes (límite de bcrypt). Se hashea con libpass (`from passlib.hash import bcrypt`); el texto plano nunca se guarda ni se compara.
 - **Otros módulos** referencian al usuario por su `id` con el nombre `user_uuid`. Los usuarios y perfiles no se copian a otras bases.
 
@@ -339,16 +339,16 @@ Ninguna ruta que exponga o modifique datos sensibles debe responder sin una sesi
 | Endpoint | Acceso | Éxito | Errores |
 |---|---|---|---|
 | `POST /api/v1/auth/login` | Público | 200 `{access_token, token_type: "bearer"}` | 401 `invalid_credentials`, 403 `inactive_user`, 415, 422 |
-| `GET /api/v1/auth/me` | Token | 200 con `id`, `email`, `role` y `profile` | 401, 403 |
-| `POST /api/v1/users` | Público (registro) | 201 con el usuario y su perfil | 409 `duplicate_email`, 422 (también si se envía `role`) |
+| `GET /api/v1/auth/me` | Token | 200 con `id`, `email`, `role` y `profile` (`name`, `phone`, `address`, o `null`) | 401, 403 |
+| `POST /api/v1/users` | Público (registro) | 201 `{id, message}`: sin email, credenciales ni perfil | 409 `duplicate_email`, 422 (también si se envía `role`) |
 | `GET /api/v1/users` | Solo admin | 200 con la lista | 401, 403 |
 | `GET /api/v1/users/{id}` | La propia cuenta o admin | 200 | 401, 403, 404 `user_not_found` |
 | `PUT /api/v1/users/{id}` | La propia cuenta o admin. `role` e `is_active`, solo admin | 200 | 401, 403, 404, 409, 422 |
 | `DELETE /api/v1/users/{id}` | La propia cuenta o admin | 200 con el usuario eliminado (también borra su perfil) | 401, 403, 404 |
-| `GET /api/v1/profiles/me` | Token | 200 | 401, 404 `profile_not_found` |
-| `PUT /api/v1/profiles/me` | Token (solo el propio perfil) | 200 | 401, 404, 422 |
-| `GET /api/v1/profiles/{user_id}` | El propio perfil o admin | 200 | 401, 403 `forbidden`, 404 (solo admin) |
-| `PUT /api/v1/profiles/{user_id}` | Solo el dueño del perfil, también frente a un admin | 200 | 401, 403 `forbidden`, 404, 422 |
+| `GET /api/v1/profiles/me` | Token | 200 `{name, phone, address}` | 401, 404 `profile_not_found` |
+| `PUT /api/v1/profiles/me` | Token (solo el propio perfil) | 200 `{name, phone, address}` | 401, 404, 422 |
+| `GET /api/v1/profiles/{user_id}` | El propio perfil o admin | 200 `{name, phone, address}` | 401, 403 `forbidden`, 404 (solo admin) |
+| `PUT /api/v1/profiles/{user_id}` | Solo el dueño del perfil, también frente a un admin | 200 `{name, phone, address}` | 401, 403 `forbidden`, 404, 422 |
 
 - **Login:** acepta JSON `{"email", "password"}` y también el formulario `username`/`password` que envía el botón «Authorize» de `/docs` (`username` es el email). Si el email no existe o la contraseña falla, la respuesta es la misma, y bcrypt se ejecuta en ambos casos para no revelar qué emails están registrados.
 - **`PUT`:** cambia solo los campos enviados. En los perfiles, `null` vacía un campo.

@@ -14,8 +14,9 @@ def test_me_f1_returns_token_user_with_profile(auth_store, user_factory):
     me = read_me(user=user, store=auth_store)
 
     assert (me.id, me.email, me.role) == (user.id, "lucia@brasaland.com", Role.MANAGER)
+    # El perfil va anidado sin `id` ni `user_id` (docs/serialization-audit.md, A2).
     assert me.profile is not None
-    assert (me.profile.user_id, me.profile.name, me.profile.phone) == (user.id, "Lucía Pérez", "+57 300 000 0000")
+    assert me.profile.model_dump() == {"name": "Lucía Pérez", "phone": "+57 300 000 0000", "address": None}
 
 
 def test_me_l1_user_without_profile_gets_empty_profile(auth_store, active_user):

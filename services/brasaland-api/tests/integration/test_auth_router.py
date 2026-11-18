@@ -98,12 +98,13 @@ def test_me_returns_email_role_and_profile(api, make_user):
     user, headers = make_user(name="Ana", phone="+57 300", address="Medellín")
     response = api.get(ME, headers=headers)
     assert response.status_code == 200
-    body = response.json()
-    assert (body["id"], body["email"], body["role"]) == (user.id, "ana@brasaland.com", "user")
-    assert body["profile"]["name"] == "Ana"
-    assert body["profile"]["phone"] == "+57 300"
-    assert body["profile"]["address"] == "Medellín"
-    assert "hashed_password" not in body
+    # Forma exacta (docs/serialization-audit.md, A2): el email propio sí; el perfil, sin `id` ni `user_id`.
+    assert response.json() == {
+        "id": user.id,
+        "email": "ana@brasaland.com",
+        "role": "user",
+        "profile": {"name": "Ana", "phone": "+57 300", "address": "Medellín"},
+    }
 
 
 def test_token_from_login_works_on_protected_route(api, make_user):

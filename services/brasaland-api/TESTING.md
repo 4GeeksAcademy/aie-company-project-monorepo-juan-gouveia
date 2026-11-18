@@ -105,7 +105,7 @@ Covers `core/security.py` (create and decode) and `get_current_user`, the depend
 
 | ID | Case | Expected decision |
 |---|---|---|
-| ME-F1 | User with a profile | ID, email, role and profile of the token's user |
+| ME-F1 | User with a profile | ID, email, role and profile of the token's user; the profile carries only `name`, `phone` and `address` |
 | ME-L1 | User without a profile | Empty `profile`, no error |
 | ME-X1 | Token of a deleted user | Never reaches the route: 401 `invalid_token` |
 
@@ -152,6 +152,7 @@ Covers `core/security.py` (create and decode) and `get_current_user`, the depend
 | ID | Case | Expected decision | Why |
 |---|---|---|---|
 | REG-F1 | Valid data with a profile | An active `user`, lowercase email, password stored only as a verifiable bcrypt hash; profile with the data sent | |
+| REG-F2 | Response of a successful sign-up | Exactly `{id, message}`: no email, credentials or profile | The serialization audit (U1): unauthenticated auth routes don't echo the email |
 | REG-L1 | No profile data | Profile created with empty fields | Every user always has a profile |
 | REG-L2 | Password of 8 characters and of 72 bytes; of 7 and of 73 bytes | The first are accepted; the others aren't | |
 | REG-L3 | Email already registered, with different case or with spaces | 409 `duplicate_email` and nothing is created | The ticket's "duplicate user" |

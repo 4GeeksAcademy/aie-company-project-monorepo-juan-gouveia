@@ -295,7 +295,48 @@ Los endpoints ✅ no se tocan. La revisión de proveedores (S1–S6) no encontr�
 
 ## 7. Registro de cambios
 
-_Se completa durante la Fase 2._
+### 2a — Autenticación, registro y perfiles (U1, A2, P1–P4)
+
+| Endpoint | Antes | Después |
+|---|---|---|
+| U1 `POST /users` | `UserWithProfile`: `id`, `email`, `is_active`, `role`, `created_at`, `profile{id, user_id, name, phone, address}` | `UserCreated`: `id`, `message` ("Cuenta creada.") |
+| A2 `GET /auth/me` | `CurrentUser`: `id`, `email`, `role`, `profile{id, user_id, name, phone, address}` | `CurrentUser`: `id`, `email`, `role`, `profile: ProfileRead \| null` |
+| P1–P4 `/profiles/me` y `/profiles/{user_id}` | `Profile`: `id`, `user_id`, `name`, `phone`, `address` | `ProfileRead`: `name`, `phone`, `address` |
+
+**API:**
+
+- `profiles/models.py`:
+  - nuevo esquema de salida `ProfileRead`, con los tres atributos nombrados de forma explícita;
+  - `Profile` queda como modelo de almacenamiento y gana `to_read()`, la única vía para convertirlo en respuesta.
+- `profiles/router.py`: las cuatro rutas declaran `response_model=ProfileRead` y devuelven `to_read()`.
+- `users/models.py`: `UserWithProfile` se sustituye por `UserCreated` (`id`, `message`).
+- `users/router.py`: `register_user` devuelve `UserCreated`.
+- `auth/schemas.py` y `auth/router.py`: `CurrentUser.profile` pasa a ser `ProfileRead | None`, construido con `to_read()`.
+- **Entradas:** `UserCreate` y `ProfileUpdate` no cambian. Ya eran esquemas propios, distintos de los de salida, con `extra="forbid"`.
+
+**Backoffice:**
+
+- `types/auth.ts`:
+  - `Profile` pierde `id` y `user_id`;
+  - `ProfileFields` pasa a ser el mismo tipo;
+  - `RegisteredUser` se reduce a `id` y `message`.
+- `components/account/AccountProfile.tsx`: la `key` que reinicia el formulario al cambiar de cuenta pasa de `user.profile.id` a `user.id`.
+- `RegisterForm` no cambia, porque nunca leía la respuesta del registro.
+
+**Pruebas:**
+
+- Nuevas:
+  - REG-F2 comprueba que el registro devuelve exactamente `{id, message}`;
+  - las de integración de `/auth/me`, `/profiles/me` y `POST /users` comparan el cuerpo completo, así que cualquier campo de más las hace fallar.
+- Adaptadas:
+  - las que leían `email` o `profile` de la respuesta del registro ahora lo comprueban en el almacén;
+  - las que comprobaban `profile.user_id` ahora comprueban el nombre del perfil leído;
+  - `test_me_is_not_taken_as_an_id` comprueba el 200 con el perfil propio.
+- Resultados:
+  - batería completa de la API: 917 superadas (916 de la línea base + REG-F2);
+  - backoffice: `tsc --noEmit` sin errores, Jest 170/170 y lint sin errores.
+
+**Documentación:** los README y los TESTING de la API (en y es) ya describen las respuestas nuevas y el caso REG-F2.
 
 ## 8. Verificación
 

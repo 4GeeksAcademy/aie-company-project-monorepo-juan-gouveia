@@ -2,16 +2,16 @@
 
 export type Role = "admin" | "manager" | "user";
 
+// Perfil tal como lo devuelve la API (`ProfileRead`): solo nombre y contacto, sin `id` ni `user_id`
+// (docs/serialization-audit.md, 4.3).
 export interface Profile {
-  id: string;
-  user_id: string;
   name: string | null;
   phone: string | null;
   address: string | null;
 }
 
 // Campos editables del perfil; en PUT /profiles/me solo cambian los enviados y null vacía el campo.
-export type ProfileFields = Pick<Profile, "name" | "phone" | "address">;
+export type ProfileFields = Profile;
 
 // Respuesta de POST /auth/login.
 export interface Token {
@@ -33,14 +33,11 @@ export interface CurrentUser {
   profile: Profile | null;
 }
 
-// Respuesta de POST /users: el usuario creado y su perfil vinculado.
+// Respuesta de POST /users: el id de la cuenta creada y una confirmación, sin reenviar el email
+// (docs/serialization-audit.md, U1).
 export interface RegisteredUser {
   id: string;
-  email: string;
-  is_active: boolean;
-  role: Role;
-  created_at: string;
-  profile: Profile | null;
+  message: string;
 }
 
 // Cuerpo de POST /users. No admite `role`: los registros nuevos siempre son `user`.

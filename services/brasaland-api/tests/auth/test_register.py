@@ -20,17 +20,21 @@ def register(store, **fields):
 def test_reg_f1_creates_active_user_with_hashed_password_and_profile(auth_store):
     created = register(auth_store, email="  Ana@Brasaland.COM ", name="Ana Gómez", phone="+57 300", address="Calle 1")
 
-    assert (created.email, created.role, created.is_active) == ("ana@brasaland.com", Role.USER, True)
-    assert not hasattr(created, "hashed_password")  # la respuesta nunca lleva el hash
-
     stored = auth_store.users.get(created.id)
+    assert (stored.email, stored.role, stored.is_active) == ("ana@brasaland.com", Role.USER, True)
     assert stored.hashed_password != PASSWORD
     assert bcrypt.identify(stored.hashed_password)
     assert bcrypt.verify(PASSWORD, stored.hashed_password)
 
     profile = auth_store.profiles.get_by_user_id(created.id)
-    assert profile == created.profile
     assert (profile.name, profile.phone, profile.address) == ("Ana Gómez", "+57 300", "Calle 1")
+
+
+def test_reg_f2_response_is_only_id_and_message(auth_store):
+    created = register(auth_store, name="Ana Gómez")
+
+    # Ni el email ni el perfil que se acaban de enviar, ni credenciales (docs/serialization-audit.md, U1).
+    assert created.model_dump() == {"id": created.id, "message": "Cuenta creada."}
 
 
 # --- Casos límite ---------------------------------------------------------------------------
@@ -48,7 +52,7 @@ def test_reg_l1_without_profile_data_creates_empty_profile(auth_store):
 def test_reg_l2_password_at_the_limits_is_accepted(password, auth_store):
     created = register(auth_store, password=password)
 
-    assert user_service.authenticate_user(auth_store, created.email, password) is not None
+    assert user_service.authenticate_user(auth_store, "ana@brasaland.com", password) is not None
 
 
 @pytest.mark.parametrize("password", ["a" * 7, "á" * 36 + "a"], ids=["7-caracteres", "73-bytes"])

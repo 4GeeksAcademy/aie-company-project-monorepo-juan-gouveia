@@ -10,12 +10,11 @@ PROFILES = "/api/v1/profiles"
 
 
 def test_get_my_profile(api, make_user):
-    user, headers = make_user(name="Ana", phone="+57 300", address="Medellín")
+    _, headers = make_user(name="Ana", phone="+57 300", address="Medellín")
     response = api.get(ME, headers=headers)
     assert response.status_code == 200
-    body = response.json()
-    assert body["user_id"] == user.id
-    assert (body["name"], body["phone"], body["address"]) == ("Ana", "+57 300", "Medellín")
+    # Solo nombre y contacto: sin `id` ni `user_id` (docs/serialization-audit.md, P1).
+    assert response.json() == {"name": "Ana", "phone": "+57 300", "address": "Medellín"}
 
 
 def test_update_my_profile_only_sent_fields(api, make_user):
@@ -114,8 +113,11 @@ def test_admin_gets_404_for_missing_profile(api, make_user):
 
 
 def test_me_is_not_taken_as_an_id(api, make_user):
-    user, headers = make_user(name="Ana")
-    assert api.get(ME, headers=headers).json()["user_id"] == user.id
+    # Si "me" se leyera como un user_id, la respuesta sería 403 (perfil ajeno) en lugar del propio.
+    _, headers = make_user(name="Ana")
+    response = api.get(ME, headers=headers)
+    assert response.status_code == 200
+    assert response.json()["name"] == "Ana"
 
 
 def test_update_by_id_validates_body(api, make_user):

@@ -14,7 +14,15 @@ from app.domains.users import service
 from app.domains.users.database import AuthStore
 from app.domains.users.dependencies import get_auth_store
 from app.domains.users.exceptions import DuplicateEmailError
-from app.domains.users.models import Role, User, UserCreate, UserPublic, UserUpdate, UserWithProfile
+from app.domains.users.models import (
+    USER_CREATED_MESSAGE,
+    Role,
+    User,
+    UserCreate,
+    UserCreated,
+    UserPublic,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -34,17 +42,18 @@ def not_found(user_id: str) -> ApiError:
     return ApiError(404, "user_not_found", f"No existe ningún usuario con el ID {user_id}.")
 
 
-@router.post("", response_model=UserWithProfile, status_code=status.HTTP_201_CREATED, responses={**CONFLICT, **INVALID})
-def register_user(data: UserCreate, store: AuthStore = Depends(get_auth_store)) -> UserWithProfile:
+@router.post("", response_model=UserCreated, status_code=status.HTTP_201_CREATED, responses={**CONFLICT, **INVALID})
+def register_user(data: UserCreate, store: AuthStore = Depends(get_auth_store)) -> UserCreated:
     """Registra un usuario con rol `user` y crea su perfil con `name`, `phone` y `address` (opcionales).
 
-    La contraseña se guarda hasheada con bcrypt; nunca en texto plano.
+    La contraseña se guarda hasheada con bcrypt; nunca en texto plano. La respuesta solo trae el `id`
+    de la cuenta y una confirmación: ni el email ni el perfil que se acaban de enviar.
     """
     try:
-        user, profile = service.create_user(store, data)
+        user, _profile = service.create_user(store, data)
     except DuplicateEmailError as error:
         raise duplicate_email(error) from None
-    return UserWithProfile(**user.to_public().model_dump(), profile=profile)
+    return UserCreated(id=user.id, message=USER_CREATED_MESSAGE)
 
 
 @router.get(
