@@ -101,17 +101,23 @@ def test_source_and_environment_only_take_the_values_of_the_plan(field, value):
 # --- Lote ------------------------------------------------------------------------------------------
 
 
-def test_batch_accepts_between_1_and_the_maximum_events():
-    assert len(TelemetryBatch.model_validate({"events": [EVENT]}).events) == 1
-    assert len(TelemetryBatch.model_validate({"events": [EVENT] * MAX_BATCH_EVENTS}).events) == MAX_BATCH_EVENTS
+def test_batch_reads_events_without_validating_them():
+    # Fase de almacenamiento: cada evento se valida después, por separado (plan, sección 14.3).
+    batch = TelemetryBatch.model_validate({"events": [EVENT, {"eventId": "x"}, 3, None]})
+    assert batch.events == [EVENT, {"eventId": "x"}, 3, None]
 
 
-@pytest.mark.parametrize("count", [0, MAX_BATCH_EVENTS + 1])
-def test_batch_rejects_empty_or_oversized_lists(count):
+def test_batch_accepts_an_empty_list_and_leaves_the_maximum_to_the_receiver():
+    assert TelemetryBatch.model_validate({"events": []}).events == []
+    assert len(TelemetryBatch.model_validate({"events": [EVENT] * (MAX_BATCH_EVENTS + 1)}).events) == MAX_BATCH_EVENTS + 1
+
+
+def test_batch_ignores_keys_next_to_events():
+    batch = TelemetryBatch.model_validate({"events": [EVENT], "sentAt": "2026-11-19T10:15:40.000Z"})
+    assert batch.model_dump() == {"events": [EVENT]}
+
+
+@pytest.mark.parametrize("body", [{}, {"events": "x"}, {"events": {"0": EVENT}}, {"evento": [EVENT]}])
+def test_batch_needs_a_list_of_events(body):
     with pytest.raises(ValidationError):
-        TelemetryBatch.model_validate({"events": [EVENT] * count})
-
-
-def test_batch_rejects_extra_keys():
-    with pytest.raises(ValidationError):
-        TelemetryBatch.model_validate({"events": [EVENT], "sentAt": "2026-11-19T10:15:40.000Z"})
+        TelemetryBatch.model_validate(body)

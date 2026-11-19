@@ -15,7 +15,7 @@ API central de Brasaland, hecha con FastAPI y organizada por dominios según [`d
 - **Inventario (Hito 5, rama `feature/inventory-orm`):** 6 rutas bajo `/api/v1/inventory`, con el stock calculado y sin ninguna forma de editarlo directamente. Ver [Dominio `inventory`](#dominio-inventory).
 - **Contraseñas (AUTH-03, rama `feature/password-reset`):** restablecimiento por correo (Resend) y cambio con la sesión iniciada. Ver [Restablecimiento y cambio de contraseña](#restablecimiento-y-cambio-de-contraseña).
 - **Gestor de incidencias (rama `feature/incident-manager`):** alta, listado con filtros, detalle, cambio de estado y métricas. Ver [Gestor de incidencias centralizado](#gestor-de-incidencias-centralizado).
-- **Telemetría (rama `feature/telemetry-capture`):** receptor provisional `POST /telemetry/events`, que valida el formato de los lotes del backoffice y responde `{"received": N}` sin guardar nada. Ver [Receptor de telemetría](#receptor-de-telemetría-post-telemetryevents).
+- **Telemetría (ramas `feature/telemetry-capture` y `feature/telemetry-storage`):** `POST /telemetry/events` valida cada evento de los lotes del backoffice por separado, guarda los válidos en la tabla `telemetry_events` de Supabase con un solo INSERT por lote y responde `{"received", "stored", "rejected"}`. Ver [Receptor de telemetría](#receptor-de-telemetría-post-telemetryevents).
 - **Rutas protegidas (AUTH-01):** todas las rutas exigen un token válido salvo `POST /auth/login`, `POST /users` (registro), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (las tres de AUTH-03), `GET /health` y `POST /telemetry/events` (receptor de telemetría). Eso incluye las 7 de `incidents` (2 del analizador y 5 del gestor) las 6 de `suppliers` y las 6 de `inventory`, que se protegen al registrar sus routers en `main.py`. Una prueba recorre el esquema OpenAPI y falla si una ruta nueva queda sin proteger por olvido.
 - **Almacenamiento:**
   - El último análisis de incidentes se guarda en memoria y se pierde al reiniciar la API.
@@ -154,8 +154,11 @@ app/
     │   └── seed.py         # Datos semilla del briefing (`uv run seed-inventory`)
     ├── telemetry/
     │   ├── models.py       # Tabla telemetry_events (SQLModel con registro propio, fuera de init_db)
-    │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch y TelemetryReceipt
-    │   └── router.py       # POST /telemetry/events: valida, registra en el log y responde; no guarda nada
+    │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch (laxo) y TelemetryReceipt
+    │   ├── catalog.py      # GENERADO desde event-schemas.json: allowlist, level, value y message por evento
+    │   ├── generate_catalog.py # `uv run telemetry-catalog`: regenera catalog.py
+    │   ├── service.py      # Validación por evento, de evento a fila y bulk insert con ON CONFLICT
+    │   └── router.py       # POST /telemetry/events: valida, guarda, registra en el log y responde
     └── suppliers/
         ├── models.py       # Modelos Pydantic: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Tabla de proveedores; la ruta y la apertura vienen de core/storage.py
@@ -413,18 +416,23 @@ Devuelve `{"status": "ok"}` (`HealthResponse`). Está fuera de `/api/v1` y no ll
 
 ## Receptor de telemetría (`POST /telemetry/events`)
 
-Receptor **provisional** de la fase de captura ([plan de telemetría](../../docs/telemetry/telemetry-plan.md), sección 13). El backoffice envía sus eventos en lotes y este endpoint comprueba que llegan con el formato correcto. **No guarda nada**: el almacenamiento es la fase siguiente, que cambiará el cuerpo de la ruta sin cambiar su contrato.
+Receptor de la fase de almacenamiento ([plan de telemetría](../../docs/telemetry/telemetry-plan.md), sección 14). El backoffice envía sus eventos en lotes; el receptor valida **cada evento por separado**, guarda los válidos en la tabla `telemetry_events` de Supabase con una sola sentencia y responde qué guardó y qué rechazó. Un evento inválido no hace fallar el lote. La URL y el formato del lote son los de la fase de captura: el backoffice no cambió.
 
 - **Ruta:** fuera de `/api/v1` y **pública**, como `/health`. La telemetría es una vía de entrada aparte, no un recurso versionado del negocio, y `navigator.sendBeacon` no puede enviar `Authorization`.
-- **Cuerpo:** `{"events": [...]}`, con entre 1 y 100 eventos. Cada uno se valida con `TelemetryEvent`, el Event Envelope del plan: `eventId`, `timestamp` (ISO 8601 en UTC con milisegundos), `sessionId`, `userId`, `event_type` (`entidad_acción`), `schemaVersion` (SemVer), `requestId` y `properties`, más `source` y `environment`. Los campos son obligatorios (pueden ser `null` donde el plan lo permite) y no se admiten campos extra. `properties` se valida solo como objeto; el backoffice ya comprueba el allowlist de cada evento antes de enviarlo.
+- **Cuerpo:** `{"events": [...]}`, leído de forma laxa: cada elemento llega sin validar y las demás claves se ignoran. Si el cuerpo no es un objeto JSON con una lista `events`, responde `422 invalid_request`; con más de 100 eventos, `422 too_many_events`.
+- **Validación por evento:**
+  1. el envelope, con `TelemetryEvent.model_validate` (el modelo de la fase de captura, sin cambios): `eventId`, `timestamp` (ISO 8601 en UTC con milisegundos), `sessionId`, `userId`, `event_type`, `schemaVersion`, `requestId`, `properties`, `source` y `environment`, sin campos extra;
+  2. `properties`, contra el catálogo generado desde `docs/telemetry/event-schemas.json` (`app/domains/telemetry/catalog.py`): el `event_type` debe existir, las obligatorias deben estar y no puede haber claves fuera del allowlist. También se rechazan los valores que PostgreSQL no puede guardar (NaN, infinitos, el carácter NUL).
+- **Guardado:** `INSERT … VALUES (…), (…) ON CONFLICT (id) DO NOTHING`, una sentencia por lote en una transacción. El `id` de la fila es el `eventId`, así que un reintento o un `sendBeacon` repetido no crea otra fila. Cada evento se convierte en fila como dice la sección 14.2 del plan: `service` sale de `source` (`browser` → `backoffice`), `level`, `value` y `message` salen del catálogo, y `tags` es `properties` más `session_id`, `user_id`, `request_id`, `schema_version` y `environment`.
 - **Tipo de contenido:** `application/json` (`fetch`) o `text/plain` (`sendBeacon`, que no puede enviar JSON a otro origen sin una comprobación previa de CORS). Los dos se leen como JSON.
-- **Respuesta:** `200 {"received": N}`. Un lote que no cumple el formato responde `422 invalid_request`, con los campos en `details`, y un cuerpo de más de 256 KB, `413 batch_too_large`.
-- **Log:** una línea por lote en el logger `api.telemetry`, con la cantidad y el `event_type` de cada evento:
+- **Respuesta:** `200 {"received": N, "stored": M, "rejected": R}`, con `N = M + R`, aunque se rechacen todos. Los repetidos cuentan en `stored`, porque ya están guardados. Si la base no puede guardar el lote (caída o falta la tabla), `503 telemetry_storage_unavailable` y no se guarda nada: el backoffice reintenta los 5xx. Un cuerpo de más de 256 KB, `413 batch_too_large`.
+- **Log:** una línea por lote en el logger `api.telemetry`, con los recibidos, guardados, repetidos y rechazados, los tipos guardados y, de cada rechazo (hasta 10), la posición, el tipo y el campo que falló. **Nunca copia valores**: los nombres de clave que no parecen un identificador se ocultan.
 
   ```
-  INFO:     api.telemetry - Lote de telemetría recibido: 2 eventos | page_viewed, login_failed
+  WARNING:  api.telemetry - Lote de telemetría: 3 recibidos, 2 guardados (1 repetidos), 1 rechazados | page_viewed, login_failed | rechazos: events[2] login_failed: properties.email: fuera del allowlist
   ```
 
+- **Catálogo:** después de cambiar `event-schemas.json`, `uv run telemetry-catalog` regenera `catalog.py`. Una prueba falla si no coinciden.
 - **CORS:** el navegador llama a este endpoint directamente, sin pasar por el BFF. Por eso es la única ruta con CORS (`app/core/cors.py`): solo admite `POST` desde el origen de `FRONTEND_URL`.
 
 ### Tabla `telemetry_events` (fase de almacenamiento)

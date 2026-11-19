@@ -36,6 +36,8 @@ seed = "app.domains.suppliers.seed:main"
 create-admin = "app.domains.users.create_admin:run"
 # `uv run --env-file .env seed-inventory` carga en Supabase los datos semilla del inventario (Hito 5).
 seed-inventory = "app.domains.inventory.seed:main"
+# `uv run telemetry-catalog` regenera app/domains/telemetry/catalog.py desde docs/telemetry/event-schemas.json.
+telemetry-catalog = "app.domains.telemetry.generate_catalog:main"
 
 [project.optional-dependencies]
 dev = [

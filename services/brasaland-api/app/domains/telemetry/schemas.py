@@ -6,9 +6,9 @@ nombres del enunciado (`eventId`, `sessionId`… en camelCase y `event_type` en 
 que añade el plan (`source` y `environment`). Ningún campo puede faltar: cuando un dato no aplica, su
 valor es `null`. El modelo no admite campos extra.
 
-Este modelo se reutiliza sin cambios cuando el receptor guarde los eventos. Lo que esta fase no
-valida es el contenido de `properties` contra el esquema de cada evento: el backoffice ya comprueba el
-allowlist antes de emitir, y la validación completa llega con el almacenamiento.
+En la fase de almacenamiento, `TelemetryEvent` se reutiliza sin cambios como validador de cada evento
+del lote (`TelemetryEvent.model_validate`), no como tipo del cuerpo. El contenido de `properties` lo
+comprueba después el receptor contra el catálogo generado desde `event-schemas.json` (`catalog.py`).
 """
 
 import re
@@ -58,16 +58,24 @@ class TelemetryEvent(BaseModel):
 
 
 class TelemetryBatch(BaseModel):
-    """Cuerpo de `POST /telemetry/events`: un lote de eventos."""
+    """Cuerpo de `POST /telemetry/events`: un lote de eventos, leído de forma laxa.
 
-    model_config = ConfigDict(extra="forbid")
+    Cada elemento de `events` llega sin validar: el receptor lo valida por separado con
+    `TelemetryEvent.model_validate`, para que un evento inválido no haga fallar el lote entero (plan de
+    telemetría, sección 14.3). Las claves que acompañen a `events` se ignoran. El máximo de
+    `MAX_BATCH_EVENTS` lo comprueba el receptor, con su propio código de error.
+    """
 
-    events: list[TelemetryEvent] = Field(
-        min_length=1, max_length=MAX_BATCH_EVENTS, description=f"Entre 1 y {MAX_BATCH_EVENTS} eventos"
-    )
+    model_config = ConfigDict(extra="ignore")
+
+    events: list[Any] = Field(description=f"Hasta {MAX_BATCH_EVENTS} eventos; cada uno se valida por separado")
 
 
 class TelemetryReceipt(BaseModel):
-    """Respuesta de `POST /telemetry/events`."""
+    """Respuesta de `POST /telemetry/events`: `received` = `stored` + `rejected`."""
 
-    received: int = Field(ge=1, description="Cantidad de eventos del lote")
+    received: int = Field(ge=0, description="Cantidad de eventos del lote")
+    stored: int = Field(
+        ge=0, description="Eventos válidos guardados; incluye los repetidos, que ya estaban guardados por su eventId"
+    )
+    rejected: int = Field(ge=0, description="Eventos que no cumplen el contrato; no se guardan")
