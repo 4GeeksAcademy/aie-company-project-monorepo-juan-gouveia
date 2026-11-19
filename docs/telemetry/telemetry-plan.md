@@ -4,7 +4,8 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 
 - **Entregables:** este documento y [`event-schemas.json`](event-schemas.json) (los esquemas de cada evento).
 - **Fuentes:** el briefing de Brasaland (métricas obligatorias, entidades y restricciones), el enunciado del RFI y el código actual del monorepo.
-- **Estado:** completo (versión 1.0.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual y una ficha por cada uno de los 44 eventos.
+- **Estado:** aprobado, con la revisión de la fase de captura (catálogo 1.1.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice y una ficha por cada uno de los 44 eventos.
+- **Fase de captura:** 34 de los 44 eventos se emiten desde el backoffice con una única función `track()`, al recibir la respuesta de la API que confirma o rechaza cada hecho. Los 10 restantes esperan al emisor de la API (sección 13).
 
 ## Índice
 
@@ -20,7 +21,8 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 10. [Throttle y debounce](#10-throttle-y-debounce)
 11. [Riesgos y exclusiones](#11-riesgos-y-exclusiones)
 12. [Brechas de instrumentación](#12-brechas-de-instrumentación)
-13. [Fichas de los eventos](#13-fichas-de-los-eventos)
+13. [Fase de captura en el backoffice](#13-fase-de-captura-en-el-backoffice)
+14. [Fichas de los eventos](#14-fichas-de-los-eventos)
 
 ## 1. Propósito y alcance
 
@@ -92,6 +94,8 @@ Cada evento tiene un solo emisor. Así un hecho no se cuenta dos veces y está c
 
 **Regla de emisión de la API:** los eventos de negocio se emiten **después del `commit`**. Una operación que se revierte no deja eventos de éxito.
 
+**Emisor en la fase de captura.** La primera implementación captura los eventos en el backoffice, con una única función `track()` (sección 13). Por eso, 26 eventos que esta tabla asignaba a la API o al BFF pasan al **navegador** (`source: "browser"`). Se emiten **al recibir la respuesta de la API**: un 2xx confirma que la operación ya está guardada (después del `commit`), y un rechazo trae su código de error, así que la regla anterior se mantiene. Los 7 eventos que solo puede emitir la API y los 3 de procesos esperan al emisor del servidor. Cada evento sigue teniendo un único emisor.
+
 ### 2.5 Nombres del briefing frente al modelo actual
 
 Las métricas obligatorias usan las entidades del briefing (`Product`, `InboundOrder`, `OutboundOrder`, `location`, `supplier`). El código del inventario (Hito 5) usa `Ingredient`, `IngredientEntry` e `IngredientExit`. **Los eventos y sus propiedades usan siempre los nombres del briefing**, como `product_id` y `product_category`. La correspondencia con el modelo, y los cambios que necesita el modelo para emitir cada evento, están en la sección 12 (brechas de instrumentación).
@@ -108,16 +112,16 @@ Las métricas obligatorias usan las entidades del briefing (`Product`, `InboundO
 
 ## 3. Métricas obligatorias
 
-Las 6 métricas del briefing son el **piso** del plan. Se instrumentan de punta a punta (captura → almacenamiento) a lo largo de la serie, y están pensadas para agregarse por local, por país y por semana.
+Las 6 métricas del briefing son el **piso** del plan. Se instrumentan de punta a punta (captura → almacenamiento) a lo largo de la serie, y están pensadas para agregarse por local, por país y por semana. En la fase de captura las emite el backoffice al recibir la respuesta de la API (§2.4 y sección 13).
 
 | `event_type` | Se dispara cuando… (briefing) | Emisor | Disparo preciso en la plataforma | Responsable |
 |---|---|---|---|---|
-| `inbound_order_created` | Un local registra la llegada de mercancía de un proveedor | API | Tras el `commit` de `POST /api/v1/inventory/orders/inbound` | Lucía |
-| `outbound_order_created` | Un local registra consumo de ingredientes en la preparación de un plato | API | Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de **consumo** | Felipe |
-| `stock_waste_registered` | Un local registra merma (producto vencido, error de cocina, o pérdida/robo) | API | Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de **merma** | Felipe |
-| `stock_threshold_triggered` | El stock de un producto cae por debajo del mínimo configurado para ese local | API | Tras el `commit` de una salida que hace que el stock **cruce** el mínimo: antes ≥ mínimo y después < mínimo | Felipe |
-| `direct_stock_edit_rejected` | Un usuario intenta modificar el stock directamente (fuera de una orden) y el sistema lo rechaza | API | Al rechazar un intento de edición directa (definición en §3.2) | Jake |
-| `ingredient_price_variance_detected` | El costo unitario de una orden de entrada varía más de un umbral (ej. 10%) respecto al histórico del mismo producto/proveedor | API | Tras el `commit` de una entrada cuyo coste unitario se desvía más del 10 % de la media histórica del mismo producto y proveedor | Lucía y Mariana |
+| `inbound_order_created` | Un local registra la llegada de mercancía de un proveedor | Navegador | Al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada) | Lucía |
+| `outbound_order_created` | Un local registra consumo de ingredientes en la preparación de un plato | Navegador | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de **consumo** | Felipe |
+| `stock_waste_registered` | Un local registra merma (producto vencido, error de cocina, o pérdida/robo) | Navegador | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de **merma** | Felipe |
+| `stock_threshold_triggered` | El stock de un producto cae por debajo del mínimo configurado para ese local | Navegador | Al recibir el 201 de una salida que hace que el stock **cruce** el mínimo: antes ≥ mínimo y después < mínimo | Felipe |
+| `direct_stock_edit_rejected` | Un usuario intenta modificar el stock directamente (fuera de una orden) y el sistema lo rechaza | Navegador | Al recibir el rechazo de la API a un intento de edición directa (definición en §3.2) | Jake |
+| `ingredient_price_variance_detected` | El costo unitario de una orden de entrada varía más de un umbral (ej. 10%) respecto al histórico del mismo producto/proveedor | Navegador | Al recibir el 201 de una entrada cuyo coste unitario se desvía más del 10 % de la media histórica del mismo producto y proveedor | Lucía y Mariana |
 
 ### 3.1 La regla de oro de cada métrica obligatoria
 
@@ -135,13 +139,13 @@ Las hipótesis y las decisiones son las del briefing.
 ### 3.2 Decisiones de interpretación
 
 - **Una salida emite un único evento, según su motivo.** El briefing describe `outbound_order_created` como consumo "en la preparación de un plato" y `stock_waste_registered` como merma, y reserva `reason` para la merma. Por eso, una salida de consumo emite `outbound_order_created` y una de merma emite `stock_waste_registered`, nunca los dos. Así la merma no se cuenta también como consumo, y el total de órdenes de salida por día es la suma de ambos eventos.
-- **`stock_threshold_triggered` se emite al cruzar el mínimo, no en cada salida por debajo de él.** Una alerta repetida en cada consumo de un producto ya bajo no aporta nada nuevo y taparía las alertas nuevas. Si el stock se repone por encima del mínimo y vuelve a caer, se emite otra vez.
+- **`stock_threshold_triggered` se emite al cruzar el mínimo, no en cada salida por debajo de él.** Una alerta repetida en cada consumo de un producto ya bajo no aporta nada nuevo y taparía las alertas nuevas. Si el stock se repone por encima del mínimo y vuelve a caer, se emite otra vez. **Mínimo en la fase de captura:** mientras no existan mínimos por local (brecha B3), se usa el umbral de stock bajo que ya muestra el backoffice para la unidad del producto (`LOW_STOCK_THRESHOLDS`: 40 kg, 25 litros, 100 unidades), sobre el stock global del producto.
 - **Qué es un "intento de edición directa"** (`direct_stock_edit_rejected`). El sistema no ofrece ninguna forma de editar el stock, así que el intento se reconoce por cómo lo rechaza la API:
   1. `PUT`, `PATCH` o `DELETE` sobre `/api/v1/inventory/products/{id}` o sobre las rutas de órdenes: hoy responde **405** (`http_405`);
   2. un cuerpo de `POST /inventory/products`, `/orders/inbound` u `/orders/outbound` que incluya `current_stock` o `stock`: hoy responde **422** (`invalid_request`, error `extra_forbidden` en ese campo).
 
-  Ambos casos requieren un usuario autenticado. Sin token, la API responde 401 antes de llegar a la ruta, y ese caso lo cubre la autenticación. El backoffice no tiene ningún control para editar el stock, así que estos intentos llegan siempre desde fuera de la interfaz (scripts, Postman, `curl`). Eso es justo lo que quiere detectar el briefing.
-- **`ingredient_price_variance_detected` compara con la media histórica del mismo producto y proveedor.** Se usan las entradas de los últimos 90 días, con un mínimo de 3 entradas para considerar que hay histórico, y un umbral del **10 %**, el ejemplo del briefing, configurable. Si no hay histórico suficiente, no se emite: una primera compra no es una anomalía.
+  Ambos casos requieren un usuario autenticado. Sin token, la API responde 401 antes de llegar a la ruta, y ese caso lo cubre la autenticación. Fuera de la interfaz, estos intentos llegan de scripts, Postman o `curl`, y los verá el emisor de la API. **En la fase de captura**, el backoffice ofrece en `/inventario/ingredientes` la acción "Ajustar stock": envía el `PATCH` real con `current_stock`, la API lo rechaza con 405 y la interfaz explica que el stock solo cambia con órdenes. Así se mide justo lo que quiere detectar el briefing: personal que intenta saltarse la trazabilidad desde la herramienta que usa.
+- **`ingredient_price_variance_detected` compara con la media histórica del mismo producto y proveedor.** Se usan las entradas de los últimos 90 días, con un mínimo de 3 entradas para considerar que hay histórico, y un umbral del **10 %**, el ejemplo del briefing, configurable. Si no hay histórico suficiente, no se emite: una primera compra no es una anomalía. En la fase de captura, el backoffice calcula la media con el historial de `GET /api/v1/inventory/orders`.
 
 ## 4. Flujo de gestión de inventario
 
@@ -167,42 +171,44 @@ Recorrido de un usuario autenticado desde que entra al backoffice hasta que comp
 
 **Cobertura del flujo:** 9 puntos de instrumentación (P5 no necesita evento propio). Incluyen los tres que exige el enunciado: intentos directos de modificar el stock (P7), validaciones fallidas (P4 y P6) y activaciones del umbral mínimo (P10). Con `requestId`, los eventos del navegador (P3, P4) se unen con los de la API (P6 a P10) de la misma petición, y con `sessionId`, con los de todo el recorrido.
 
+**En la fase de captura**, P1, P2 y P6 a P10 se emiten en el backoffice al recibir la respuesta de la API de cada paso. El rechazo de P7 lo provoca la acción "Ajustar stock" (§3.2).
+
 ## 5. Catálogo de oportunidades identificadas
 
-Eventos propuestos por este plan, agrupados por categoría. Para cada uno: emisor, cuándo se dispara, la frase de la regla de oro y el responsable de la decisión. Todos son **oportunidades identificadas**; los obligatorios están en la sección 3.
+Eventos propuestos por este plan, agrupados por categoría. Para cada uno: emisor, cuándo se dispara, la frase de la regla de oro y el responsable de la decisión. Todos son **oportunidades identificadas**; los obligatorios están en la sección 3. El emisor es el de la fase de captura (§2.4); los eventos que siguen en la API esperan a su emisor (sección 13).
 
 ### 5.1 Inventario
 
-- **`order_validation_failed`** — API — la API rechaza una orden de entrada o de salida por datos inválidos: 422 `invalid_request` o 404 `ingredient_not_found`.
+- **`order_validation_failed`** — Navegador, al recibir la respuesta de la API — la API rechaza una orden de entrada o de salida por datos inválidos: 422 `invalid_request` o 404 `ingredient_not_found`.
   *"Capturamos `order_validation_failed` porque necesitamos saber qué productos y qué campos acumulan más errores de validación al registrar órdenes, lo que nos permite tomar la decisión de corregir esos datos de catálogo o reforzar la capacitación sobre esos productos."* — Jake.
-- **`outbound_order_rejected`** — API — la API rechaza una salida porque supera el stock disponible (400 `insufficient_stock`).
+- **`outbound_order_rejected`** — Navegador, al recibir la respuesta de la API — la API rechaza una salida porque supera el stock disponible (400 `insufficient_stock`).
   *"Capturamos `outbound_order_rejected` porque necesitamos saber en qué productos y locales el stock registrado no alcanza para lo que la cocina dice haber consumido, señal de entradas sin registrar o de un stock que no refleja la realidad física, lo que nos permite tomar la decisión de ordenar un conteo físico de ese producto en ese local."* — Felipe.
 - **`product_created`** — API — tras el `commit` de `POST /api/v1/inventory/products`.
   *"Capturamos `product_created` porque necesitamos saber cuánto y en qué categorías crece el catálogo de ingredientes de cada país, lo que nos permite tomar la decisión de revisar las altas que duplican productos existentes antes de que fragmenten el histórico de consumo y de precios."* — Lucía.
 
 ### 5.2 Autenticación y sesión
 
-- **`login_succeeded`** — API — `POST /auth/login` emite un token.
+- **`login_succeeded`** — Navegador, al recibir la respuesta de la API — `POST /auth/login` emite un token.
   *"Capturamos `login_succeeded` porque necesitamos saber cuántos usuarios de cada rol usan el backoffice y en qué franjas horarias, lo que nos permite tomar la decisión de planificar capacitación para los roles que apenas lo usan y concentrar las ventanas de mantenimiento en las horas sin actividad."* — Jake y Nicolás.
-- **`login_failed`** — API — `POST /auth/login` responde 401 `invalid_credentials` o 403 `inactive_user`.
+- **`login_failed`** — Navegador, al recibir la respuesta de la API — `POST /auth/login` responde 401 `invalid_credentials` o 403 `inactive_user`.
   *"Capturamos `login_failed` porque necesitamos saber cuántos intentos fallidos hay por día y si se concentran en una misma cuenta en poco tiempo (posible fuerza bruta) o se reparten (olvido de contraseña), lo que nos permite tomar la decisión de añadir bloqueo temporal por intentos o de promover la recuperación de contraseña."* — Nicolás.
-- **`session_expired`** — API — una petición llega con un token caducado (401 `token_expired`).
+- **`session_expired`** — Navegador, al recibir la respuesta de la API — una petición llega con un token caducado (401 `token_expired`).
   *"Capturamos `session_expired` porque necesitamos saber con qué frecuencia la sesión caduca en mitad del trabajo de un operador, lo que nos permite tomar la decisión de ajustar `ACCESS_TOKEN_EXPIRE_MINUTES` o de implementar la renovación del token."* — Nicolás.
-- **`auth_token_rejected`** — API — una petición llega con un token inválido (401 `invalid_token`) o revocado tras un cambio de contraseña (401 `session_revoked`).
+- **`auth_token_rejected`** — Navegador, al recibir la respuesta de la API — una petición llega con un token inválido (401 `invalid_token`) o revocado tras un cambio de contraseña (401 `session_revoked`).
   *"Capturamos `auth_token_rejected` porque necesitamos saber si llegan tokens manipulados o sesiones ya revocadas que siguen intentando entrar, lo que nos permite tomar la decisión de investigar el origen y, si se repite, rotar `SECRET_KEY`."* — Nicolás.
 - **`logout_completed`** — Navegador — el usuario cierra sesión desde el menú de la cuenta.
   *"Capturamos `logout_completed` porque necesitamos saber qué proporción de sesiones se cierran explícitamente y cuántas se dejan abiertas hasta caducar, lo que nos permite tomar la decisión de activar el cierre automático por inactividad en los dispositivos compartidos de los locales."* — Nicolás y Jake.
-- **`user_registered`** — API — tras crear una cuenta con `POST /users`, que hoy es un registro abierto.
+- **`user_registered`** — Navegador, al recibir la respuesta de la API — tras crear una cuenta con `POST /users`, que hoy es un registro abierto.
   *"Capturamos `user_registered` porque necesitamos saber cuántas cuentas se crean por autorregistro y a qué ritmo, lo que nos permite tomar la decisión de cerrar el registro abierto y pasar a altas aprobadas por un administrador."* — Nicolás.
 - **`user_access_changed`** — API — un administrador cambia el rol o activa o desactiva una cuenta (`PUT /users/{id}` con `role` o `is_active`), o se elimina una cuenta (`DELETE /users/{id}`: la propia o, si es admin, cualquiera).
   *"Capturamos `user_access_changed` porque necesitamos saber quién concede o retira permisos de administrador y con qué frecuencia, lo que nos permite tomar la decisión de revisar los accesos privilegiados y exigir aprobación doble si se conceden fuera de un proceso."* — Nicolás.
 - **`password_reset_requested`** — API — `POST /auth/forgot-password`, exista o no la cuenta.
   *"Capturamos `password_reset_requested` porque necesitamos saber cuántos usuarios olvidan su contraseña y si hay ráfagas de solicitudes contra cuentas que no existen (enumeración), lo que nos permite tomar la decisión de reforzar la formación sobre credenciales o de limitar las solicitudes por origen."* — Nicolás y Jake.
-- **`password_reset_completed`** — API — `POST /auth/reset-password` cambia la contraseña.
+- **`password_reset_completed`** — Navegador, al recibir la respuesta de la API — `POST /auth/reset-password` cambia la contraseña.
   *"Capturamos `password_reset_completed` porque necesitamos saber qué proporción de las solicitudes de recuperación terminan en una contraseña nueva, lo que nos permite tomar la decisión de simplificar el flujo de recuperación si la mayoría se queda a medias."* — Nicolás.
-- **`password_reset_link_rejected`** — API — un enlace de recuperación se rechaza por inválido, caducado o ya usado (`invalid_reset_token`, `reset_token_expired`, `reset_token_used`).
+- **`password_reset_link_rejected`** — Navegador, al recibir la respuesta de la API — un enlace de recuperación se rechaza por inválido, caducado o ya usado (`invalid_reset_token`, `reset_token_expired`, `reset_token_used`).
   *"Capturamos `password_reset_link_rejected` porque necesitamos saber cuántos enlaces caducan antes de usarse o se reutilizan, lo que nos permite tomar la decisión de ajustar `PASSWORD_RESET_EXPIRE_MINUTES` o el texto del correo."* — Nicolás.
-- **`password_changed`** — API — el propio usuario cambia su contraseña con `POST /auth/change-password`.
+- **`password_changed`** — Navegador, al recibir la respuesta de la API — el propio usuario cambia su contraseña con `POST /auth/change-password`.
   *"Capturamos `password_changed` porque necesitamos saber con qué frecuencia el personal renueva su contraseña por iniciativa propia, lo que nos permite tomar la decisión de exigir una renovación periódica o no hacerlo."* — Nicolás.
 
 ### 5.3 Navegación y abandono de flujos
@@ -220,7 +226,7 @@ Eventos propuestos por este plan, agrupados por categoría. Para cada uno: emiso
 
 ### 5.4 Rendimiento
 
-- **`api_latency_recorded`** — API — una medición de duración por petición. Es el middleware de timing que ya existe (`app/core/timing.py`), convertido en evento.
+- **`api_latency_recorded`** — Navegador, al recibir la respuesta de la API — una medición de duración por petición. Es el middleware de timing que ya existe (`app/core/timing.py`), convertido en evento.
   *"Capturamos `api_latency_recorded` porque necesitamos saber qué endpoints son lentos con el volumen real y con qué frecuencia se llaman, lo que nos permite tomar la decisión de dónde cachear, paginar u optimizar consultas, y de fijar objetivos de latencia por endpoint."* — Nicolás.
 - **`page_performance_recorded`** — Navegador — las métricas de carga de una vista (LCP, CLS, INP y tiempo hasta mostrar los datos).
   *"Capturamos `page_performance_recorded` porque necesitamos saber cómo de rápido carga el backoffice en los dispositivos y redes reales de los locales, no solo en las mediciones de laboratorio, lo que nos permite tomar la decisión de priorizar optimizaciones por vista y fijar un presupuesto de rendimiento."* — Nicolás.
@@ -229,13 +235,13 @@ Eventos propuestos por este plan, agrupados por categoría. Para cada uno: emiso
 
 ### 5.5 Errores
 
-- **`api_error_returned`** — API — cualquier respuesta 4xx de la API, con su código de error.
+- **`api_error_returned`** — Navegador, al recibir la respuesta de la API — cualquier respuesta 4xx de la API, con su código de error.
   *"Capturamos `api_error_returned` porque necesitamos saber qué códigos de error devuelve cada endpoint y con qué frecuencia, lo que nos permite tomar la decisión de corregir los flujos de la interfaz que provocan errores evitables y detectar integraciones mal construidas."* — Nicolás.
 - **`server_error_occurred`** — API — una respuesta 500 (`internal_error`) por una excepción no controlada.
   *"Capturamos `server_error_occurred` porque necesitamos saber en qué endpoint y con qué tipo de excepción falla la API, lo que nos permite tomar la decisión de atender el fallo de inmediato y priorizar su corrección frente a otro trabajo."* — Nicolás.
 - **`frontend_error_captured`** — Navegador — un error de JavaScript no controlado o una vista que muestra su pantalla de error (`error.tsx`).
   *"Capturamos `frontend_error_captured` porque necesitamos saber qué errores sufren los operadores sin que nadie los reporte, lo que nos permite tomar la decisión de priorizar la corrección de los que afectan a más sesiones."* — Nicolás.
-- **`api_connection_failed`** — BFF — el intermediario no consigue respuesta de la API (502 `api_unavailable`) o no está configurado (500 `api_not_configured`).
+- **`api_connection_failed`** — Navegador, al recibir la respuesta del intermediario — el intermediario no consigue respuesta de la API (502 `api_unavailable`), la API tarda demasiado (504 `api_timeout`) o el intermediario no está configurado (500 `api_not_configured`).
   *"Capturamos `api_connection_failed` porque necesitamos saber cuándo y durante cuánto tiempo el backoffice se queda sin API, lo que nos permite tomar la decisión de abrir un incidente de disponibilidad y revisar el despliegue."* — Nicolás.
 - **`email_delivery_failed`** — Proceso (tarea en segundo plano de la API) — el envío de un correo falla, o no se envía porque falta `RESEND_API_KEY`.
   *"Capturamos `email_delivery_failed` porque necesitamos saber cuántos correos de recuperación no llegan a salir, lo que nos permite tomar la decisión de verificar el dominio de envío en Resend o de corregir la configuración del entorno."* — Nicolás.
@@ -244,27 +250,27 @@ Eventos propuestos por este plan, agrupados por categoría. Para cada uno: emiso
 
 **Directorio de proveedores**
 
-- **`supplier_created`** — API — tras dar de alta un proveedor (`POST /suppliers`).
+- **`supplier_created`** — Navegador, al recibir la respuesta de la API — tras dar de alta un proveedor (`POST /suppliers`).
   *"Capturamos `supplier_created` porque necesitamos saber cuántos proveedores nuevos entran por país y categoría, lo que nos permite tomar la decisión de consolidar categorías con demasiados proveedores para negociar volumen."* — Lucía.
-- **`supplier_rate_updated`** — API — tras cambiar la tarifa de un proveedor (`PATCH /suppliers/{id}/rate`).
+- **`supplier_rate_updated`** — Navegador, al recibir la respuesta de la API — tras cambiar la tarifa de un proveedor (`PATCH /suppliers/{id}/rate`).
   *"Capturamos `supplier_rate_updated` porque necesitamos saber qué proveedores cambian su tarifa, con qué frecuencia y en qué porcentaje, lo que nos permite tomar la decisión de renegociar antes de que el cambio llegue a la factura."* — Lucía.
-- **`supplier_status_changed`** — API — tras suspender o reactivar un proveedor (`PATCH /suppliers/{id}/status`).
+- **`supplier_status_changed`** — Navegador, al recibir la respuesta de la API — tras suspender o reactivar un proveedor (`PATCH /suppliers/{id}/status`).
   *"Capturamos `supplier_status_changed` porque necesitamos saber cuántos proveedores se suspenden y en qué categorías y países, lo que nos permite tomar la decisión de buscar proveedores alternativos donde una suspensión deja una categoría sin cobertura."* — Lucía.
 - **`supplier_deleted`** — API — tras borrar un proveedor (`DELETE /suppliers/{id}`).
   *"Capturamos `supplier_deleted` porque necesitamos saber cuándo se borra un proveedor que podría tener entregas en el histórico, lo que nos permite tomar la decisión de sustituir el borrado por la suspensión si se pierde trazabilidad."* — Lucía.
 
 **Gestor de incidencias**
 
-- **`incident_created`** — API — tras registrar una incidencia (`POST /incidents`).
+- **`incident_created`** — Navegador, al recibir la respuesta de la API — tras registrar una incidencia (`POST /incidents`).
   *"Capturamos `incident_created` porque necesitamos saber qué categorías de incidencia se concentran en qué sedes y con qué origen, lo que nos permite tomar la decisión de dónde enfocar las visitas de supervisión y el mantenimiento preventivo."* — Felipe.
-- **`incident_status_changed`** — API — tras cambiar el estado de una incidencia (`PATCH /incidents/{id}/status`).
+- **`incident_status_changed`** — Navegador, al recibir la respuesta de la API — tras cambiar el estado de una incidencia (`PATCH /incidents/{id}/status`).
   *"Capturamos `incident_status_changed` porque necesitamos saber cuánto tarda cada sede en pasar una incidencia de `open` a `in_progress` y a `resolved`, lo que nos permite tomar la decisión de fijar tiempos objetivo de respuesta y apoyar a las sedes que no los cumplen."* — Felipe.
-- **`incident_transition_rejected`** — API — la API rechaza un cambio de estado no permitido (400 `invalid_transition`).
+- **`incident_transition_rejected`** — Navegador, al recibir la respuesta de la API — la API rechaza un cambio de estado no permitido (400 `invalid_transition`).
   *"Capturamos `incident_transition_rejected` porque necesitamos saber si los usuarios intentan transiciones que el ciclo de vida no permite (por ejemplo, reabrir una incidencia resuelta), lo que nos permite tomar la decisión de revisar el ciclo de vida o explicarlo mejor en la interfaz."* — Felipe y Jake.
 
 **Analizador del CSV de incidentes**
 
-- **`incident_report_analyzed`** — API — tras analizar un CSV con `POST /incidents/analyze`.
+- **`incident_report_analyzed`** — Navegador, al recibir la respuesta de la API — tras analizar un CSV con `POST /incidents/analyze`.
   *"Capturamos `incident_report_analyzed` porque necesitamos saber qué proporción de filas de los reportes de los locales es inválida y por qué regla, lo que nos permite tomar la decisión de capacitar a los locales que envían reportes con más errores."* — Jake y Felipe.
 - **`incident_report_exported`** — API — tras descargar `results.csv` con `GET /incidents/results/export`.
   *"Capturamos `incident_report_exported` porque necesitamos saber si alguien usa de verdad el resumen exportado o se queda en la pantalla, lo que nos permite tomar la decisión de mantener la exportación o sustituirla por un envío automático del resumen."* — Felipe.
@@ -289,7 +295,7 @@ Eventos propuestos por este plan, agrupados por categoría. Para cada uno: emiso
 | Procesos internos | — | 2 | 2 |
 | **Total** | **6** | **38** | **44** |
 
-Por emisor: 32 de la API, 8 del navegador, 1 del BFF y 3 de procesos (la tarea de correo, el arranque de la API y los scripts de carga). Las preguntas del RFI quedan cubiertas así:
+Por emisor, en la fase de captura: 34 del navegador, 7 de la API y 3 de procesos (la tarea de correo, el arranque de la API y los scripts de carga). El diseño original asignaba 32 a la API, 8 al navegador y 1 al BFF (§2.4). Las preguntas del RFI quedan cubiertas así:
 
 | Pregunta | Evento(s) |
 |---|---|
@@ -309,8 +315,8 @@ Todo evento, sea cual sea su emisor, es un objeto JSON con los campos siguientes
 |---|---|---|
 | `eventId` | string (UUID v4) | Identificador único del evento, generado por el emisor. El almacenamiento descarta los duplicados por este campo. |
 | `timestamp` | string (ISO 8601) | Momento del hecho, en UTC y con milisegundos: `2026-11-18T17:36:46.123Z`. Lo pone el emisor cuando ocurre el hecho, no cuando se envía. |
-| `sessionId` | string (UUID v4) o `null` | Sesión del navegador: un UUID que el backoffice crea al abrirse y guarda en `sessionStorage` (uno por pestaña). Viaja en la cabecera `X-Session-Id`. Es `null` en los procesos y en las peticiones que no vienen del backoffice. |
-| `userId` | string (UUID) o `null` | La cuenta que actúa: el `sub` del token (`User.id` en TinyDB). Es un identificador seudónimo, nunca el email ni el nombre. Es `null` si no hay usuario autenticado. Cada ficha (sección 13) indica qué valor lleva. |
+| `sessionId` | string (UUID v4) o `null` | Sesión del navegador: un UUID que el backoffice crea **al iniciar sesión** y guarda en `sessionStorage` (uno por pestaña; una pestaña nueva con la sesión ya iniciada crea el suyo al validarla). Se borra al cerrar la sesión o cuando caduca. Viaja en la cabecera `X-Session-Id`. Es `null` antes del login (vistas públicas), en los procesos y en las peticiones que no vienen del backoffice. |
+| `userId` | string (UUID) o `null` | La cuenta que actúa: el `sub` del token (`User.id` en TinyDB). Es un identificador seudónimo, nunca el email ni el nombre. Es `null` si no hay usuario autenticado. Cada ficha (sección 14) indica qué valor lleva. |
 | `event_type` | string | El tipo del evento, con la taxonomía de la sección 2.3. Cada esquema de `event-schemas.json` lo fija con `const`. |
 | `schemaVersion` | string (SemVer) | Versión del esquema **de ese evento**. Todos empiezan en `1.0.0`. Sube la versión menor al añadir una propiedad opcional, y la mayor al quitar o renombrar una propiedad, cambiar su tipo o hacer obligatoria una que no lo era. |
 | `requestId` | string (UUID v4) o `null` | Correlación entre el frontend, el backend y los logs. Lo crea el navegador por cada llamada a la API, en la cabecera `X-Request-Id`; el BFF lo reenvía; la API lo crea si falta, lo devuelve en la respuesta y lo pone en sus eventos y en su línea de `api.timing`. Es `null` si el evento no nace de una petición, como una vista o un proceso. |
@@ -343,7 +349,7 @@ Todo evento, sea cual sea su emisor, es un objeto JSON con los campos siguientes
     "reason": "expired",
     "stock_after": 30.4
   },
-  "source": "api",
+  "source": "browser",
   "environment": "production"
 }
 ```
@@ -353,7 +359,7 @@ Todo evento, sea cual sea su emisor, es un objeto JSON con los campos siguientes
 1. **Validar antes de emitir.** El emisor valida cada evento contra `event-schemas.json`. Un evento que no cumple su esquema, por ejemplo porque lleva una clave fuera del allowlist, **no se emite**: se descarta y se cuenta en el log del emisor. Nunca se recorta ni se corrige en silencio.
 2. **Las propiedades opcionales se omiten.** Si una propiedad opcional no tiene valor, la clave no se envía. Los `null` son solo para los campos del envelope.
 3. **Correlación de extremo a extremo.** Para que `requestId` y `sessionId` lleguen a la API, el navegador añade `X-Request-Id` y `X-Session-Id` a cada llamada (`lib/api-client.ts`). El BFF debe reenviarlas, porque hoy solo copia `Content-Type`, `Accept` y `Authorization`. La API debe leerlas y crear `X-Request-Id` si falta.
-4. **Los eventos de negocio de la API se emiten después del `commit`** (sección 2.4). Los rechazos se emiten al construir la respuesta de error.
+4. **Los eventos de negocio de la API se emiten después del `commit`** (sección 2.4). Los rechazos se emiten al construir la respuesta de error. En la fase de captura, el backoffice los emite al recibir esa respuesta, con el `requestId` de la llamada.
 5. **Las rutas siempre van como plantilla:** `/api/v1/incidents/{incident_id}` o `/talento/candidates/[id]`, nunca con ids reales ni query string.
 
 ### 7.2 Cómo está organizado `event-schemas.json`
@@ -386,11 +392,11 @@ Estos eventos describen productos, locales y el uso del sistema, no a las person
 |---|---|---|---|
 | **Ninguno** | Datos de negocio y técnicos sin relación con una persona | — | La mayoría de las propiedades |
 | **Seudónimo** | Identifica una cuenta sin revelar quién es | UUID internos: `userId` (envelope), `new_user_id`, `target_user_id` | Autenticación y cualquier evento con usuario |
-| **Sanitizado** | Dato personal transformado antes de salir del emisor | `account_fingerprint`: HMAC-SHA256 del email normalizado con la clave `TELEMETRY_HASH_KEY` (distinta de `SECRET_KEY`), truncado a 16 caracteres hexadecimales. `client_network`: IP truncada a /24 (IPv4) o /48 (IPv6). `message_sanitized`: mensaje recortado a 200 caracteres, con emails, números de 4 o más cifras y UUID sustituidos por `[redacted]`. | `login_failed`, `password_reset_requested`, `frontend_error_captured` |
+| **Sanitizado** | Dato personal transformado antes de salir del emisor | `account_fingerprint`: HMAC-SHA256 del email normalizado con la clave `TELEMETRY_HASH_KEY` (distinta de `SECRET_KEY`), truncado a 16 caracteres hexadecimales. `client_network`: IP truncada a /24 (IPv4) o /48 (IPv6). `message_sanitized`: mensaje recortado a 200 caracteres, con emails, números de 4 o más cifras y UUID sustituidos por `[redacted]`. | `password_reset_requested`, `frontend_error_captured` (y `login_failed` 1.0.0, cuando lo emita la API; la 2.0.0 del navegador no lleva ni huella ni red) |
 
 **Por qué HMAC y no un hash simple:** el email tiene pocas variantes probables, así que un SHA-256 sin clave se podría revertir probando emails conocidos. Con una clave secreta del servidor no se puede. Si la clave se rota, las huellas anteriores dejan de agruparse con las nuevas. Es aceptable, porque solo se usan para detectar ráfagas en ventanas cortas.
 
-**Por qué `userId` es `null` en `login_failed` aunque la cuenta exista:** con el `userId` relleno, la telemetría revelaría qué emails tienen cuenta, que es justo lo que la respuesta neutra de la API oculta. La agrupación por cuenta la da `account_fingerprint`.
+**Por qué `userId` es `null` en `login_failed` aunque la cuenta exista:** con el `userId` relleno, la telemetría revelaría qué emails tienen cuenta, que es justo lo que la respuesta neutra de la API oculta. La agrupación por cuenta la da `account_fingerprint` cuando el evento lo emite la API. En la fase de captura, `login_failed` 2.0.0 solo lleva el motivo (sección 13).
 
 ## 9. Estrategia de entrega: stream o batch
 
@@ -401,7 +407,7 @@ Estos eventos describen productos, locales y el uso del sistema, no a las person
 
 **Todo evento, también los de stream, se guarda para el análisis batch.** Stream añade la ruta rápida; no sustituye al histórico. `stock_threshold_triggered`, por ejemplo, avisa en el momento y además alimenta en batch el ajuste del mínimo.
 
-**Transporte frente a procesamiento:** el navegador agrupa sus eventos para enviarlos (hasta 10 eventos o 5 segundos, y `navigator.sendBeacon` al cerrar la pestaña). Eso es una optimización del envío, no "batch" en el sentido de esta sección: un evento de stream emitido por el navegador sale en ese mismo envío.
+**Transporte frente a procesamiento:** el navegador agrupa sus eventos para enviarlos (hasta 20 eventos o 10 segundos, lo que ocurra primero, y `navigator.sendBeacon` al ocultar o cerrar la pestaña). Eso es una optimización del envío, no "batch" en el sentido de esta sección: un evento de stream emitido por el navegador sale en ese mismo envío, así que llega en 10 segundos como máximo.
 
 **Resumen:** **12 eventos en stream** (seguridad, disponibilidad y alertas de negocio que no pueden esperar) y **32 en batch** (28 diarios y 4 cada hora). De los 6 obligatorios, 2 van en stream (`stock_threshold_triggered` e `ingredient_price_variance_detected`) y 4 en batch.
 
@@ -464,7 +470,7 @@ Los eventos de alta frecuencia se limitan **en el emisor, antes de enviarlos**, 
 | `event_type` | Estrategia |
 |---|---|
 | `stock_threshold_triggered` | Natural: solo se emite al **cruzar** el mínimo (§3.2), así que un producto bajo no repite la alerta en cada consumo. |
-| `login_failed` | Sin muestreo: cada intento cuenta para detectar la ráfaga. Si un mismo `client_network` supera 60 eventos por minuto, el emisor los sigue enviando todos, agrupados en lotes de 1 segundo. |
+| `login_failed` | Sin muestreo ni límite: cada intento cuenta para detectar la ráfaga. En el navegador, su frecuencia es la de los envíos del formulario de login. |
 | `session_expired` | Uno por token: varias peticiones en paralelo con el mismo token caducado (resumen y listado) emiten un solo evento por (`userId`, `iat`) en 60 s. |
 | `auth_token_rejected` | Uno por token y motivo cada 60 s (las peticiones en paralelo comparten token). |
 | `page_viewed` | Se ignora una segunda vista de la misma ruta en menos de 1 s (doble montaje de React en desarrollo, recargas dobles). |
@@ -520,7 +526,7 @@ Cada uno se descartó porque no supera la regla de oro (no hay decisión concret
 |---|---|---|
 | R1 | **Varios eventos obligatorios no pueden emitirse con el modelo actual** (sin precio en las entradas, sin motivo de merma, sin mínimos por local, sin entidad de locales). | No se emiten con valores inventados: la sección 12 dice qué cambio necesita cada uno. Cerrar esas brechas es la primera tarea de la fase de captura. |
 | R2 | `userId` es seudónimo, pero sigue siendo un dato personal. | Acceso restringido a los datos crudos. Al eliminar una cuenta (`DELETE /users/{id}`), sus eventos guardados pasan a `userId: null`. La retención de los datos crudos se fija en la fase de almacenamiento. |
-| R3 | Los eventos del navegador se pierden (bloqueadores, pestañas cerradas, sin conexión). | Las métricas de navegador se tratan como aproximaciones. **Los hechos de negocio siempre los emite la API**, que es la fuente de verdad. |
+| R3 | Los eventos del navegador se pierden (bloqueadores, pestañas cerradas, sin conexión). | Las métricas de navegador se tratan como aproximaciones. **Los hechos de negocio debe emitirlos la API**, que es la fuente de verdad. **Riesgo asumido en la fase de captura:** los emite el backoffice al recibir la respuesta de la API, con cola, reintentos y `sendBeacon` (sección 13). Una pestaña cerrada antes del envío o una orden registrada fuera del backoffice no dejan evento hasta que exista el emisor de la API. |
 | R4 | El reloj del navegador puede estar mal. | El almacenamiento añadirá la hora de recepción. Los análisis de negocio usan los `timestamp` de la API. |
 | R5 | La telemetría podría romper la operación (latencia o errores al emitir). | Emisión asíncrona, después del `commit` y sin bloquear la respuesta. Un fallo al emitir se registra en el log y nunca hace fallar la petición. |
 | R6 | Doble conteo: reintentos o dos emisores del mismo hecho. | Un único emisor por evento (§2.4). Los reintentos conservan el `eventId`, y el almacenamiento descarta duplicados por ese campo. |
@@ -553,21 +559,96 @@ Lo que necesita el sistema actual para emitir cada evento tal como lo define est
 
 | # | Eventos afectados | Qué falta hoy | Cambio propuesto |
 |---|---|---|---|
-| B3 | `stock_threshold_triggered` | No hay mínimos configurables, y el stock es global por ingrediente (decisión D7 del Hito 5), no por local. | Tabla `stock_thresholds` (`product_id`, `location_id`, `min_quantity`) y cálculo del stock **por local** (sumas filtradas por `location_id`) para evaluar el cruce tras cada salida. |
+| B3 | `stock_threshold_triggered` | No hay mínimos configurables, y el stock es global por ingrediente (decisión D7 del Hito 5), no por local. | Tabla `stock_thresholds` (`product_id`, `location_id`, `min_quantity`) y cálculo del stock **por local** (sumas filtradas por `location_id`) para evaluar el cruce tras cada salida. **Provisional en la fase de captura:** umbral de stock bajo del backoffice por unidad, sobre el stock global (§3.2). |
 | B4 | `direct_stock_edit_rejected` | La API rechaza los intentos (405 y 422), pero no los distingue de otros errores. | En los manejadores de 405 y de validación de `app/core/errors.py`, detectar las rutas del inventario y el campo `current_stock`/`stock` en los errores `extra_forbidden`, y emitir el evento. |
-| B5 | `inbound_order_created`, `ingredient_price_variance_detected` | Las entradas no tienen coste unitario. | `unit_cost` obligatorio en `IngredientEntryCreate` y en la tabla (en la moneda del local), y una consulta de la media de 90 días por producto y proveedor. |
-| B6 | `stock_waste_registered` | Las salidas solo distinguen `consumption`/`waste`, sin el motivo de la merma. | `waste_reason` (`expired`, `kitchen_error`, `theft_suspected`), obligatorio cuando `reason` = `waste` y prohibido en los consumos. El backoffice añade el desplegable al formulario de salida. |
-| B7 | Todos los de inventario (`country`, `currency`) | No hay entidad de locales: `location_id` es un número sin país ni ciudad. | Tabla `locations` (`id` 1–14, `country`, `city`) en Supabase. `country` y `currency` salen del local de la orden. |
-| B8 | `inbound_order_created`, `ingredient_price_variance_detected` | La entrada guarda el nombre del proveedor, no su id, y el directorio vive en TinyDB. | `supplier_id` en `IngredientEntry`, que referencia al directorio (más fácil tras migrar `suppliers` a PostgreSQL, ya pendiente). |
+| B5 | `inbound_order_created`, `ingredient_price_variance_detected` | Las entradas no tienen coste unitario. | `unit_cost` obligatorio en `IngredientEntryCreate` y en la tabla (en la moneda del local), y una consulta de la media de 90 días por producto y proveedor. **Se cierra en la fase de captura** (`unit_cost`; la media la calcula el backoffice con `GET /orders`). |
+| B6 | `stock_waste_registered` | Las salidas solo distinguen `consumption`/`waste`, sin el motivo de la merma. | `waste_reason` (`expired`, `kitchen_error`, `theft_suspected`), obligatorio cuando `reason` = `waste` y prohibido en los consumos. El backoffice añade el desplegable al formulario de salida. **Se cierra en la fase de captura.** |
+| B7 | Todos los de inventario (`country`, `currency`) | No hay entidad de locales: `location_id` es un número sin país ni ciudad. | Tabla `locations` (`id` 1–14, `country`, `city`) en Supabase. `country` y `currency` salen del local de la orden. **Provisional en la fase de captura:** salen del país del ingrediente (`Ingredient.country`). |
+| B8 | `inbound_order_created`, `ingredient_price_variance_detected` | La entrada guarda el nombre del proveedor, no su id, y el directorio vive en TinyDB. | `supplier_id` en `IngredientEntry`, que referencia al directorio (más fácil tras migrar `suppliers` a PostgreSQL, ya pendiente). **Provisional en la fase de captura:** el backoffice obtiene el `id` del directorio por el nombre elegido, que es único. |
 | B9 | Validación de la instrumentación | La semilla actual no cubre el §5 del briefing (3 mermas con motivos distintos, 2 cruces de umbral, 1 variación de precio). | Ampliar `seed-inventory` en la fase de captura con esos casos, una vez cerradas B3, B5 y B6. |
 | B10 | `direct_stock_edit_rejected` (decisión "en los locales donde ocurre") | Las cuentas no tienen local asignado. Un `PATCH /products/{id}` no indica local. | `location_id` en el perfil del usuario, para atribuir el intento al local de quien lo hace. Hasta entonces, `location_id` solo se rellena si la petición lo trae. |
-| B11 | Todos (`requestId`, `sessionId`) | El navegador no envía `X-Request-Id` ni `X-Session-Id`, el BFF no los reenvía y la API no los lee. | `lib/api-client.ts` añade las dos cabeceras; el BFF las copia; un middleware de la API lee o crea `X-Request-Id`, lo devuelve y lo pone en los eventos y en la línea de `api.timing`. |
+| B11 | Todos (`requestId`, `sessionId`) | El navegador no envía `X-Request-Id` ni `X-Session-Id`, el BFF no los reenvía y la API no los lee. | `lib/api-client.ts` añade las dos cabeceras; el BFF las copia; un middleware de la API lee o crea `X-Request-Id`, lo devuelve y lo pone en los eventos y en la línea de `api.timing`. **La fase de captura cierra `X-Request-Id`** (navegador, BFF y `api.timing`); `X-Session-Id` llega con el emisor de la API. |
 | B12 | `login_failed`, `password_reset_requested`; todos (`environment`) | No hay clave de huella ni variable de entorno de telemetría. | Variables `TELEMETRY_HASH_KEY` y `TELEMETRY_ENVIRONMENT` en `app/core/config.py` (obligatorias cuando la telemetría esté activa). |
 | B13 | `incident_report_exported` | El último análisis se guarda en memoria sin la hora en que se hizo. | Guardar `analyzed_at` junto al resultado en `LastAnalysisRepository`. |
 
 Las brechas B1 (nombres de las entidades) y B2 (categorías) ya quedan resueltas por las equivalencias de §12.1: se traducen al emitir y no requieren cambios de modelo.
 
-## 13. Fichas de los eventos
+## 13. Fase de captura en el backoffice
+
+La primera implementación del plan captura los eventos **en el backoffice** y los envía en lotes a un receptor provisional de la API. El receptor valida el formato y responde 200, sin guardar nada: el almacenamiento es la fase siguiente. Cuando llegue, la URL del receptor cambiará en la configuración y el backoffice no cambiará.
+
+### 13.1 Cómo se captura
+
+- **Una sola función.** `uis/backoffice/lib/telemetry/` exporta únicamente `track(eventType, properties)`. Ningún otro código del backoffice envía telemetría con `fetch` ni con otra librería.
+- **El envelope lo pone el servicio.** Quien llama a `track()` solo pasa el `event_type` y sus `properties`. El servicio añade:
+
+  | Campo | Valor |
+  |---|---|
+  | `eventId` | UUID v4 generado al capturar el evento |
+  | `timestamp` | ISO 8601 en UTC con milisegundos, del momento de la captura, no del envío |
+  | `sessionId` | El de la sesión del navegador (§7): se crea al iniciar sesión; `null` en las vistas públicas |
+  | `userId` | El usuario de la sesión, o `null` si no hay sesión |
+  | `schemaVersion` | La del esquema de ese evento, tomada del catálogo generado desde `event-schemas.json` |
+  | `requestId` | El `X-Request-Id` de la llamada a la API que confirma o rechaza el hecho; `null` si el evento no nace de una llamada |
+  | `source` | `browser` |
+  | `environment` | `NEXT_PUBLIC_TELEMETRY_ENVIRONMENT` (`development` si no está definida) |
+
+- **Validación antes de emitir (§7.1).** `track()` comprueba cada evento contra un catálogo que un script genera desde `event-schemas.json`: el tipo debe existir, las propiedades obligatorias deben estar y no puede haber ninguna clave fuera del allowlist. Un evento que no cumple se descarta, con un aviso en la consola en desarrollo; nunca se recorta en silencio.
+- **Correlación.** `lib/api-client.ts` crea un `X-Request-Id` por llamada. El BFF lo reenvía a la API, que lo escribe en su línea de `api.timing` y lo devuelve en la respuesta. Los eventos que nacen de una respuesta se emiten en la capa de datos, con el `requestId` de esa llamada.
+
+### 13.2 Envío
+
+| Mecanismo | Comportamiento |
+|---|---|
+| Cola local | Un arreglo en memoria. Como máximo 500 eventos: si el receptor no responde durante mucho tiempo, se descartan los más antiguos. |
+| Lote | Se envía `{"events": [...]}` cada 10 segundos o al llegar a 20 eventos, lo que ocurra primero, a `NEXT_PUBLIC_TELEMETRY_ENDPOINT`. |
+| Pestaña oculta o cerrada | En `visibilitychange` (`hidden`), lo pendiente sale con `navigator.sendBeacon`, en lotes de 20 como máximo. |
+| Reintentos | Hasta 3, con esperas de 1, 2 y 4 segundos. Después se descarta el lote: la telemetría nunca bloquea la aplicación. Los reintentos conservan el `eventId`, para que el almacenamiento descarte duplicados. |
+
+El receptor está en otro origen (la API, en el puerto 8000) y `sendBeacon` no puede enviar `application/json` a otro origen sin una comprobación previa de CORS. Por eso los lotes de `sendBeacon` van como `text/plain`, y el receptor interpreta el cuerpo como JSON en los dos casos.
+
+### 13.3 Receptor provisional
+
+`POST /telemetry/events` en `services/brasaland-api`, en su propio router:
+
+- **Fuera de `/api/v1` y público**, como `/health`. La recepción de telemetría es una vía de entrada aparte, no un recurso versionado del negocio, y `sendBeacon` no puede enviar `Authorization`.
+- **CORS** solo para el origen del backoffice (`FRONTEND_URL`) y solo para `POST`.
+- **Valida el formato** con el modelo `TelemetryEvent`: los 10 campos del envelope, con sus tipos y dominios y sin campos extra. Un lote tiene entre 1 y 100 eventos. `properties` se valida como objeto; la validación contra el esquema de cada evento llega con el almacenamiento.
+- **Registra** en el log la cantidad de eventos y el `event_type` de cada uno, y responde `200 {"received": N}`. No escribe en ninguna base de datos.
+- **`TELEMETRY_ENDPOINT`** queda declarada en la configuración de la API desde el principio, aunque todavía no se use.
+
+### 13.4 Alcance: 34 de los 44 eventos
+
+| Grupo | Eventos |
+|---|---|
+| **Obligatorios (6)** | `inbound_order_created`, `outbound_order_created`, `stock_waste_registered`, `stock_threshold_triggered`, `ingredient_price_variance_detected`, `direct_stock_edit_rejected` |
+| Piso técnico (3) | `page_viewed`, `frontend_error_captured`, `page_performance_recorded` (Web Vitals: LCP, CLS e INP, agrupados por vista) |
+| Autenticación (9) | `login_succeeded`, `login_failed`, `session_expired`, `auth_token_rejected`, `logout_completed`, `user_registered`, `password_reset_completed`, `password_reset_link_rejected`, `password_changed` |
+| Inventario (2) | `order_validation_failed`, `outbound_order_rejected` |
+| Errores y rendimiento de la API (3) | `api_error_returned`, `api_connection_failed`, `api_latency_recorded` (medidos en el navegador) |
+| Navegación (4) | `form_validation_failed`, `form_abandoned`, `list_filter_applied`, `list_page_extended` |
+| Proveedores (3) | `supplier_created`, `supplier_rate_updated`, `supplier_status_changed` |
+| Incidencias (4) | `incident_created`, `incident_status_changed`, `incident_transition_rejected`, `incident_report_analyzed` |
+
+**Esperan al emisor de la API (10):**
+
+| Evento | Por qué no se captura en el backoffice |
+|---|---|
+| `product_created`, `user_access_changed`, `supplier_deleted` | El backoffice no tiene ningún control que haga esa operación. |
+| `password_reset_requested` | Necesita saber si la cuenta existe y la huella del email, que solo tiene la API. |
+| `server_error_occurred` | Necesita el tipo de la excepción, que la API no expone. |
+| `cache_stats_recorded`, `email_delivery_failed`, `api_instance_started`, `data_seed_executed` | Solo existen dentro del servidor o de los scripts. |
+| `incident_report_exported` | Falta la hora del análisis (brecha B13). |
+
+### 13.5 Cambios de esquema de esta fase
+
+- **26 eventos cambian de emisor** a `source: "browser"`. Su versión no cambia, porque sus propiedades son las mismas.
+- **`login_failed` 2.0.0.** `failure_reason` admite también `network_error`, y salen `account_fingerprint` y `client_network`: el navegador no puede calcularlos sin enviar el email. Volverán con el emisor de la API.
+- **`api_connection_failed` 1.1.0.** Admite `api_timeout` (504), que el intermediario ya devuelve.
+- **Envelope:** `sessionId` se crea al iniciar sesión (§7).
+- **Catálogo:** `urn:brasaland:telemetry:event-schemas:1.1.0`.
+
+## 14. Fichas de los eventos
 
 Una ficha por evento, en el mismo orden y con las mismas propiedades que `event-schemas.json`. **El allowlist de cada evento son exactamente las propiedades de su tabla:** cualquier otra clave hace que el evento no se emita. "Obligatoria: sí" significa que la clave debe estar siempre; las opcionales se omiten cuando no hay valor.
 
@@ -580,11 +661,12 @@ Un local registra la llegada de mercancía de un proveedor.
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras el `commit` de `POST /api/v1/inventory/orders/inbound`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el backoffice, al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada). `supplier_id` sale del directorio por el nombre elegido; `country` y `currency`, del ingrediente. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Consolidar compras y negociar precios son decisiones semanales o mensuales de Lucía; nadie actúa sobre una entrega concreta en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -609,11 +691,12 @@ Un local registra consumo de ingredientes en la preparación de un plato.
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de consumo. Una salida de merma emite `stock_waste_registered` en su lugar. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de consumo. Una salida de merma emite `stock_waste_registered` en su lugar. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). La sugerencia automática de pedidos se recalcula con el consumo acumulado del día; un consumo concreto no cambia la decisión en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -637,11 +720,12 @@ Un local registra merma (producto vencido, error de cocina, o pérdida/robo).
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras el `commit` de `POST /api/v1/inventory/orders/outbound` con motivo de merma. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de merma; `reason` es el `waste_reason` de la salida. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Priorizar auditorías de merma es una decisión semanal por local; la merma de hoy ya ocurrió y no se corrige en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -666,11 +750,12 @@ El stock de un producto cae por debajo del mínimo configurado para ese local.
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras el `commit` de una salida que hace cruzar el mínimo: stock antes ≥ `threshold_quantity` y después < `threshold_quantity`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al recibir el 201 de una salida que hace cruzar el mínimo: stock antes ≥ `threshold_quantity` y después < `threshold_quantity`. Mientras no haya mínimos por local (brecha B3), el mínimo es el umbral de stock bajo del backoffice para la unidad del producto (`LOW_STOCK_THRESHOLDS`) y el stock es el global del producto. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **stream** (segundos). Un local que se queda corto de un ingrediente clave necesita reponer **ese mismo día**: el supervisor debe enterarse en minutos, no al día siguiente. Además alimenta en batch el ajuste del mínimo. |
 | **Throttle / debounce** | Natural: solo se emite al **cruzar** el mínimo (§3.2), así que un producto bajo no repite la alerta en cada consumo. |
@@ -694,11 +779,12 @@ Un usuario intenta modificar el stock directamente (fuera de una orden) y el sis
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Al responder 405 a un `PUT`/`PATCH`/`DELETE` sobre una ruta del inventario, o 422 a un `POST` del inventario cuyo cuerpo incluye `current_stock` o `stock`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `lib/api-client.ts`, al recibir 405 a un `PUT`/`PATCH`/`DELETE` sobre una ruta del inventario, o 422 con `extra_forbidden` en `current_stock` o `stock` a un `POST` del inventario. Desde la interfaz lo provoca la acción "Ajustar stock" de `/inventario/ingredientes`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. No se guarda el cuerpo de la petición ni el valor de stock que se intentó escribir. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Reforzar capacitación o permisos es una decisión semanal de Jake; el sistema ya rechazó el intento, no hay daño que contener en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -725,11 +811,12 @@ El costo unitario de una orden de entrada varía más de un umbral (ej. 10%) res
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras el `commit` de una entrada cuyo `unit_cost` se desvía más de `threshold_pct` de la media de los últimos `history_window_days` días del mismo producto y proveedor, con al menos 3 entradas en esa ventana. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al recibir el 201 de una entrada cuyo `unit_cost` se desvía más de `threshold_pct` de la media de las entradas de los últimos `history_window_days` días del mismo producto y proveedor (al menos 3), calculada con el historial de `GET /api/v1/inventory/orders`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **stream** (segundos). Es una alerta para Lucía y Mariana: renegociar o cambiar de proveedor **antes** de aceptar más entregas al precio nuevo. Un día de retraso son más compras al precio anómalo. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -759,11 +846,12 @@ La API rechaza una orden de entrada o de salida por datos inválidos.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Al responder 422 `invalid_request` o 404 `ingredient_not_found` a `POST /api/v1/inventory/orders/inbound` u `/outbound`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al recibir 422 `invalid_request` o 404 `ingredient_not_found` de `POST /api/v1/inventory/orders/inbound` u `/outbound`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. Solo nombres de campo, nunca los valores enviados. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Corregir datos de catálogo y capacitar se decide con el acumulado de la semana. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -784,11 +872,12 @@ La API rechaza una salida porque supera el stock disponible.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Al responder 400 `insufficient_stock` a `POST /api/v1/inventory/orders/outbound` (no se escribe nada). |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | Al recibir 400 `insufficient_stock` de `POST /api/v1/inventory/orders/outbound` (no se escribió nada). `available_quantity` es el stock que mostraba el formulario. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). El conteo físico se programa con el acumulado del día por producto y local; el rechazo ya protegió el stock. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -812,6 +901,7 @@ Se da de alta un producto en el catálogo de inventario.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | API (`source: api`) |
 | **Se emite** | Tras el `commit` de `POST /api/v1/inventory/products`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
@@ -838,11 +928,12 @@ Un usuario inicia sesión.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Cuando `POST /api/v1/auth/login` emite un token. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el formulario de login, al recibir el token de `POST /api/v1/auth/login` y validar la sesión con `GET /api/v1/auth/me`, de donde sale `user_role`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | `userId` es un identificador seudónimo (UUID). No se guarda el email. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Planificar capacitación y ventanas de mantenimiento usa patrones de semanas. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -858,20 +949,19 @@ Un intento de inicio de sesión falla.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Cuando `POST /api/v1/auth/login` responde 401 `invalid_credentials` o 403 `inactive_user`. |
+| **Versión** | `2.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el formulario de login, al recibir 401 `invalid_credentials` o 403 `inactive_user` de `POST /api/v1/auth/login`, o cuando la petición no llega a la API (`network_error`: fallo de red, o 502/504 del intermediario). |
 | **`userId`** | `null`: la petición no está autenticada. |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
-| **Datos sensibles** | **Sí (sanitizado).** El email nunca se emite: va como `account_fingerprint` (HMAC truncado). La IP va truncada (`client_network`). `userId` es `null` aunque la cuenta exista, para no revelar qué emails tienen cuenta. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
+| **Datos sensibles** | Ninguno. El email y la contraseña escritos nunca se emiten, ni nada derivado de ellos. `userId` es `null` aunque la cuenta exista. La huella de la cuenta (`account_fingerprint`) y la red (`client_network`) salen en la 2.0.0: el navegador no puede calcularlas sin enviar el email; vuelven con el emisor de la API. |
 | **Entrega** | **stream** (segundos). Un ataque de fuerza bruta se detiene en minutos o no se detiene: la decisión (bloqueo temporal) solo sirve si llega a tiempo. |
-| **Throttle / debounce** | Sin muestreo: cada intento cuenta para detectar la ráfaga. Si un mismo `client_network` supera 60 eventos por minuto, el emisor los sigue enviando todos, agrupados en lotes de 1 segundo. |
+| **Throttle / debounce** | Sin muestreo ni límite: cada intento cuenta para detectar la ráfaga. En el navegador, su frecuencia es la de los envíos del formulario de login. |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
-| `failure_reason` | enum: `invalid_credentials`, `inactive_user` | sí | Motivo del rechazo. |
-| `account_fingerprint` | string | sí | HMAC-SHA256 del email normalizado (minúsculas, sin espacios) con la clave `TELEMETRY_HASH_KEY`, truncado a 16 caracteres hexadecimales. Permite agrupar intentos por cuenta sin guardar el email. **[sanitizado]** |
-| `client_network` | string (máx. 43) | sí | IP de origen truncada: /24 en IPv4 (`203.0.113.0/24`) o /48 en IPv6. Nunca la IP completa. **[sanitizado]** |
+| `failure_reason` | enum: `invalid_credentials`, `inactive_user`, `network_error` | sí | Motivo: credenciales incorrectas, cuenta inactiva o petición que no llegó a la API. |
 
 #### `session_expired`
 
@@ -880,12 +970,13 @@ Una petición llega con una sesión caducada.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Cuando la dependencia de autenticación responde 401 `token_expired`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `lib/api-client.ts` (también al validar la sesión en `SessionProvider`), al recibir 401 `token_expired`. `token_age_minutes` sale del `iat` del token, leído sin verificar la firma. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
-| **Datos sensibles** | `userId` sale del `sub` del token caducado (la firma es válida). No se guarda el token. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
+| **Datos sensibles** | `userId` es el de la sesión del navegador. No se emite el token. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Ajustar la duración del token es una decisión de configuración que se toma con semanas de datos. |
 | **Throttle / debounce** | Uno por token: varias peticiones en paralelo con el mismo token caducado (resumen y listado) emiten un solo evento por (`userId`, `iat`) en 60 s. |
 
@@ -901,12 +992,13 @@ Una petición llega con un token inválido o revocado.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Cuando la dependencia de autenticación responde 401 `invalid_token` o `session_revoked`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `lib/api-client.ts` (también al validar la sesión en `SessionProvider`), al recibir 401 `invalid_token` o `session_revoked`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
-| **Datos sensibles** | `userId` es el `sub` solo si el token está revocado (firma válida); con `invalid_token` es `null`. No se guarda el token. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
+| **Datos sensibles** | `userId` es el de la sesión del navegador, si la había. No se emite el token. |
 | **Entrega** | **stream** (segundos). Tokens manipulados o sesiones revocadas que insisten son un posible incidente de seguridad: investigar y rotar `SECRET_KEY` no puede esperar al día siguiente. |
 | **Throttle / debounce** | Uno por token y motivo cada 60 s (las peticiones en paralelo comparten token). |
 
@@ -922,10 +1014,11 @@ El usuario cierra sesión.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | Al pulsar "Cerrar sesión" en el menú de la cuenta, antes de borrar el token. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no hay petición a la API. |
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). El cierre automático por inactividad se decide con el patrón de semanas. |
@@ -943,11 +1036,12 @@ Se crea una cuenta por autorregistro.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras crear la cuenta con `POST /api/v1/users`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el formulario de registro, al recibir el 201 de `POST /api/v1/users`; `new_user_id` es el `id` de la respuesta. |
 | **`userId`** | `null`: la petición no está autenticada. |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | `userId` es `null` (la petición no está autenticada); la cuenta nueva va como `new_user_id` (seudónimo). No se guarda el email. |
 | **Entrega** | **stream** (segundos). Con el registro abierto, una cuenta creada por alguien ajeno ya puede leer el inventario: hay que poder revisarla y desactivarla en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -964,6 +1058,7 @@ Cambia el acceso de una cuenta.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | API (`source: api`) |
 | **Se emite** | Tras `PUT /api/v1/users/{id}` que cambia `role` o `is_active`, o tras `DELETE /api/v1/users/{id}`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
@@ -989,6 +1084,7 @@ Se solicita un enlace de recuperación de contraseña.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | API (`source: api`) |
 | **Se emite** | Al recibir `POST /api/v1/auth/forgot-password`, exista o no la cuenta (la respuesta al usuario es neutra). |
 | **`userId`** | `null`: la petición no está autenticada. |
@@ -1011,12 +1107,13 @@ Una contraseña se restablece con un enlace de recuperación.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras el cambio de contraseña de `POST /api/v1/auth/reset-password`. |
-| **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
-| **Datos sensibles** | `userId` es el dueño del enlace. No se guarda el enlace ni el token. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `/reset-password`, al recibir el 200 de `POST /api/v1/auth/reset-password`. `link_age_minutes` sale del `iat` del token del enlace, leído sin verificar la firma. |
+| **`userId`** | `null`: la petición no está autenticada. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
+| **Datos sensibles** | `userId` es `null`: la vista es pública y el `sub` del enlace no se lee. No se emiten el enlace ni el token. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Simplificar el flujo de recuperación se decide con la tasa semanal. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
 
@@ -1031,11 +1128,12 @@ Un enlace de recuperación se rechaza.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Cuando `POST /api/v1/auth/reset-password/validate` o `/reset-password` responde con `invalid_reset_token`, `reset_token_expired` o `reset_token_used`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `/reset-password`, al recibir `invalid_reset_token`, `reset_token_expired` o `reset_token_used` de `POST /api/v1/auth/reset-password/validate` (al abrir el enlace) o de `/reset-password` (al enviar la contraseña). |
 | **`userId`** | `null`: la petición no está autenticada. |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. No se guarda el token ni el email. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Ajustar la caducidad del enlace o el texto del correo es una decisión de configuración. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1052,11 +1150,12 @@ Un usuario cambia su propia contraseña.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras `POST /api/v1/auth/change-password` (también al editar `password` con `PUT /api/v1/users/{id}`). |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `/account/change-password`, al recibir el 200 de `POST /api/v1/auth/change-password` (`channel: change_password`). El canal `user_update` queda para el emisor de la API: el backoffice no cambia contraseñas con `PUT /users/{id}`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Exigir o no la renovación periódica es una política, no una reacción. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1075,10 +1174,11 @@ El backoffice muestra una vista.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | Al mostrar una ruta del backoffice, en la carga inicial y en cada navegación sin recarga. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
 | **Datos sensibles** | Ninguno. La ruta va como plantilla (`/talento/candidates/[id]`), sin ids reales ni query string. `userId` es `null` en las vistas públicas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Reordenar el menú o retirar secciones se decide con semanas de uso. |
@@ -1098,10 +1198,11 @@ Un formulario bloquea el envío por errores de validación.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | Al pulsar enviar con campos inválidos según la validación del navegador. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
 | **Datos sensibles** | Ninguno. Solo nombres de campo, nunca los valores escritos. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Rediseñar campos se decide con el acumulado. |
@@ -1120,10 +1221,11 @@ Un formulario empezado se abandona sin enviar.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | Al salir de la vista, cerrar el modal o cerrar la pestaña con al menos un campo modificado y sin envío correcto. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
 | **Datos sensibles** | Ninguno. Solo nombres de campo. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Simplificar formularios se decide con el acumulado. |
@@ -1144,10 +1246,11 @@ Se cambia un filtro de una lista.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | Al aplicarse un filtro (en el texto, cuando deja de escribirse durante 500 ms). |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
 | **Datos sensibles** | Ninguno. El texto de búsqueda no se emite: solo su longitud. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Mover filtros a la API se decide con el uso de semanas. |
@@ -1168,10 +1271,11 @@ Se piden más filas de una lista larga.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | Al pulsar "Mostrar más". |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Fijar las filas iniciales o añadir paginación se decide con el acumulado. |
@@ -1193,11 +1297,12 @@ Duración de una petición a la API.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Al terminar cada petición, en el middleware de timing (`app/core/timing.py`), con el muestreo de la estrategia de entrega. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `lib/api-client.ts`, al terminar cada llamada a la API a través del intermediario, con el muestreo de la estrategia de entrega. La duración se mide en el navegador (incluye el paso por el BFF); `cache` sale de la cabecera `X-Cache`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. La ruta va como plantilla. `userId` es `null` en las rutas públicas. |
 | **Entrega** | **batch** (cada hora). Decidir dónde cachear o fijar objetivos de latencia usa percentiles por hora y por día. Las caídas, que sí son urgentes, las detectan `server_error_occurred` y `api_connection_failed` en stream. |
 | **Throttle / debounce** | **Muestreo:** se emite siempre si `duration_ms` ≥ 300 o `status_code` ≥ 400; el resto, 1 de cada 10 peticiones, elegidas por el `requestId` (determinista). `sample_rate` indica la tasa aplicada (1 o 0,1) para reconstruir los recuentos. |
@@ -1218,10 +1323,11 @@ Métricas de carga de una vista.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | Al ocultarse la vista o salir de ella (cuando las métricas son definitivas). |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
 | **Datos sensibles** | Ninguno. No se emite el user agent completo: solo la clase de dispositivo. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Priorizar optimizaciones y fijar presupuestos de rendimiento usa la distribución de días. |
@@ -1244,6 +1350,7 @@ Resumen de aciertos y fallos de una caché.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | API (`source: api`) |
 | **Se emite** | Cada 5 minutos por cada caché del inventario, con los contadores de esa ventana. |
 | **`userId`** | `null`: lo emite un proceso, no un usuario. |
@@ -1270,11 +1377,12 @@ La API responde con un error 4xx.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Al responder cualquier 4xx con el formato `{"error": {"code", "message"}}`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `lib/api-client.ts`, al recibir cualquier 4xx con el formato `{"error": {"code", "message"}}`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. No se guarda el `message` ni el cuerpo; solo el código. `userId` es `null` si la petición no estaba autenticada. |
 | **Entrega** | **batch** (cada hora). Corregir flujos que provocan errores evitables se decide con el acumulado; los errores graves (500) van por su propio evento en stream. |
 | **Throttle / debounce** | Un mismo (`route`, `error_code`, `userId`) se emite como máximo una vez cada 10 s: un script que repite la misma petición fallida no multiplica el volumen. |
@@ -1293,6 +1401,7 @@ Una excepción no controlada produce un 500.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | API (`source: api`) |
 | **Se emite** | Al responder 500 `internal_error`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
@@ -1316,10 +1425,11 @@ Un error de JavaScript no controlado en el backoffice.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
 | **Se emite** | En `window.onerror`, en `unhandledrejection` y al mostrarse la pantalla de error de una vista (`error.tsx`). |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
 | **Datos sensibles** | **Posible (sanitizado).** El mensaje se recorta a 200 caracteres y se le sustituyen emails, números de 4 o más cifras y UUID por `[redacted]` antes de emitirlo. |
 | **Entrega** | **batch** (cada hora). La decisión es priorizar correcciones por número de sesiones afectadas, con datos de horas. Un despliegue roto se ve también en `api_error_returned` y en las consultas de soporte. |
@@ -1340,12 +1450,13 @@ El backoffice no llega a la API.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | BFF (`source: bff`) |
-| **Se emite** | Cuando el intermediario `app/api/[...path]/route.ts` responde 502 `api_unavailable` o 500 `api_not_configured`. |
+| **Versión** | `1.1.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `lib/api-client.ts`, al recibir del intermediario 502 `api_unavailable`, 504 `api_timeout` o 500 `api_not_configured`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera recibida). |
-| **`requestId`** | Id de la petición que no llegó a la API. |
-| **Datos sensibles** | Ninguno. `userId` es `null`: el BFF no decodifica el token. |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
+| **Datos sensibles** | Ninguno. `userId` es el de la sesión del navegador. |
 | **Entrega** | **stream** (segundos). Sin API, ningún local puede registrar órdenes: es un incidente de disponibilidad que se abre en minutos. |
 | **Throttle / debounce** | Una vez por sesión cada 30 s mientras la API no responde. |
 
@@ -1353,8 +1464,8 @@ El backoffice no llega a la API.
 |---|---|---|---|
 | `method` | enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | sí | Método HTTP. |
 | `route` | string | sí | Plantilla de la ruta de la API que se intentó. |
-| `failure` | enum: `api_unavailable`, `api_not_configured` | sí | Motivo. |
-| `status_code` | enum: `500`, `502` | sí | 502 o 500. |
+| `failure` | enum: `api_unavailable`, `api_timeout`, `api_not_configured` | sí | Motivo. |
+| `status_code` | enum: `500`, `502`, `504` | sí | 502, 504 o 500. |
 | `duration_ms` | number (≥ 0) | sí | Ms hasta el fallo. |
 
 #### `email_delivery_failed`
@@ -1364,6 +1475,7 @@ Un correo no sale.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Proceso (`source: process`) |
 | **Se emite** | En la tarea en segundo plano de envío (`send_safely`) cuando el proveedor falla o el envío está desactivado (falta `RESEND_API_KEY`). |
 | **`userId`** | `null`: lo emite un proceso, no un usuario. |
@@ -1388,11 +1500,12 @@ Se da de alta un proveedor.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras `POST /api/v1/suppliers`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el directorio de proveedores, al recibir el 201 de `POST /api/v1/suppliers`; los datos salen de la respuesta. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. No se emiten los datos de contacto del proveedor. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Consolidar categorías de proveedores es una decisión trimestral. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1412,11 +1525,12 @@ Cambia la tarifa de un proveedor.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras `PATCH /api/v1/suppliers/{id}/rate`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el directorio, al recibir el 200 de `PATCH /api/v1/suppliers/{id}/rate`; `previous_rate` es la tarifa mostrada antes del cambio. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Renegociar se planifica con el histórico de cambios; la tarifa ya está registrada. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1437,11 +1551,12 @@ Un proveedor se suspende o se reactiva.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras `PATCH /api/v1/suppliers/{id}/status` que cambia el estado. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el directorio, al recibir el 200 de `PATCH /api/v1/suppliers/{id}/status` que cambia el estado. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Buscar proveedores alternativos se decide con la cobertura por categoría, revisada a diario. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1461,6 +1576,7 @@ Se borra un proveedor.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | API (`source: api`) |
 | **Se emite** | Tras `DELETE /api/v1/suppliers/{id}`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
@@ -1484,11 +1600,12 @@ Se registra una incidencia.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras `POST /api/v1/incidents`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el formulario de registro de incidencias, al recibir el 201 de `POST /api/v1/incidents`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. No se emiten el título ni la descripción (texto libre). |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Planificar visitas y mantenimiento usa el acumulado por sede. La atención de cada incidencia ya ocurre en el gestor, no en la telemetría. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1508,11 +1625,12 @@ Cambia el estado de una incidencia.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras `PATCH /api/v1/incidents/{id}/status`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el gestor de incidencias, al recibir el 200 de `PATCH /api/v1/incidents/{id}/status`; los minutos salen de `created_at` y `updated_at` del listado. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Los tiempos objetivo de respuesta se fijan y revisan con datos de semanas. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1534,11 +1652,12 @@ Se rechaza un cambio de estado no permitido.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Cuando `PATCH /api/v1/incidents/{id}/status` responde 400 `invalid_transition`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En el gestor, al recibir 400 `invalid_transition` de `PATCH /api/v1/incidents/{id}/status`. La interfaz solo ofrece transiciones válidas: ocurre si otra persona cambió el estado antes. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Revisar el ciclo de vida o la interfaz se decide con el acumulado. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1556,11 +1675,12 @@ Se analiza un CSV de incidentes.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
-| **Emisor** | API (`source: api`) |
-| **Se emite** | Tras un análisis correcto de `POST /api/v1/incidents/analyze`. |
+| **Versión** | `1.0.0` |
+| **Emisor** | Navegador (`source: browser`) |
+| **Se emite** | En `/incidencias`, al recibir el 200 de `POST /api/v1/incidents/analyze`; `file_size_bytes` es el tamaño del archivo elegido. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
-| **`sessionId`** | Sesión del navegador (cabecera `X-Session-Id`); `null` si la petición no viene del backoffice. |
-| **`requestId`** | Id de la petición (`X-Request-Id`). |
+| **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
+| **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
 | **Datos sensibles** | Ninguno. No se emite el contenido del archivo ni su nombre. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). La capacitación por calidad de los reportes es periódica. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
@@ -1580,6 +1700,7 @@ Se descarga el resumen del último análisis.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | API (`source: api`) |
 | **Se emite** | Tras `GET /api/v1/incidents/results/export`. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
@@ -1602,6 +1723,7 @@ La API termina de arrancar.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Proceso (`source: process`) |
 | **Se emite** | Al final del `lifespan` de `app/main.py`. |
 | **`userId`** | `null`: lo emite un proceso, no un usuario. |
@@ -1624,6 +1746,7 @@ Un script carga o retira datos fuera de la API.
 | | |
 |---|---|
 | **Clasificación** | Oportunidad identificada |
+| **Versión** | `1.0.0` |
 | **Emisor** | Proceso (`source: process`) |
 | **Se emite** | Al terminar `uv run seed`, `uv run seed-inventory`, `scripts/seed_incidents.py` o `scripts/seed_volume.py`. |
 | **`userId`** | `null`: lo emite un proceso, no un usuario. |
