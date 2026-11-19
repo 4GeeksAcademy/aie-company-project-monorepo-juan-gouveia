@@ -17,7 +17,13 @@ function CardLabel({ children }: { children: React.ReactNode }) {
   return <span className="font-semibold text-red-700 lg:hidden">{children}: </span>;
 }
 
-export default function IngredientTable({ ingredients }: { ingredients: Ingredient[] }) {
+interface IngredientTableProps {
+  ingredients: Ingredient[];
+  // "Ajustar stock": abre el modal que intenta el cambio directo (lo rechaza la API).
+  onAdjustStock: (ingredient: Ingredient) => void;
+}
+
+export default function IngredientTable({ ingredients, onAdjustStock }: IngredientTableProps) {
   return (
     <div className="rounded-lg border border-red-200 bg-white shadow-md">
       <div
@@ -83,6 +89,14 @@ export default function IngredientTable({ ingredients }: { ingredients: Ingredie
                 >
                   Registrar salida
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => onAdjustStock(ingredient)}
+                  aria-label={`Ajustar stock de ${ingredient.name}`}
+                  className={ACTION_LINK}
+                >
+                  Ajustar stock
+                </button>
               </div>
             </li>
           );

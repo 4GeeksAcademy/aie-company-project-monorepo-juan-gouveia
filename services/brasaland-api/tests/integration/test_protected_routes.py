@@ -59,6 +59,8 @@ PUBLIC_ROUTES = {
     ("POST", "/api/v1/auth/reset-password"),
     ("POST", "/api/v1/auth/reset-password/validate"),
     ("GET", "/health"),
+    # Telemetría: el receptor provisional es público (sendBeacon no puede enviar Authorization).
+    ("POST", "/telemetry/events"),
 }
 
 

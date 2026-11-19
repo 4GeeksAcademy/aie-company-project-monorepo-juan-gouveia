@@ -41,17 +41,18 @@ INGREDIENTS_SEED = [
     {"name": "Caja para llevar (M)", "sku": "BRS-PKG-001", "unit": "unidad", "category": "packaging", "country": "CO"},
 ]
 
-# Las órdenes referencian el ingrediente por SKU; el ID lo asigna la base al insertarlo.
+# Las órdenes referencian el ingrediente por SKU; el ID lo asigna la base al insertarlo. `unit_cost` va
+# en la moneda del país del ingrediente (COP en Colombia, USD en Estados Unidos).
 ENTRIES_SEED = [
-    {"sku": "BRS-BEEF-001", "quantity": 50.0, "supplier_name": "Carnes del Valle S.A.", "location_id": CO_LOCATION_ID},
-    {"sku": "BRS-BEEF-001", "quantity": 30.0, "supplier_name": "Carnes del Valle S.A.", "location_id": CO_LOCATION_ID},
-    {"sku": "BRS-PORK-001", "quantity": 40.0, "supplier_name": "MiamiMeat Co.", "location_id": US_LOCATION_ID},
-    {"sku": "BRS-SAUCE-001", "quantity": 20.0, "supplier_name": "Salsas Artesanales Ltda.", "location_id": CO_LOCATION_ID},
+    {"sku": "BRS-BEEF-001", "quantity": 50.0, "supplier_name": "Carnes del Valle S.A.", "unit_cost": 38500.0, "location_id": CO_LOCATION_ID},
+    {"sku": "BRS-BEEF-001", "quantity": 30.0, "supplier_name": "Carnes del Valle S.A.", "unit_cost": 39000.0, "location_id": CO_LOCATION_ID},
+    {"sku": "BRS-PORK-001", "quantity": 40.0, "supplier_name": "MiamiMeat Co.", "unit_cost": 6.8, "location_id": US_LOCATION_ID},
+    {"sku": "BRS-SAUCE-001", "quantity": 20.0, "supplier_name": "Salsas Artesanales Ltda.", "unit_cost": 12000.0, "location_id": CO_LOCATION_ID},
 ]
 
 EXITS_SEED = [
     {"sku": "BRS-BEEF-001", "quantity": 25.0, "reason": "consumption", "location_id": CO_LOCATION_ID},
-    {"sku": "BRS-BEEF-001", "quantity": 3.0, "reason": "waste", "location_id": CO_LOCATION_ID},
+    {"sku": "BRS-BEEF-001", "quantity": 3.0, "reason": "waste", "waste_reason": "expired", "location_id": CO_LOCATION_ID},
     {"sku": "BRS-PORK-001", "quantity": 8.0, "reason": "consumption", "location_id": US_LOCATION_ID},
 ]
 

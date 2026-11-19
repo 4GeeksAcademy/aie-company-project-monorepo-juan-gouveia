@@ -1,0 +1,157 @@
+// Propiedades de las métricas obligatorias del inventario (lib/telemetry/inventory-events.ts):
+// vocabulario del briefing, variación de precio con el histórico y cruce del umbral mínimo.
+import {
+  PRODUCT_CATEGORY,
+  inboundOrderProperties,
+  outboundOrderEvent,
+  priceVarianceProperties,
+  productFields,
+  thresholdProperties,
+} from "@/lib/telemetry/inventory-events";
+import { apiRouteTemplate } from "@/lib/telemetry/routes";
+import type { Ingredient, IngredientEntry, IngredientExit } from "@/types/inventory";
+
+const BEEF: Ingredient = { id: 12, name: "Falda de ternera", sku: "BRS-BEEF-001", unit: "kg", category: "meat", country: "CO", current_stock: 52 };
+const PORK_US: Ingredient = { ...BEEF, id: 13, sku: "BRS-PORK-001", country: "US" };
+const USER = "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2";
+const PROJECTION = { ingredient_id: 12, ingredient_name: "Falda de ternera", ingredient_sku: "BRS-BEEF-001", ingredient_unit: "kg" as const };
+
+function entry(id: number, unitCost: number | null, createdAt = "2026-11-19T10:00:00Z", supplier = "Carnes del Valle S.A."): IngredientEntry {
+  return { id, ...PROJECTION, quantity: 20, location_id: 3, created_at: createdAt, user_uuid: USER, supplier_name: supplier, unit_cost: unitCost };
+}
+
+function exit(id: number, quantity: number, reason: "consumption" | "waste" = "consumption"): IngredientExit {
+  return {
+    id,
+    ...PROJECTION,
+    quantity,
+    location_id: 3,
+    created_at: "2026-11-19T10:00:00Z",
+    user_uuid: USER,
+    reason,
+    waste_reason: reason === "waste" ? "expired" : null,
+  };
+}
+
+describe("vocabulario del briefing", () => {
+  it("traduce las categorías del modelo a las del briefing", () => {
+    expect(PRODUCT_CATEGORY).toEqual({
+      meat: "proteína",
+      produce: "vegetal",
+      sauce: "salsa",
+      beverage: "bebida",
+      packaging: "empaque",
+      cleaning: "limpieza",
+    });
+  });
+
+  it("país y moneda salen del ingrediente", () => {
+    expect(productFields(BEEF, 3)).toEqual({ location_id: 3, country: "CO", product_id: 12, product_category: "proteína", unit: "kg", currency: "COP" });
+    expect(productFields(PORK_US, 10)).toMatchObject({ country: "US", currency: "USD" });
+  });
+});
+
+describe("inbound_order_created", () => {
+  it("lleva la orden, el producto, el proveedor y el coste unitario", () => {
+    expect(inboundOrderProperties(entry(7824, 38500), BEEF, 2)).toEqual({
+      order_id: 7824,
+      location_id: 3,
+      country: "CO",
+      product_id: 12,
+      product_category: "proteína",
+      quantity: 20,
+      unit: "kg",
+      currency: "COP",
+      supplier_id: 2,
+      unit_cost: 38500,
+    });
+  });
+});
+
+describe("ingredient_price_variance_detected", () => {
+  const history = [entry(1, 38000, "2026-10-01T10:00:00Z"), entry(2, 38200, "2026-10-20T10:00:00Z"), entry(3, 38400, "2026-11-10T10:00:00Z")];
+
+  it("se emite si el coste se desvía más del 10 % de la media de 3 o más entradas", () => {
+    const current = entry(4, 44000);
+    expect(priceVarianceProperties(current, BEEF, 2, [current, ...history])).toMatchObject({
+      order_id: 4,
+      unit_cost: 44000,
+      historical_avg_unit_cost: 38200,
+      variance_pct: 15.18,
+      threshold_pct: 10,
+      history_window_days: 90,
+      history_sample_size: 3,
+    });
+  });
+
+  it("también avisa de una bajada anómala", () => {
+    expect(priceVarianceProperties(entry(4, 30000), BEEF, 2, history)?.variance_pct).toBe(-21.47);
+  });
+
+  it("no se emite dentro del 10 %", () => {
+    expect(priceVarianceProperties(entry(4, 42000), BEEF, 2, history)).toBeNull();
+  });
+
+  it("no se emite sin al menos 3 entradas del mismo producto y proveedor en 90 días", () => {
+    const otherSupplier = entry(5, 38000, "2026-11-01T10:00:00Z", "Otro proveedor");
+    const tooOld = entry(6, 38000, "2026-07-01T10:00:00Z");
+    const withoutCost = entry(7, null, "2026-11-01T10:00:00Z");
+    expect(priceVarianceProperties(entry(4, 60000), BEEF, 2, [history[0], history[1], otherSupplier, tooOld, withoutCost])).toBeNull();
+  });
+
+  it("no cuenta entradas posteriores ni la propia", () => {
+    const later = entry(8, 38000, "2026-11-20T10:00:00Z");
+    expect(priceVarianceProperties(entry(4, 60000), BEEF, 2, [history[0], history[1], later, entry(4, 60000)])).toBeNull();
+  });
+});
+
+describe("salidas", () => {
+  it("un consumo emite outbound_order_created, sin reason", () => {
+    expect(outboundOrderEvent(exit(13318, 4.2), BEEF, 31.6)).toEqual({
+      eventType: "outbound_order_created",
+      properties: { order_id: 13318, ...productFields(BEEF, 3), quantity: 4.2, stock_after: 31.6 },
+    });
+  });
+
+  it("una merma emite stock_waste_registered con su motivo, y no outbound_order_created", () => {
+    const event = outboundOrderEvent(exit(13319, 1.2, "waste"), BEEF, 30.4);
+    expect(event.eventType).toBe("stock_waste_registered");
+    expect(event.properties).toMatchObject({ order_id: 13319, reason: "expired", stock_after: 30.4 });
+  });
+});
+
+describe("stock_threshold_triggered", () => {
+  it("se emite al cruzar el umbral de la unidad (40 kg): antes ≥ 40 y después < 40", () => {
+    expect(thresholdProperties(exit(20, 5), BEEF, 38)).toEqual({
+      ...productFields(BEEF, 3),
+      quantity: 38,
+      threshold_quantity: 40,
+      trigger_order_id: 20,
+    });
+  });
+
+  it("también si la salida empieza justo en el umbral", () => {
+    expect(thresholdProperties(exit(20, 0.3), BEEF, 39.7)).not.toBeNull();
+  });
+
+  it("no se repite si el stock ya estaba por debajo", () => {
+    expect(thresholdProperties(exit(21, 2), BEEF, 30)).toBeNull();
+  });
+
+  it("no se emite si sigue por encima", () => {
+    expect(thresholdProperties(exit(22, 2), BEEF, 45)).toBeNull();
+  });
+});
+
+describe("apiRouteTemplate", () => {
+  it.each([
+    ["/inventory/products/12", "/api/v1/inventory/products/{ingredient_id}"],
+    ["/inventory/products?country=CO", "/api/v1/inventory/products"],
+    ["/inventory/orders/outbound", "/api/v1/inventory/orders/outbound"],
+    ["/suppliers/9/rate", "/api/v1/suppliers/{supplier_id}/rate"],
+    ["/incidents/10098/status", "/api/v1/incidents/{incident_id}/status"],
+    ["/profiles/d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2", "/api/v1/profiles/{user_id}"],
+  ])("%s → %s", (path, template) => {
+    expect(apiRouteTemplate(path)).toBe(template);
+  });
+});

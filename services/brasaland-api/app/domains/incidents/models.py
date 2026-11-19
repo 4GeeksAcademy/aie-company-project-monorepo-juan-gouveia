@@ -119,10 +119,11 @@ class StatusUpdate(BaseModel):
 
 
 class IncidentListItem(BaseModel):
-    """Fila de GET /incidents: los campos que muestra el listado del gestor, sin `updated_at`.
+    """Fila de GET /incidents: los campos que usa el listado del gestor.
 
-    El esquema de detalle (`Incident`) añade `updated_at`, un timestamp de auditoría que ninguna
-    pantalla del listado lee. Ver docs/serialization-audit.md (4.5, I4).
+    La auditoría de serialización quitó `updated_at` porque ninguna pantalla lo leía (4.5, I4). La
+    captura de telemetría lo devuelve: el listado lo usa para medir cuánto tiempo pasó una incidencia
+    en su estado anterior (`incident_status_changed`). Ver docs/serialization-audit.md, sección 11.
     """
 
     id: int = Field(description="Identificador generado automáticamente")
@@ -133,6 +134,7 @@ class IncidentListItem(BaseModel):
     origin: IncidentOrigin = Field(description="Origen del reporte: customer, branch o internal")
     branch: Branch = Field(description="Sede que gestiona o reporta la incidencia; `central` si no es un local")
     created_at: datetime = Field(description="Fecha y hora de creación (UTC)")
+    updated_at: datetime = Field(description="Fecha y hora del último cambio de estado (UTC)")
 
 
 class Incident(IncidentFields):
@@ -153,6 +155,7 @@ class Incident(IncidentFields):
             origin=self.origin,
             branch=self.branch,
             created_at=self.created_at,
+            updated_at=self.updated_at,
         )
 
 

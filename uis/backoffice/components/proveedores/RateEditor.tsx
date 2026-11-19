@@ -36,7 +36,7 @@ export default function RateEditor({ supplier, onUpdated }: RateEditorProps) {
     setSaving(true);
     setApiError(null);
     try {
-      onUpdated(await updateRate(supplier.id, Number(value)));
+      onUpdated(await updateRate(supplier.id, Number(value), supplier));
       setEditing(false);
     } catch (err) {
       setApiError(toUserMessage(err, "No se pudo actualizar la tarifa. Inténtalo de nuevo."));

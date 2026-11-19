@@ -2,11 +2,13 @@
 
 import ErrorScreen from "@/components/ErrorScreen";
 import Header from "@/components/Header";
+import { useReportBoundaryError } from "@/hooks/useReportBoundaryError";
 
 // Límite de error de la aplicación: páginas públicas (login, registro, contraseña) y los layouts de
 // cada grupo, incluido el de la zona protegida. Sustituye a esos layouts, así que pone su propia cabecera.
 // No se muestra `error.message` ni `error.digest`: pueden contener detalles internos.
-export default function AppError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
+export default function AppError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  useReportBoundaryError(error);
   return (
     <>
       <Header minimal />

@@ -174,8 +174,9 @@ def test_orders_list_has_ingredient_data_and_only_schema_fields(api, headers, be
     }
     # Sin campos del modelo ORM (como la relación inversa `entries`) ni el ingrediente anidado:
     # solo la proyección plana del schema (docs/serialization-audit.md, D4).
-    assert set(entry) == common | {"supplier_name"}
-    assert set(exit_) == common | {"reason"}
+    assert set(entry) == common | {"supplier_name", "unit_cost"}
+    assert set(exit_) == common | {"reason", "waste_reason"}
+    assert (entry["unit_cost"], exit_["waste_reason"]) == (38500.0, "expired")
     assert (entry["ingredient_id"], entry["ingredient_name"], entry["ingredient_sku"], entry["ingredient_unit"]) == (
         1, "Falda de ternera", "BRS-BEEF-001", "kg",
     )
@@ -199,7 +200,69 @@ def test_order_creation_returns_the_flat_projection(api, make_user, beef):
         "ingredient_unit": "kg",
         "quantity": 2.0,
         "reason": "waste",
+        "waste_reason": "expired",
         "location_id": exit_data()["location_id"],
         "created_at": body["created_at"],
         "user_uuid": user.id,
     }
+
+
+# --- Brechas B5 y B6 del plan de telemetría: coste unitario y motivo de la merma ------------------
+
+
+def test_inbound_order_requires_a_positive_unit_cost(api, headers, beef):
+    data = entry_data()
+    del data["unit_cost"]
+    missing = api.post(f"{BASE}/orders/inbound", json=data, headers=headers)
+    zero = api.post(f"{BASE}/orders/inbound", json=entry_data(unit_cost=0), headers=headers)
+
+    assert missing.status_code == zero.status_code == 422
+    assert {detail["field"] for detail in missing.json()["error"]["details"]} == {"unit_cost"}
+    assert {detail["field"] for detail in zero.json()["error"]["details"]} == {"unit_cost"}
+
+
+def test_inbound_order_returns_its_unit_cost(api, headers, beef):
+    response = api.post(f"{BASE}/orders/inbound", json=entry_data(unit_cost=41250.5), headers=headers)
+
+    assert response.status_code == 201
+    assert response.json()["unit_cost"] == 41250.5
+
+
+@pytest.mark.parametrize("waste_reason", ["expired", "kitchen_error", "theft_suspected"])
+def test_waste_order_keeps_its_reason(api, headers, beef, waste_reason):
+    response = api.post(
+        f"{BASE}/orders/outbound", json=exit_data(reason="waste", waste_reason=waste_reason), headers=headers
+    )
+
+    assert response.status_code == 201
+    assert response.json()["waste_reason"] == waste_reason
+
+
+def test_waste_order_without_reason_is_422_and_writes_nothing(api, headers, beef):
+    data = exit_data(reason="waste")
+    del data["waste_reason"]
+
+    response = api.post(f"{BASE}/orders/outbound", json=data, headers=headers)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [{"field": "waste_reason", "message": "Indica el motivo de la merma."}]
+    assert api.get(f"{BASE}/orders", headers=headers).json()["outbound"] == []
+
+
+def test_consumption_with_waste_reason_is_422(api, headers, beef):
+    response = api.post(f"{BASE}/orders/outbound", json=exit_data(waste_reason="expired"), headers=headers)
+
+    assert response.status_code == 422
+
+
+def test_consumption_returns_null_waste_reason(api, headers, beef):
+    response = api.post(f"{BASE}/orders/outbound", json=exit_data(), headers=headers)
+
+    assert response.json()["waste_reason"] is None
+
+
+def test_invalid_waste_reason_is_422(api, headers, beef):
+    response = api.post(f"{BASE}/orders/outbound", json=exit_data(reason="waste", waste_reason="lost"), headers=headers)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "waste_reason"

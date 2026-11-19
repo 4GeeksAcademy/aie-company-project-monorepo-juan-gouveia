@@ -111,7 +111,7 @@ def test_blank_supplier_name_is_rejected():
 )
 def test_created_at_is_returned_in_utc(stored, expected):
     entry = IngredientEntryRead(
-        id=1, ingredient_id=1, quantity=50.0, supplier_name="Carnes del Valle S.A.", location_id=1,
+        id=1, ingredient_id=1, quantity=50.0, supplier_name="Carnes del Valle S.A.", unit_cost=38500.0, location_id=1,
         created_at=stored, user_uuid=USER_UUID,
         ingredient_name="Falda de ternera", ingredient_sku="BRS-BEEF-001", ingredient_unit="kg",
     )

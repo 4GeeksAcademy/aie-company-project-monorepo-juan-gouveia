@@ -428,7 +428,7 @@ Nueva suite `tests/integration/test_response_models.py`. Recorre el esquema Open
 
 | Prueba | Qué exige |
 |---|---|
-| `test_the_app_still_has_the_35_audited_operations` | Que sigan siendo 35 operaciones. Una ruta nueva obliga a auditarla y añadirla a este documento |
+| `test_the_app_still_has_the_35_audited_operations` | Que sigan siendo 35 operaciones. Una ruta nueva obliga a auditarla y añadirla a este documento. Desde la captura de telemetría se llama `test_the_app_still_has_the_audited_operations` y espera 36 (sección 11) |
 | `test_every_json_response_is_a_named_model_except_the_named_exceptions` | Que toda respuesta 2xx JSON sea un `$ref` a un modelo con nombre, o una lista de ellos. La única excepción es I2 (CSV) |
 | `test_the_csv_exception_answers_a_file_not_json` | Que la excepción siga respondiendo `text/csv` |
 | `test_no_response_exposes_passwords_hashes_or_reset_tokens` | Que ninguna respuesta, ni siquiera en un modelo anidado, tenga `password`, `hashed_password`, `password_changed_at`, `current_password`, `new_password` ni `token` |
@@ -514,3 +514,15 @@ La cuenta temporal se borró al terminar con `DELETE /api/v1/users/{id}` (200). 
 | Ninguna respuesta expone contraseñas hasheadas ni tokens internos; los flujos de auth no autenticados no reenvían el email; `/auth/me` sí puede | ✅ | Registro → `{id, message}` (U1); login y forgot/validate/reset sin email (4.1); `test_no_response_exposes_passwords_hashes_or_reset_tokens` y `test_auth_flows_do_not_echo_the_email_but_me_does` |
 | `docs/serialization-audit.md` lista todos los endpoints, su estado original y los cambios | ✅ | Tabla general con estado original y final (sección 3), fichas (4), registro de cambios por subfase (7) |
 | La aplicación sigue funcionando sin regresiones | ✅ | 926 pruebas de la API, Jest 170, `tsc`, lint y build del backoffice; OpenAPI sin cambios fuera de lo previsto; prueba manual en `/docs` (sección 8) |
+
+## 11. Rutas añadidas después de la auditoría
+
+Las rutas nuevas se auditan con los mismos criterios antes de ampliar el recuento de la guarda (`test_the_app_still_has_the_audited_operations`).
+
+| # | Operación | Para qué | Entrada | Salida | Consumidor | Estado |
+|---|---|---|---|---|---|---|
+| T1 | `POST /telemetry/events` (captura de telemetría, 2026-11-19) | Receptor provisional de los lotes de telemetría del backoffice | `TelemetryBatch` (`events`: 1–100 `TelemetryEvent`), `extra="forbid"` | `TelemetryReceipt`: `received` | `lib/telemetry/` del backoffice (`fetch` y `sendBeacon`) | ✅ |
+
+**T1.** La salida es un modelo con nombre y solo dice cuántos eventos llegaron: no devuelve los eventos ni ningún dato del usuario. La entrada es un esquema propio, distinto de la salida. La ruta es pública y está fuera de `/api/v1` (plan de telemetría, sección 13.3), así que figura entre las rutas públicas de `test_protected_routes.py`. Con ella, la aplicación tiene **36 operaciones**.
+
+**Cambio posterior en I4 (`GET /incidents`, captura de telemetría, 2026-11-19).** `IncidentListItem` vuelve a incluir `updated_at`. La auditoría lo quitó porque ninguna pantalla lo leía; ahora el gestor lo usa para calcular `minutes_in_previous_status` del evento `incident_status_changed` sin pedir el detalle de cada incidencia. El listado sigue sin anidar nada y con un modelo propio, distinto del de entrada. `test_list_rows_carry_only_the_listing_fields` compara ahora la fila con la incidencia creada completa.

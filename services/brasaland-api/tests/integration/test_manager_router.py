@@ -114,9 +114,10 @@ def test_list_filters_by_status_origin_branch_and_category(api):
 def test_list_rows_carry_only_the_listing_fields(api):
     created = create(api)
 
-    # El listado usa IncidentListItem: el detalle sin `updated_at` (docs/serialization-audit.md, I4).
+    # El listado usa IncidentListItem, con los mismos campos que el detalle: `updated_at` volvió con la
+    # captura de telemetría (docs/serialization-audit.md, sección 11).
     [row] = api.get(URL).json()
-    assert row == {key: value for key, value in created.items() if key != "updated_at"}
+    assert row == created
     assert "updated_at" in api.get(f"{URL}/1").json()  # el detalle sí lo trae
 
 

@@ -21,7 +21,7 @@ export default function StatusToggle({ supplier, onUpdated }: StatusToggleProps)
     setSaving(true);
     setError(null);
     try {
-      onUpdated(await updateStatus(supplier.id, isActive ? "suspended" : "active"));
+      onUpdated(await updateStatus(supplier.id, isActive ? "suspended" : "active", supplier));
     } catch (err) {
       setError(toUserMessage(err, "No se pudo cambiar el estado. Inténtalo de nuevo."));
     } finally {

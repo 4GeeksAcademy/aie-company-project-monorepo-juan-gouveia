@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import TelemetryRoot from "@/components/telemetry/TelemetryRoot";
 
 export const metadata: Metadata = {
   title: {
@@ -18,6 +19,8 @@ export default function RootLayout({
     <html lang="es">
       {/* La cabecera la pone el layout de cada grupo: (protegido) con navegación y (publico) sin ella. */}
       <body className="min-h-screen bg-gray-100">
+        {/* Telemetría transversal: vistas, errores de JavaScript y Web Vitals (no dibuja nada). */}
+        <TelemetryRoot />
         {children}
       </body>
     </html>

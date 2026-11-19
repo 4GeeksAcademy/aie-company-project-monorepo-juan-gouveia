@@ -10,10 +10,11 @@ import IngredientSelect from "@/components/inventario/IngredientSelect";
 import SupplierSelect from "@/components/inventario/SupplierSelect";
 import { useIngredientSuppliers } from "@/hooks/useIngredientSuppliers";
 import { useIngredients } from "@/hooks/useIngredients";
+import { useFormTelemetry } from "@/hooks/useFormTelemetry";
 import { formErrorsFromApi } from "@/lib/auth/api-errors";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createEntry } from "@/lib/inventory";
-import { FIELD_LABELS, LOCATION_OPTIONS, formatQuantity } from "@/lib/inventory-labels";
+import { COUNTRY_CURRENCY, FIELD_LABELS, LOCATION_OPTIONS, formatQuantity } from "@/lib/inventory-labels";
 import {
   EMPTY_ENTRY_FORM,
   ENTRY_FORM_FIELDS,
@@ -36,6 +37,8 @@ const UNKNOWN_INGREDIENT = "El ingrediente del enlace ya no existe. Elige otro."
 export default function EntryForm({ presetIngredientId }: { presetIngredientId: string }) {
   const initialValues: EntryFormValues = { ...EMPTY_ENTRY_FORM, ingredient_id: presetIngredientId };
   const { ingredients, fetchState, reload } = useIngredients();
+  // Telemetría: errores de validación y abandono del formulario (solo nombres de campo).
+  const formTelemetry = useFormTelemetry("inbound_order");
   const [values, setValues] = useState<EntryFormValues>(initialValues);
   // Los errores locales se muestran tras el primer intento de envío.
   const [attempted, setAttempted] = useState(false);
@@ -48,6 +51,8 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
   // Un id del enlace que no está en la lista (ingrediente borrado o enlace manipulado).
   const unknownIngredient = fetchState.status === "success" && Boolean(values.ingredient_id) && !selected;
   const { suppliers, reload: reloadSuppliers } = useIngredientSuppliers(selected);
+  // Moneda del coste unitario: la del país del ingrediente (COP en Colombia, USD en Estados Unidos).
+  const currency = selected ? COUNTRY_CURRENCY[selected.country] : null;
 
   function localErrors(): EntryFormErrors {
     const errors = validateEntryForm(values);
@@ -64,6 +69,7 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     setValues((prev) => ({ ...prev, [field]: value }));
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
     setMessage(null);
+    formTelemetry.fieldChanged(field);
   }
 
   function show(next: Message) {
@@ -76,7 +82,9 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     e.preventDefault();
     setAttempted(true);
     setMessage(null);
-    if (Object.keys(localErrors()).length > 0) {
+    const invalid = localErrors();
+    if (Object.keys(invalid).length > 0) {
+      formTelemetry.validationFailed(invalid);
       show({ tone: "error", text: "Revisa los campos marcados." });
       return;
     }
@@ -84,7 +92,10 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     setSubmitting(true);
     setApiFields({});
     try {
-      const entry = await createEntry(toEntryInput(values));
+      const supplierId = suppliers.status === "success" ? suppliers.idsByName[values.supplier_name.trim()] : undefined;
+      // `selected` existe: la validación local rechaza un ingrediente desconocido.
+      const entry = await createEntry(toEntryInput(values), selected ? { ingredient: selected, supplierId } : undefined);
+      formTelemetry.submitted();
       setValues(initialValues);
       setAttempted(false);
       show({
@@ -174,6 +185,22 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
         onChange={(value) => setField("supplier_name", value)}
         error={errors.supplier_name}
         disabled={submitting}
+      />
+
+      <FormField
+        label={selected && currency ? `${FIELD_LABELS.unit_cost} (${currency} por ${selected.unit})` : FIELD_LABELS.unit_cost}
+        value={values.unit_cost}
+        onChange={(value) => setField("unit_cost", value)}
+        required
+        size="lg"
+        error={errors.unit_cost}
+        hint={
+          selected && currency
+            ? `Precio de este proveedor por cada ${selected.unit}, en ${currency}. Admite decimales: 6.8`
+            : "Elige primero el ingrediente para ver la moneda y la unidad."
+        }
+        disabled={submitting}
+        inputProps={{ name: "unit_cost", inputMode: "decimal", autoComplete: "off" }}
       />
 
       <p className="text-xs text-gray-600">Los campos con * son obligatorios.</p>

@@ -59,6 +59,29 @@ export function clearToken(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(TOKEN_CHANGE_EVENT));
 }
 
+// Datos públicos del JWT que usa la telemetría: `sub` (UUID de la cuenta) e `iat` (emisión, en
+// segundos). Se leen SIN verificar la firma: solo sirven para medir y correlacionar, nunca para
+// decidir permisos (eso lo hace la API). Devuelve null si el token no tiene el formato esperado.
+export interface TokenClaims {
+  sub: string;
+  iat: number | null;
+}
+
+export function readTokenClaims(token: string | null): TokenClaims | null {
+  const payload = token?.split(".")[1];
+  if (!payload) return null;
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const claims: unknown = JSON.parse(atob(base64));
+    if (typeof claims !== "object" || claims === null) return null;
+    const { sub, iat } = claims as { sub?: unknown; iat?: unknown };
+    if (typeof sub !== "string" || !sub) return null;
+    return { sub, iat: typeof iat === "number" ? iat : null };
+  } catch {
+    return null;
+  }
+}
+
 // De dónde viene el cambio. Cuando el token se borra en esta pestaña, quien lo borró
 // (el cierre de sesión o el cliente común ante un 401) ya decide a dónde redirigir.
 export type TokenChangeSource = "this-tab" | "other-tab";

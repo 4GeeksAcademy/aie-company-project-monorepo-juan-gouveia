@@ -10,9 +10,18 @@ import IngredientSelect from "@/components/inventario/IngredientSelect";
 import StockPanel from "@/components/inventario/StockPanel";
 import { useIngredientStock } from "@/hooks/useIngredientStock";
 import { useIngredients } from "@/hooks/useIngredients";
+import { useFormTelemetry } from "@/hooks/useFormTelemetry";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createExit } from "@/lib/inventory";
-import { FIELD_LABELS, LOCATION_OPTIONS, REASON_DESCRIPTIONS, REASON_OPTIONS, formatQuantity } from "@/lib/inventory-labels";
+import {
+  FIELD_LABELS,
+  LOCATION_OPTIONS,
+  REASON_DESCRIPTIONS,
+  REASON_OPTIONS,
+  WASTE_REASON_DESCRIPTIONS,
+  WASTE_REASON_OPTIONS,
+  formatQuantity,
+} from "@/lib/inventory-labels";
 import {
   EMPTY_EXIT_FORM,
   exceedsStock,
@@ -35,6 +44,8 @@ const UNKNOWN_INGREDIENT = "El ingrediente del enlace ya no existe. Elige otro."
 // - tras el éxito, limpia la cantidad (conserva ingrediente, motivo y local) y refresca el stock.
 export default function ExitForm({ presetIngredientId }: { presetIngredientId: string }) {
   const { ingredients, fetchState, reload } = useIngredients();
+  // Telemetría: errores de validación y abandono del formulario (solo nombres de campo).
+  const formTelemetry = useFormTelemetry("outbound_order");
   const [values, setValues] = useState<ExitFormValues>({ ...EMPTY_EXIT_FORM, ingredient_id: presetIngredientId });
   // Los errores locales se muestran tras el primer intento de envío.
   const [attempted, setAttempted] = useState(false);
@@ -66,6 +77,7 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     setValues((prev) => ({ ...prev, [field]: value }));
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
     setMessage(null);
+    formTelemetry.fieldChanged(field);
   }
 
   function show(next: Message) {
@@ -78,7 +90,9 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     e.preventDefault();
     setAttempted(true);
     setMessage(null);
-    if (Object.keys(localErrors()).length > 0) {
+    const invalid = localErrors();
+    if (Object.keys(invalid).length > 0) {
+      formTelemetry.validationFailed(invalid);
       show({ tone: "error", text: "Revisa los campos marcados." });
       return;
     }
@@ -86,12 +100,13 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     setSubmitting(true);
     setApiFields({});
     try {
-      const exit = await createExit(toExitInput(values));
+      const exit = await createExit(toExitInput(values), selected ? { ingredient: selected } : undefined);
+      formTelemetry.submitted();
       setValues((prev) => ({ ...prev, quantity: "" }));
       setAttempted(false);
       show({
         tone: "success",
-        text: `Salida #${exit.id} registrada: ${formatQuantity(exit.quantity, exit.ingredient_unit)} de ${exit.ingredient_name} (${exit.reason}: ${REASON_DESCRIPTIONS[exit.reason]}).`,
+        text: `Salida #${exit.id} registrada: ${formatQuantity(exit.quantity, exit.ingredient_unit)} de ${exit.ingredient_name} (${exit.reason}: ${REASON_DESCRIPTIONS[exit.reason]}${exit.waste_reason ? `, ${WASTE_REASON_DESCRIPTIONS[exit.waste_reason]}` : ""}).`,
       });
       refresh();
     } catch (err) {
@@ -179,6 +194,25 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
           {errors.reason && <span className="text-xs text-red-700">{errors.reason}</span>}
         </LabeledSelect>
       </div>
+
+      {/* Motivo de la merma (brecha B6): solo en las mermas. Un consumo no lo envía. */}
+      {values.reason === "waste" && (
+        <LabeledSelect
+          label={FIELD_LABELS.waste_reason}
+          value={values.waste_reason}
+          options={WASTE_REASON_OPTIONS}
+          onChange={(value) => setField("waste_reason", value)}
+          placeholder="Elige el motivo de la merma"
+          required
+          size="lg"
+          fullWidth
+          invalid={Boolean(errors.waste_reason)}
+          disabled={submitting}
+        >
+          <span className="text-xs text-gray-600">Por qué se desecha: producto vencido, error de cocina o pérdida/robo.</span>
+          {errors.waste_reason && <span className="text-xs text-red-700">{errors.waste_reason}</span>}
+        </LabeledSelect>
+      )}
 
       <LabeledSelect
         label={FIELD_LABELS.location_id}

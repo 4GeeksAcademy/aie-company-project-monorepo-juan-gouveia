@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationInfo, field_validator
 
 from app.domains.inventory.models import NAME_MAX_LENGTH, SKU_MAX_LENGTH, SUPPLIER_NAME_MAX_LENGTH
 
@@ -47,6 +47,14 @@ class ExitReason(StrEnum):
     WASTE = "waste"
 
 
+class WasteReason(StrEnum):
+    """Motivo de una merma, con los valores del briefing de telemetría (brecha B6)."""
+
+    EXPIRED = "expired"
+    KITCHEN_ERROR = "kitchen_error"
+    THEFT_SUSPECTED = "theft_suspected"
+
+
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=NAME_MAX_LENGTH)]
 Sku = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=SKU_MAX_LENGTH)]
 SupplierName = Annotated[
@@ -54,6 +62,8 @@ SupplierName = Annotated[
 ]
 # Cantidad estricta: un número mayor que 0. Rechaza textos ("10"), booleanos, NaN e infinito.
 Quantity = Annotated[float, Field(gt=0, strict=True, allow_inf_nan=False)]
+# Coste unitario estricto, mayor que 0, en la moneda del país del ingrediente (COP o USD).
+UnitCost = Annotated[float, Field(gt=0, strict=True, allow_inf_nan=False)]
 IngredientId = Annotated[int, Field(ge=1, strict=True)]
 LocationId = Annotated[int, Field(ge=MIN_LOCATION_ID, le=MAX_LOCATION_ID, strict=True)]
 
@@ -104,6 +114,9 @@ class IngredientEntryCreate(BaseModel):
     ingredient_id: IngredientId
     quantity: Quantity = Field(description="Cantidad recibida, en la unidad del ingrediente")
     supplier_name: SupplierName = Field(description="Proveedor de esta entrega")
+    unit_cost: UnitCost = Field(
+        description="Coste por unidad del ingrediente, en la moneda de su país (COP o USD)"
+    )
     location_id: LocationId = Field(description="Local receptor (1–14)")
 
 
@@ -115,7 +128,24 @@ class IngredientExitCreate(BaseModel):
     ingredient_id: IngredientId
     quantity: Quantity = Field(description="Cantidad consumida o mermada, en la unidad del ingrediente")
     reason: ExitReason = Field(description='"consumption" (consumo) o "waste" (merma)')
+    waste_reason: WasteReason | None = Field(
+        default=None,
+        # Se valida también cuando falta, para exigirlo en las mermas.
+        validate_default=True,
+        description='Solo en las mermas, y obligatorio en ellas: "expired", "kitchen_error" o "theft_suspected"',
+    )
     location_id: LocationId = Field(description="Local donde ocurrió la salida (1–14)")
+
+    @field_validator("waste_reason")
+    @classmethod
+    def waste_reason_only_for_waste(cls, value: WasteReason | None, info: ValidationInfo) -> WasteReason | None:
+        # `reason` se valida antes (va antes en el modelo); si no es válido, ya tiene su propio error.
+        reason = info.data.get("reason")
+        if reason == ExitReason.WASTE and value is None:
+            raise ValueError("Indica el motivo de la merma.")
+        if reason == ExitReason.CONSUMPTION and value is not None:
+            raise ValueError("Un consumo no lleva motivo de merma.")
+        return value
 
 
 class OrderReadBase(BaseModel):
@@ -145,12 +175,14 @@ class IngredientEntryRead(OrderReadBase):
     """Salida de POST /inventory/orders/inbound y de cada entrada en GET /inventory/orders."""
 
     supplier_name: str = Field(description="Proveedor de la entrega")
+    unit_cost: float | None = Field(description="Coste por unidad, en la moneda del país; null en entradas anteriores")
 
 
 class IngredientExitRead(OrderReadBase):
     """Salida de POST /inventory/orders/outbound y de cada salida en GET /inventory/orders."""
 
     reason: ExitReason = Field(description='"consumption" (consumo) o "waste" (merma)')
+    waste_reason: WasteReason | None = Field(description="Motivo de la merma; null en los consumos y en mermas anteriores")
 
 
 class OrdersRead(BaseModel):

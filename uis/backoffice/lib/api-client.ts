@@ -1,5 +1,7 @@
 import { clearToken, getToken } from "@/lib/auth/token";
 import { currentPath, LOGIN_PATH, loginUrl, type LoginReason } from "@/lib/auth/navigation";
+import { reportApiCall, reportApiError } from "@/lib/telemetry/api-events";
+import { uuidV4 } from "@/lib/telemetry/ids";
 import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 
 // Cliente común para la API de Brasaland. Las rutas son las del intermediario
@@ -7,6 +9,11 @@ import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 // El tracker (lib/talento/api.ts) no usa apiFetch: llama a una API de terceros que no debe recibir el
 // token. Sí reutiliza errorFromStatus y readJson para que sus errores se muestren igual.
 const BFF_PREFIX = "/api";
+
+// Correlación (telemetría, decisión C9): cada llamada lleva un UUID propio en esta cabecera. El BFF
+// lo reenvía a la API, que lo escribe en su log y lo devuelve en la respuesta. Es el `requestId` de los
+// eventos de telemetría que nacen de esa llamada.
+export const REQUEST_ID_HEADER = "X-Request-Id";
 
 const SERVER_ERROR_MESSAGE = "El servidor tuvo un problema y no pudo completar la operación. Inténtalo de nuevo en unos minutos.";
 
@@ -19,7 +26,9 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly code: string,
-    readonly details: ApiFieldError[] = []
+    readonly details: ApiFieldError[] = [],
+    // X-Request-Id de la llamada que falló (vacío si el error no viene de apiFetch).
+    public requestId: string | null = null
   ) {
     super(message);
     this.name = "ApiError";
@@ -91,24 +100,49 @@ function endSession(reason: LoginReason) {
   window.location.replace(loginUrl(currentPath(), reason));
 }
 
+// Respuesta correcta junto con el X-Request-Id de su llamada (para la telemetría).
+export interface ApiResult<T> {
+  data: T;
+  requestId: string;
+}
+
 // Devuelve la respuesta solo si es correcta; si no, lanza un ApiError.
 export async function apiFetch(path: string, options: ApiRequestOptions): Promise<Response> {
+  return (await send(path, options)).res;
+}
+
+async function send(path: string, options: ApiRequestOptions): Promise<{ res: Response; requestId: string }> {
   const { fallback, endSessionOnAuthError = true, headers, ...init } = options;
+  const method = (init.method ?? "GET").toUpperCase();
 
   const requestHeaders = new Headers(headers);
   const token = getToken();
   if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+  const requestId = uuidV4();
+  requestHeaders.set(REQUEST_ID_HEADER, requestId);
+
+  // Telemetría: la duración de la llamada vista desde el navegador (incluye el paso por el BFF) y el
+  // cuerpo enviado, del que solo se leen identificadores (nunca se emite el cuerpo).
+  const startedAt = performance.now();
+  const call = { method, path, requestId, body: init.body };
 
   let res: Response;
   try {
     res = await fetch(`${BFF_PREFIX}${path}`, { cache: "no-store", ...init, headers: requestHeaders });
   } catch {
-    throw new ApiError("No se pudo conectar con el backoffice. Revisa tu conexión.", 0, "network_error");
+    const error = new ApiError("No se pudo conectar con el backoffice. Revisa tu conexión.", 0, "network_error", [], requestId);
+    reportApiError({ ...call, durationMs: performance.now() - startedAt }, error);
+    throw error;
   }
+  const durationMs = performance.now() - startedAt;
+  reportApiCall({ ...call, durationMs }, res.status, res.headers.get("X-Cache"));
 
-  if (res.ok) return res;
+  if (res.ok) return { res, requestId };
 
   const error = await toApiError(res, fallback);
+  error.requestId = requestId;
+  // Telemetría de los errores (rechazos de reglas, sesión, disponibilidad): nunca lanza.
+  reportApiError({ ...call, durationMs }, error);
   const reason = sessionEndReason(error);
   if (reason && endSessionOnAuthError) endSession(reason);
   throw error;
@@ -116,6 +150,13 @@ export async function apiFetch(path: string, options: ApiRequestOptions): Promis
 
 export async function apiJson<T>(path: string, options: ApiRequestOptions): Promise<T> {
   return readJson(await apiFetch(path, options));
+}
+
+// Como apiJson, pero devuelve también el X-Request-Id: la capa de datos lo usa para que los eventos
+// de telemetría que nacen de esta respuesta lleven su `requestId` (decisión C9).
+export async function apiJsonWithRequestId<T>(path: string, options: ApiRequestOptions): Promise<ApiResult<T>> {
+  const { res, requestId } = await send(path, options);
+  return { data: await readJson<T>(res), requestId };
 }
 
 // Lee el cuerpo JSON de una respuesta correcta; si no se puede, lanza un ApiError legible.
