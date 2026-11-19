@@ -10,6 +10,7 @@ import IngredientSelect from "@/components/inventario/IngredientSelect";
 import StockPanel from "@/components/inventario/StockPanel";
 import { useIngredientStock } from "@/hooks/useIngredientStock";
 import { useIngredients } from "@/hooks/useIngredients";
+import { useFormTelemetry } from "@/hooks/useFormTelemetry";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createExit } from "@/lib/inventory";
 import {
@@ -43,6 +44,8 @@ const UNKNOWN_INGREDIENT = "El ingrediente del enlace ya no existe. Elige otro."
 // - tras el éxito, limpia la cantidad (conserva ingrediente, motivo y local) y refresca el stock.
 export default function ExitForm({ presetIngredientId }: { presetIngredientId: string }) {
   const { ingredients, fetchState, reload } = useIngredients();
+  // Telemetría: errores de validación y abandono del formulario (solo nombres de campo).
+  const formTelemetry = useFormTelemetry("outbound_order");
   const [values, setValues] = useState<ExitFormValues>({ ...EMPTY_EXIT_FORM, ingredient_id: presetIngredientId });
   // Los errores locales se muestran tras el primer intento de envío.
   const [attempted, setAttempted] = useState(false);
@@ -74,6 +77,7 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     setValues((prev) => ({ ...prev, [field]: value }));
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
     setMessage(null);
+    formTelemetry.fieldChanged(field);
   }
 
   function show(next: Message) {
@@ -86,7 +90,9 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     e.preventDefault();
     setAttempted(true);
     setMessage(null);
-    if (Object.keys(localErrors()).length > 0) {
+    const invalid = localErrors();
+    if (Object.keys(invalid).length > 0) {
+      formTelemetry.validationFailed(invalid);
       show({ tone: "error", text: "Revisa los campos marcados." });
       return;
     }
@@ -95,6 +101,7 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     setApiFields({});
     try {
       const exit = await createExit(toExitInput(values), selected ? { ingredient: selected } : undefined);
+      formTelemetry.submitted();
       setValues((prev) => ({ ...prev, quantity: "" }));
       setAttempted(false);
       show({

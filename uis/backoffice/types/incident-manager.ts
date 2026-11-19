@@ -42,12 +42,13 @@ export interface IncidentListItem {
   origin: IncidentOrigin;
   branch: Branch;
   created_at: string;
+  // Último cambio de estado (UTC). El listado lo trae desde la captura de telemetría
+  // (`minutes_in_previous_status` de `incident_status_changed`).
+  updated_at: string;
 }
 
 // Incidencia completa: respuesta del alta, del detalle y del cambio de estado.
-export interface Incident extends IncidentListItem {
-  updated_at: string;
-}
+export type Incident = IncidentListItem;
 
 // Filtros del listado (GET /incidents). "" = sin filtro.
 export interface IncidentFilters {

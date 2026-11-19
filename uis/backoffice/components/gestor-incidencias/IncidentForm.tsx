@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { useFormTelemetry } from "@/hooks/useFormTelemetry";
 import Button from "@/components/Button";
 import FormField from "@/components/FormField";
 import LabeledSelect from "@/components/LabeledSelect";
@@ -39,6 +40,8 @@ type Message = { tone: "error" | "success"; text: string };
 // - Tras el éxito, el formulario se limpia y muestra una confirmación.
 export default function IncidentForm() {
   const [values, setValues] = useState<IncidentFormValues>(EMPTY_INCIDENT_FORM);
+  // Telemetría: errores de validación y abandono del formulario (solo nombres de campo).
+  const formTelemetry = useFormTelemetry("incident");
   // Los errores locales se muestran tras el primer intento de envío.
   const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +56,7 @@ export default function IncidentForm() {
     setValues((prev) => ({ ...prev, [field]: value }));
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
     setMessage(null);
+    formTelemetry.fieldChanged(field);
   }
 
   function show(next: Message) {
@@ -65,7 +69,9 @@ export default function IncidentForm() {
     e.preventDefault();
     setAttempted(true);
     setMessage(null);
-    if (Object.keys(validateIncidentForm(values)).length > 0) {
+    const invalid = validateIncidentForm(values);
+    if (Object.keys(invalid).length > 0) {
+      formTelemetry.validationFailed(invalid);
       show({ tone: "error", text: "Revisa los campos marcados." });
       return;
     }
@@ -74,6 +80,7 @@ export default function IncidentForm() {
     setApiFields({});
     try {
       const incident = await createIncident(toCreateInput(values));
+      formTelemetry.submitted();
       setValues(EMPTY_INCIDENT_FORM);
       setAttempted(false);
       show({

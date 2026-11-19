@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFormTelemetry } from "@/hooks/useFormTelemetry";
 import Button from "@/components/Button";
 import FormField from "@/components/FormField";
 import LabeledSelect from "@/components/LabeledSelect";
@@ -58,6 +59,8 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
   const [submitting, setSubmitting] = useState(false);
   const [apiFailure, setApiFailure] = useState<ApiFailure | null>(null);
 
+  // Telemetría: errores de validación y abandono del modal (solo nombres de campo).
+  const formTelemetry = useFormTelemetry("supplier", "modal_closed");
   const errors = validateSupplierForm(form);
   const shownErrors = attempted ? errors : {};
   // La moneda se deriva del país (restricción del briefing); no se elige a mano.
@@ -65,9 +68,11 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
 
   function setField<K extends keyof SupplierFormValues>(key: K, value: SupplierFormValues[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+    formTelemetry.fieldChanged(key);
   }
 
   function toggleCategory(category: Category) {
+    formTelemetry.fieldChanged("categories");
     setForm((prev) => ({
       ...prev,
       categories: prev.categories.includes(category)
@@ -79,7 +84,10 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
   async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setAttempted(true);
-    if (Object.keys(errors).length > 0 || !form.country || !currency) return;
+    if (Object.keys(errors).length > 0 || !form.country || !currency) {
+      formTelemetry.validationFailed(errors);
+      return;
+    }
 
     setSubmitting(true);
     setApiFailure(null);
@@ -95,6 +103,7 @@ export default function SupplierFormModal({ onClose, onCreated }: SupplierFormMo
         contact_email: form.contact_email.trim() || null,
         notes: form.notes.trim() || null,
       });
+      formTelemetry.submitted();
       onCreated(created);
     } catch (err) {
       setApiFailure({

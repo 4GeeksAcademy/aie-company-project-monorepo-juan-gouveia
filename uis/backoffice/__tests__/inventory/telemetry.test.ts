@@ -10,6 +10,8 @@ const tracked: Array<{ eventType: string; properties: Record<string, unknown>; r
 
 jest.mock("@/lib/telemetry", () => ({
   track: (eventType: string, properties: Record<string, unknown>) => {
+    // Los eventos de cada llamada (latencia y error genérico) tienen sus propias pruebas.
+    if (eventType === "api_latency_recorded" || eventType === "api_error_returned") return;
     // El contexto real: track() lee el requestId con el que lo envuelve la capa de datos.
     const { currentRequestId: read } = jest.requireActual("@/lib/telemetry/request-context");
     tracked.push({ eventType, properties, requestId: read() });
@@ -98,13 +100,20 @@ it("un consumo emite solo outbound_order_created; sin stock resultante, sin umbr
   expect(tracked[0].properties.stock_after).toBeUndefined();
 });
 
-it("una salida rechazada (400) no emite eventos de orden", async () => {
-  fetchMock.mockResolvedValueOnce(json({ error: { code: "insufficient_stock", message: "Stock insuficiente." } }, 400));
+it("una salida sin stock suficiente (400) emite outbound_order_rejected con el stock disponible, y no la orden", async () => {
+  fetchMock
+    .mockResolvedValueOnce(json({ error: { code: "insufficient_stock", message: "Stock insuficiente." } }, 400))
+    .mockResolvedValueOnce(json({ ...BEEF, current_stock: 52 }));
 
-  await expect(createExit({ ingredient_id: 1, quantity: 99, reason: "consumption", location_id: 3 }, { ingredient: BEEF })).rejects.toBeInstanceOf(ApiError);
+  await expect(createExit({ ingredient_id: 1, quantity: 60, reason: "waste", waste_reason: "expired", location_id: 3 }, { ingredient: BEEF })).rejects.toBeInstanceOf(ApiError);
   await settle();
 
-  expect(tracked.map((event) => event.eventType)).not.toContain("outbound_order_created");
+  expect(tracked.map((event) => event.eventType)).toEqual(["outbound_order_rejected"]);
+  expect(tracked[0]).toEqual({
+    eventType: "outbound_order_rejected",
+    properties: { location_id: 3, country: "CO", product_id: 1, product_category: "proteína", unit: "kg", currency: "COP", quantity: 60, available_quantity: 52, outbound_type: "waste" },
+    requestId: requestIdOf(0),
+  });
 });
 
 it("Ajustar stock: el 405 de la API emite direct_stock_edit_rejected", async () => {

@@ -9,7 +9,8 @@ import RetryableError from "@/components/RetryableError";
 import ShowMoreButton from "@/components/ShowMoreButton";
 import { useOrders } from "@/hooks/useOrders";
 import { useSession } from "@/hooks/useSession";
-import { useShowMore } from "@/hooks/useShowMore";
+import { useListFilterTelemetry } from "@/hooks/useListFilterTelemetry";
+import { SHOW_MORE_STEP, useShowMore } from "@/hooks/useShowMore";
 import { filterOrders, NO_ORDER_FILTERS, type OrderFilters as Filters } from "@/lib/inventory-orders";
 
 // Historial de órdenes, solo de lectura, con filtros por tipo e ingrediente.
@@ -29,10 +30,21 @@ export default function OrdersPanel() {
     [orders, filters.kind, ingredient]
   );
 
-  // Pinta 50 filas y 50 más por clic. Vuelve a 50 al cambiar los filtros, no al recargar.
-  const { visible, nextCount, showMore } = useShowMore(filtered.rows.length, `${filters.kind}|${ingredient}`);
-
   const hasFilters = Boolean(filters.kind || filters.ingredient);
+
+  // Pinta 50 filas y 50 más por clic. Vuelve a 50 al cambiar los filtros, no al recargar.
+  const { visible, nextCount, showMore } = useShowMore(filtered.rows.length, `${filters.kind}|${ingredient}`, SHOW_MORE_STEP, {
+    listId: "order_history",
+    filtersActive: hasFilters,
+  });
+
+  // Telemetría: qué filtros se usan (el del ingrediente es texto: solo su longitud).
+  useListFilterTelemetry(
+    "order_history",
+    { kind: filters.kind, ingredient },
+    fetchState.status === "success" ? filtered.rows.length : null,
+    ["ingredient"]
+  );
   function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }

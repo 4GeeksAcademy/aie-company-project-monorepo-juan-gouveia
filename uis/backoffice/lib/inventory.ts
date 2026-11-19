@@ -1,8 +1,9 @@
-import { apiJson, apiJsonWithRequestId, jsonBody } from "@/lib/api-client";
+import { ApiError, apiJson, apiJsonWithRequestId, jsonBody } from "@/lib/api-client";
 import { track } from "@/lib/telemetry";
 import {
   inboundOrderProperties,
   outboundOrderEvent,
+  outboundRejectedProperties,
   priceVarianceProperties,
   thresholdProperties,
 } from "@/lib/telemetry/inventory-events";
@@ -86,12 +87,26 @@ export async function createEntry(input: IngredientEntryInput, telemetry?: Entry
 // POST /inventory/orders/outbound: registra un consumo o una merma. 400 `insufficient_stock` si
 // dejaría el stock en negativo (la API no escribe nada).
 // Telemetría: `outbound_order_created` (consumo) o `stock_waste_registered` (merma) y, si la salida
-// hace cruzar el mínimo, `stock_threshold_triggered`. El stock resultante se pide a la API.
+// hace cruzar el mínimo, `stock_threshold_triggered`. El stock resultante se pide a la API. Si la API
+// la rechaza por falta de stock, `outbound_order_rejected` con el stock disponible en ese momento.
 export async function createExit(input: IngredientExitInput, telemetry?: ExitTelemetryContext): Promise<IngredientExit> {
-  const { data: exit, requestId } = await apiJsonWithRequestId<IngredientExit>(`${INVENTORY_PATH}/orders/outbound`, {
-    fallback: "no se pudo registrar la salida",
-    ...jsonBody("POST", input),
-  });
+  let result: { data: IngredientExit; requestId: string };
+  try {
+    result = await apiJsonWithRequestId<IngredientExit>(`${INVENTORY_PATH}/orders/outbound`, {
+      fallback: "no se pudo registrar la salida",
+      ...jsonBody("POST", input),
+    });
+  } catch (err) {
+    if (telemetry && err instanceof ApiError && err.code === "insufficient_stock") {
+      const { ingredient } = telemetry;
+      quietly(async () => {
+        const available = (await getIngredient(ingredient.id)).current_stock;
+        withRequestId(err.requestId, () => track("outbound_order_rejected", outboundRejectedProperties(input, ingredient, available)));
+      });
+    }
+    throw err;
+  }
+  const { data: exit, requestId } = result;
   if (telemetry) {
     const { ingredient } = telemetry;
     quietly(async () => {

@@ -1,6 +1,6 @@
 import { COUNTRY_CURRENCY } from "@/lib/inventory-labels";
 import { LOW_STOCK_THRESHOLDS } from "@/lib/inventory-stock-level";
-import type { Category, Ingredient, IngredientEntry, IngredientExit } from "@/types/inventory";
+import type { Category, Ingredient, IngredientEntry, IngredientExit, IngredientExitInput } from "@/types/inventory";
 
 // Propiedades de las métricas obligatorias del inventario (plan de telemetría, sección 3). Son
 // funciones puras: lib/inventory.ts las llama tras la respuesta de la API y emite con track().
@@ -119,5 +119,16 @@ export function thresholdProperties(exit: IngredientExit, ingredient: Ingredient
     quantity: stockAfter,
     threshold_quantity: threshold,
     trigger_order_id: exit.id,
+  };
+}
+
+// `outbound_order_rejected` (§5.1): la API rechazó una salida por superar el stock (400
+// `insufficient_stock`); `available_quantity` es el stock de ese momento.
+export function outboundRejectedProperties(input: IngredientExitInput, ingredient: Ingredient, available: number) {
+  return {
+    ...productFields(ingredient, input.location_id),
+    quantity: input.quantity,
+    available_quantity: available,
+    outbound_type: input.reason,
   };
 }

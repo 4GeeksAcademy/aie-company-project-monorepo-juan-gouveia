@@ -27,7 +27,7 @@ export function useIncidents() {
   async function changeStatus(incident: IncidentListItem, next: IncidentStatus): Promise<string | null> {
     replaceIncident({ ...incident, status: next });
     try {
-      replaceIncident(await updateIncidentStatus(incident.id, next));
+      replaceIncident(await updateIncidentStatus(incident.id, next, incident));
       return null;
     } catch (err) {
       replaceIncident(incident);

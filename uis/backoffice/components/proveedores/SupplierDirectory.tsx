@@ -8,6 +8,7 @@ import LoadingMessage from "@/components/LoadingMessage";
 import SupplierFilters from "@/components/proveedores/SupplierFilters";
 import SupplierList from "@/components/proveedores/SupplierList";
 import RetryableError from "@/components/RetryableError";
+import { useListFilterTelemetry } from "@/hooks/useListFilterTelemetry";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import type { Supplier } from "@/types/supplier";
 
@@ -19,6 +20,12 @@ const SupplierFormModal = dynamic(() => import("@/components/proveedores/Supplie
 export default function SupplierDirectory() {
   const { filters, updateFilter, clearFilters, hasFilters, suppliers, fetchState, replaceSupplier, reload } =
     useSuppliers();
+  // Telemetría: qué filtros se usan, con los proveedores que devuelve la API para ellos.
+  useListFilterTelemetry(
+    "supplier_directory",
+    { country: filters.country, category: filters.category },
+    fetchState.status === "success" ? suppliers.length : null
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 

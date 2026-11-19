@@ -10,7 +10,8 @@ import RetryableError from "@/components/RetryableError";
 import ShowMoreButton from "@/components/ShowMoreButton";
 import { useIncidentSummary } from "@/hooks/useIncidentSummary";
 import { useIncidents } from "@/hooks/useIncidents";
-import { useShowMore } from "@/hooks/useShowMore";
+import { useListFilterTelemetry } from "@/hooks/useListFilterTelemetry";
+import { SHOW_MORE_STEP, useShowMore } from "@/hooks/useShowMore";
 import type { IncidentListItem, IncidentStatus } from "@/types/incident-manager";
 
 // Panel del gestor de incidencias: el resumen arriba y el listado con filtros debajo.
@@ -23,7 +24,15 @@ export default function IncidentPanel() {
   // cambio de estado sustituye la lista entera y no debe plegarla ni hacer perder la posición.
   const { visible, nextCount, showMore } = useShowMore(
     incidents.length,
-    `${filters.status}|${filters.origin}|${filters.branch}`
+    `${filters.status}|${filters.origin}|${filters.branch}`,
+    SHOW_MORE_STEP,
+    { listId: "incident_manager", filtersActive: hasFilters }
+  );
+  // Telemetría: qué filtros se usan, con las incidencias que devuelve la API para ellos.
+  useListFilterTelemetry(
+    "incident_manager",
+    { status: filters.status, origin: filters.origin, branch: filters.branch },
+    fetchState.status === "success" ? incidents.length : null
   );
 
   async function handleStatusChange(incident: IncidentListItem, next: IncidentStatus): Promise<string | null> {

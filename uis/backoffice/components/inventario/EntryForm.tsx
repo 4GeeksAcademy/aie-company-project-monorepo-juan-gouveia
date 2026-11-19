@@ -10,6 +10,7 @@ import IngredientSelect from "@/components/inventario/IngredientSelect";
 import SupplierSelect from "@/components/inventario/SupplierSelect";
 import { useIngredientSuppliers } from "@/hooks/useIngredientSuppliers";
 import { useIngredients } from "@/hooks/useIngredients";
+import { useFormTelemetry } from "@/hooks/useFormTelemetry";
 import { formErrorsFromApi } from "@/lib/auth/api-errors";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createEntry } from "@/lib/inventory";
@@ -36,6 +37,8 @@ const UNKNOWN_INGREDIENT = "El ingrediente del enlace ya no existe. Elige otro."
 export default function EntryForm({ presetIngredientId }: { presetIngredientId: string }) {
   const initialValues: EntryFormValues = { ...EMPTY_ENTRY_FORM, ingredient_id: presetIngredientId };
   const { ingredients, fetchState, reload } = useIngredients();
+  // Telemetría: errores de validación y abandono del formulario (solo nombres de campo).
+  const formTelemetry = useFormTelemetry("inbound_order");
   const [values, setValues] = useState<EntryFormValues>(initialValues);
   // Los errores locales se muestran tras el primer intento de envío.
   const [attempted, setAttempted] = useState(false);
@@ -66,6 +69,7 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     setValues((prev) => ({ ...prev, [field]: value }));
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
     setMessage(null);
+    formTelemetry.fieldChanged(field);
   }
 
   function show(next: Message) {
@@ -78,7 +82,9 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     e.preventDefault();
     setAttempted(true);
     setMessage(null);
-    if (Object.keys(localErrors()).length > 0) {
+    const invalid = localErrors();
+    if (Object.keys(invalid).length > 0) {
+      formTelemetry.validationFailed(invalid);
       show({ tone: "error", text: "Revisa los campos marcados." });
       return;
     }
@@ -89,6 +95,7 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
       const supplierId = suppliers.status === "success" ? suppliers.idsByName[values.supplier_name.trim()] : undefined;
       // `selected` existe: la validación local rechaza un ingrediente desconocido.
       const entry = await createEntry(toEntryInput(values), selected ? { ingredient: selected, supplierId } : undefined);
+      formTelemetry.submitted();
       setValues(initialValues);
       setAttempted(false);
       show({

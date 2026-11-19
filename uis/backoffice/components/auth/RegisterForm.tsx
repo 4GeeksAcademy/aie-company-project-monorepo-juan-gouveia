@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { useFormTelemetry } from "@/hooks/useFormTelemetry";
 import Button from "@/components/Button";
 import FormField from "@/components/FormField";
 import PasswordField from "@/components/PasswordField";
@@ -33,6 +34,8 @@ export default function RegisterForm() {
   const next = searchParams.get("next");
   const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
 
+  // Telemetría: errores de validación y abandono (solo nombres de campo, nunca lo escrito).
+  const formTelemetry = useFormTelemetry("register");
   const [values, setValues] = useState<RegisterValues>(EMPTY);
   const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -47,12 +50,17 @@ export default function RegisterForm() {
   function setField(field: keyof RegisterValues, value: string) {
     setValues((prev) => ({ ...prev, [field]: value }));
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
+    formTelemetry.fieldChanged(field);
   }
 
   async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setAttempted(true);
-    if (Object.keys(validateRegister(values)).length > 0) return;
+    const invalid = validateRegister(values);
+    if (Object.keys(invalid).length > 0) {
+      formTelemetry.validationFailed(invalid);
+      return;
+    }
 
     setSubmitting(true);
     setApiMessage(null);
@@ -84,6 +92,7 @@ export default function RegisterForm() {
         const { access_token } = await login(email, values.password);
         setToken(access_token);
         navigating = true;
+      formTelemetry.submitted();
         router.replace(safeNext(next));
       } catch {
         setCreatedWithoutSession(true);

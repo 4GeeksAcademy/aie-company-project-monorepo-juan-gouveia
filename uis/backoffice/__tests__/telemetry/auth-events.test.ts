@@ -13,6 +13,8 @@ import { ApiError } from "@/lib/api-client";
 const tracked: Array<{ eventType: string; properties: Record<string, unknown>; requestId: string | null }> = [];
 jest.mock("@/lib/telemetry", () => ({
   track: (eventType: string, properties: Record<string, unknown>) => {
+    // Los eventos de cada llamada (latencia y error genérico) tienen sus propias pruebas.
+    if (eventType === "api_latency_recorded" || eventType === "api_error_returned") return;
     const { currentRequestId } = jest.requireActual("@/lib/telemetry/request-context");
     tracked.push({ eventType, properties, requestId: currentRequestId() });
   },
@@ -27,7 +29,7 @@ function jwt(claims: object): string {
 }
 
 function json(body: unknown, status = 200): Response {
-  return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
+  return { ok: status >= 200 && status < 300, status, headers: new Headers(), json: async () => body } as Response;
 }
 
 function requestIdOf(call: number): string {

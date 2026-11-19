@@ -1,6 +1,6 @@
 import { clearToken, getToken } from "@/lib/auth/token";
 import { currentPath, LOGIN_PATH, loginUrl, type LoginReason } from "@/lib/auth/navigation";
-import { reportApiError } from "@/lib/telemetry/api-events";
+import { reportApiCall, reportApiError } from "@/lib/telemetry/api-events";
 import { uuidV4 } from "@/lib/telemetry/ids";
 import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 
@@ -121,21 +121,28 @@ async function send(path: string, options: ApiRequestOptions): Promise<{ res: Re
   const requestId = uuidV4();
   requestHeaders.set(REQUEST_ID_HEADER, requestId);
 
+  // Telemetría: la duración de la llamada vista desde el navegador (incluye el paso por el BFF) y el
+  // cuerpo enviado, del que solo se leen identificadores (nunca se emite el cuerpo).
+  const startedAt = performance.now();
+  const call = { method, path, requestId, body: init.body };
+
   let res: Response;
   try {
     res = await fetch(`${BFF_PREFIX}${path}`, { cache: "no-store", ...init, headers: requestHeaders });
   } catch {
     const error = new ApiError("No se pudo conectar con el backoffice. Revisa tu conexión.", 0, "network_error", [], requestId);
-    reportApiError(method, path, error);
+    reportApiError({ ...call, durationMs: performance.now() - startedAt }, error);
     throw error;
   }
+  const durationMs = performance.now() - startedAt;
+  reportApiCall({ ...call, durationMs }, res.status, res.headers.get("X-Cache"));
 
   if (res.ok) return { res, requestId };
 
   const error = await toApiError(res, fallback);
   error.requestId = requestId;
   // Telemetría de los errores (rechazos de reglas, sesión, disponibilidad): nunca lanza.
-  reportApiError(method, path, error);
+  reportApiError({ ...call, durationMs }, error);
   const reason = sessionEndReason(error);
   if (reason && endSessionOnAuthError) endSession(reason);
   throw error;
