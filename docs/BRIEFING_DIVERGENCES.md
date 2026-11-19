@@ -1422,6 +1422,7 @@ Las decisiones (S1 a S11) se tomaron con el desarrollador el 19 de noviembre de 
 | SQLAlchemy en ejecución | Regla del Hito 5: solo `sqlmodel` | El dominio `telemetry` importa SQLAlchemy (`insert` de cada dialecto, `JSONB`, registro propio) | `sqlmodel` no expone `ON CONFLICT` ni `JSONB` |
 | Riesgos R2 y R4 del plan | Plan: anonimizar eventos al borrar una cuenta; guardar la hora de recepción | Sin reescrituras; sin columna de recepción | La tabla es inmutable y tiene ocho columnas |
 | Destino del PR | La rama principal (`main`) | `feature/telemetry-capture` | Los PR #17 a #22 siguen abiertos; decisión del desarrollador |
+| Tablas del inventario en Supabase | Fuera del enunciado | Migración 003: RLS sin políticas y sin permisos para `anon` ni `authenticated` | Supabase las marcaba como *unrestricted*; decisión del desarrollador hacerlo en esta rama |
 
 ### 1. La estructura de la tabla viene de otro documento de la academia
 
@@ -1491,6 +1492,12 @@ El plan prometía poner `userId` a `null` en los eventos de una cuenta borrada (
 ### 12. Pull Request contra la rama anterior
 
 El enunciado pide el PR contra la rama principal. La rama sale de `feature/telemetry-capture` y el PR apunta a ella, porque los PR #17 a #22 siguen abiertos; lo decidió el desarrollador. El título es `feat: telemetry event storage`.
+
+### 13. RLS en las tablas del inventario (migración 003)
+
+Al crear `telemetry_events`, el Table Editor de Supabase mostró las tres tablas del inventario (Hito 5) como *unrestricted*: sin RLS, cualquiera con la URL del proyecto y la clave `anon` podía leerlas y modificarlas por la API REST de Supabase, saltándose la autenticación de la API de Brasaland y la regla de que el stock solo cambia con órdenes. No lo pide el enunciado, pero el desarrollador decidió corregirlo al final de esta rama. `migrations/003_inventory_rls.sql` hace con ellas lo mismo que la 002 con `telemetry_events` (RLS sin políticas y sin permisos para `anon` ni `authenticated`, también en sus secuencias). Ningún componente del proyecto usa esa API REST, y la API de Brasaland se conecta como `postgres`, que no está sujeto a RLS. `tests/core/test_migrations.py` falla si una tabla de la API queda sin RLS.
+
+**Coste:** volver a ejecutar la 003 si las tablas se recrean en una base nueva, porque la API las crea al arrancar con `create_all`.
 
 ### Verificación de los criterios
 

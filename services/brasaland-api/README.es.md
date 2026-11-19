@@ -292,6 +292,7 @@ Los nombres de entidades y campos son exactamente los del briefing. Los modelos 
 - **`user_uuid`** es el `id` de TinyDB del usuario autenticado; lo pone la API a partir del token. Enviarlo en el cuerpo da 422. No es FK: los usuarios no se replican en Supabase.
 - **`created_at`** lo pone la API, en UTC.
 - **`unit_cost` y `waste_reason`** (captura de telemetría, brechas B5 y B6 del [plan](../../docs/telemetry/telemetry-plan.md)): las respuestas los devuelven como `null` en las órdenes anteriores. En una base que ya existía, `create_all` no añade estas columnas: hay que ejecutar una vez [`migrations/001_inventory_unit_cost_waste_reason.sql`](./migrations/001_inventory_unit_cost_waste_reason.sql) en el SQL Editor de Supabase **antes** de arrancar la API con este código.
+- **RLS en Supabase** (almacenamiento de telemetría, Fase 4): Supabase publica las tablas de `public` en su API REST para los roles `anon` y `authenticated`, y las del inventario se crearon sin RLS. [`migrations/003_inventory_rls.sql`](./migrations/003_inventory_rls.sql) activa RLS sin políticas y retira los permisos de esos roles (también en las secuencias de los `id`), como hace la 002 con `telemetry_events`. La API se conecta como `postgres`, que no está sujeto a RLS, así que no cambia nada para ella. Hay que ejecutarla una vez en el SQL Editor, y de nuevo si las tablas se recrean en una base nueva. `tests/core/test_migrations.py` falla si una tabla de la API queda sin RLS en alguna migración.
 
 ### Endpoints
 
