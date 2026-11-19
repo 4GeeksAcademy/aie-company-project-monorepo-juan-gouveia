@@ -5,6 +5,7 @@ import { createContext, useCallback, useEffect, useMemo, useRef, useState } from
 import { getCurrentUser } from "@/lib/auth/api";
 import { currentPath, LOGIN_PATH, loginUrl } from "@/lib/auth/navigation";
 import { clearToken, getToken, subscribeToToken } from "@/lib/auth/token";
+import { rememberUserRole } from "@/lib/telemetry/session";
 import type { CurrentUser } from "@/types/auth";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -48,6 +49,8 @@ export default function SessionProvider({ children }: { children: React.ReactNod
     getCurrentUser()
       .then((current) => {
         if (id !== requestId.current) return;
+        // Telemetría: el rol no está en el token; los eventos que lo llevan lo toman de aquí.
+        rememberUserRole(current.role);
         setUserState(current);
         setStatus("authenticated");
       })

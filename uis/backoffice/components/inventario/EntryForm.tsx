@@ -86,7 +86,9 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     setSubmitting(true);
     setApiFields({});
     try {
-      const entry = await createEntry(toEntryInput(values));
+      const supplierId = suppliers.status === "success" ? suppliers.idsByName[values.supplier_name.trim()] : undefined;
+      // `selected` existe: la validación local rechaza un ingrediente desconocido.
+      const entry = await createEntry(toEntryInput(values), selected ? { ingredient: selected, supplierId } : undefined);
       setValues(initialValues);
       setAttempted(false);
       show({

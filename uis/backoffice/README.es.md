@@ -104,6 +104,9 @@ track("page_viewed", { route: "/inventario/ordenes", navigation_type: "client" }
 - **Envío por lotes.** Los eventos se acumulan en memoria y salen a `NEXT_PUBLIC_TELEMETRY_ENDPOINT` cada 10 segundos o al llegar a 20, lo que ocurra primero. Si el envío falla, se reintenta 3 veces (esperas de 1, 2 y 4 s) y después el lote se descarta. Al ocultar o cerrar la pestaña, lo pendiente sale con `navigator.sendBeacon`. Sin la variable, la telemetría está desactivada.
 - **Sesión.** `sessionId` se crea al iniciar sesión y se guarda en `sessionStorage` (uno por pestaña). `userId` es el `sub` del token (el UUID de la cuenta, nunca el email). Sin sesión, los dos son `null`.
 - **Correlación.** `apiFetch` envía un UUID nuevo en `X-Request-Id` en cada llamada; el intermediario lo reenvía y la API lo escribe en su log. Los eventos que nacen de una respuesta de la API llevan ese `requestId`, que la capa de datos fija con `withRequestId()` (`lib/telemetry/request-context.ts`).
+- **Dónde se instrumenta.** Nunca en los componentes, sino en la capa de datos:
+  - `lib/inventory.ts` emite las métricas obligatorias de las órdenes al recibir el 201: `inbound_order_created`, `ingredient_price_variance_detected` (con el historial de `GET /inventory/orders`), `outbound_order_created` o `stock_waste_registered` según el motivo, y `stock_threshold_triggered` al cruzar el umbral de stock bajo. Los cálculos están en `lib/telemetry/inventory-events.ts`;
+  - `lib/api-client.ts` pasa cada error a `lib/telemetry/api-events.ts`, que emite `direct_stock_edit_rejected` cuando la API rechaza un cambio directo del stock (el 405 de "Ajustar stock" o un 422 por `current_stock`).
 - **Receptor.** La URL apunta directamente a la API (`http://localhost:8000/telemetry/events`), sin pasar por el intermediario: es la única llamada del navegador a otro origen, y la API admite CORS solo para ella.
 
 ## Estructura

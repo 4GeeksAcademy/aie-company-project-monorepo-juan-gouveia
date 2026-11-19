@@ -1,4 +1,5 @@
 import { getToken, readTokenClaims } from "@/lib/auth/token";
+import type { Role } from "@/types/auth";
 import { uuidV4 } from "@/lib/telemetry/ids";
 
 // Sesión de telemetría (`sessionId` y `userId` del envelope; decisión C6).
@@ -11,6 +12,9 @@ import { uuidV4 } from "@/lib/telemetry/ids";
 // - `userId` es el `sub` del token: el UUID de la cuenta, nunca el email ni el nombre.
 //
 // No hace falta llamar a nada al iniciar o cerrar sesión: se deduce del token en cada evento.
+//
+// El rol (`user_role` de varios eventos) no está en el token: SessionProvider lo guarda con
+// rememberUserRole() cuando valida la sesión con /auth/me, y se olvida con la sesión.
 
 const SESSION_KEY = "brasaland.telemetry_session";
 
@@ -18,6 +22,7 @@ interface StoredSession {
   id: string;
   sub: string;
   startedAt: number;
+  role?: Role;
 }
 
 export interface TelemetrySession {
@@ -58,19 +63,36 @@ function write(store: Storage | null, session: StoredSession | null): void {
   }
 }
 
-// Sesión del momento, creada o descartada según el token.
-export function currentSession(now: number = Date.now()): TelemetrySession {
+// Sesión guardada de la cuenta del token, creándola si hace falta; null si no hay token.
+function activeSession(now: number): StoredSession | null {
   const claims = readTokenClaims(getToken());
   const store = storage();
   if (!claims) {
     write(store, null);
-    return NO_SESSION;
+    return null;
   }
-
   let stored = readStored(store);
   if (!stored || stored.sub !== claims.sub) {
     stored = { id: uuidV4(), sub: claims.sub, startedAt: now };
     write(store, stored);
   }
-  return { sessionId: stored.id, userId: claims.sub, startedAt: stored.startedAt };
+  return stored;
+}
+
+// Sesión del momento, creada o descartada según el token.
+export function currentSession(now: number = Date.now()): TelemetrySession {
+  const stored = activeSession(now);
+  if (!stored) return NO_SESSION;
+  return { sessionId: stored.id, userId: stored.sub, startedAt: stored.startedAt };
+}
+
+// Rol del usuario de la sesión, o null si aún no se validó (o no hay sesión).
+export function currentUserRole(): Role | null {
+  return activeSession(Date.now())?.role ?? null;
+}
+
+// Lo llama SessionProvider al validar la sesión con /auth/me.
+export function rememberUserRole(role: Role, now: number = Date.now()): void {
+  const stored = activeSession(now);
+  if (stored && stored.role !== role) write(storage(), { ...stored, role });
 }

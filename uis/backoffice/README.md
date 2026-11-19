@@ -104,6 +104,9 @@ track("page_viewed", { route: "/inventario/ordenes", navigation_type: "client" }
 - **Batched sending.** Events pile up in memory and go to `NEXT_PUBLIC_TELEMETRY_ENDPOINT` every 10 seconds or when 20 accumulate, whichever comes first. If sending fails, it retries 3 times (1, 2 and 4 s waits) and then drops the batch. When the tab is hidden or closed, whatever is pending goes out with `navigator.sendBeacon`. Without the variable, telemetry is disabled.
 - **Session.** `sessionId` is created at login and kept in `sessionStorage` (one per tab). `userId` is the token's `sub` (the account UUID, never the email). Without a session, both are `null`.
 - **Correlation.** `apiFetch` sends a new UUID in `X-Request-Id` with every call; the intermediary forwards it and the API writes it to its log. Events born from an API response carry that `requestId`, which the data layer sets with `withRequestId()` (`lib/telemetry/request-context.ts`).
+- **Where it is instrumented.** Never in components, always in the data layer:
+  - `lib/inventory.ts` emits the mandatory order metrics on the API's 201: `inbound_order_created`, `ingredient_price_variance_detected` (with the `GET /inventory/orders` history), `outbound_order_created` or `stock_waste_registered` depending on the reason, and `stock_threshold_triggered` when the low-stock threshold is crossed. The calculations live in `lib/telemetry/inventory-events.ts`;
+  - `lib/api-client.ts` passes every error to `lib/telemetry/api-events.ts`, which emits `direct_stock_edit_rejected` when the API rejects a direct stock change (the 405 from "Ajustar stock" or a 422 for `current_stock`).
 - **Receiver.** The URL points straight at the API (`http://localhost:8000/telemetry/events`), not through the intermediary: it is the browser's only call to another origin, and the API allows CORS just for it.
 
 ## Structure

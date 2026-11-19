@@ -1,5 +1,6 @@
 import { clearToken, getToken } from "@/lib/auth/token";
 import { currentPath, LOGIN_PATH, loginUrl, type LoginReason } from "@/lib/auth/navigation";
+import { reportApiError } from "@/lib/telemetry/api-events";
 import { uuidV4 } from "@/lib/telemetry/ids";
 import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 
@@ -99,9 +100,20 @@ function endSession(reason: LoginReason) {
   window.location.replace(loginUrl(currentPath(), reason));
 }
 
+// Respuesta correcta junto con el X-Request-Id de su llamada (para la telemetría).
+export interface ApiResult<T> {
+  data: T;
+  requestId: string;
+}
+
 // Devuelve la respuesta solo si es correcta; si no, lanza un ApiError.
 export async function apiFetch(path: string, options: ApiRequestOptions): Promise<Response> {
+  return (await send(path, options)).res;
+}
+
+async function send(path: string, options: ApiRequestOptions): Promise<{ res: Response; requestId: string }> {
   const { fallback, endSessionOnAuthError = true, headers, ...init } = options;
+  const method = (init.method ?? "GET").toUpperCase();
 
   const requestHeaders = new Headers(headers);
   const token = getToken();
@@ -113,13 +125,17 @@ export async function apiFetch(path: string, options: ApiRequestOptions): Promis
   try {
     res = await fetch(`${BFF_PREFIX}${path}`, { cache: "no-store", ...init, headers: requestHeaders });
   } catch {
-    throw new ApiError("No se pudo conectar con el backoffice. Revisa tu conexión.", 0, "network_error", [], requestId);
+    const error = new ApiError("No se pudo conectar con el backoffice. Revisa tu conexión.", 0, "network_error", [], requestId);
+    reportApiError(method, path, error);
+    throw error;
   }
 
-  if (res.ok) return res;
+  if (res.ok) return { res, requestId };
 
   const error = await toApiError(res, fallback);
   error.requestId = requestId;
+  // Telemetría de los errores (rechazos de reglas, sesión, disponibilidad): nunca lanza.
+  reportApiError(method, path, error);
   const reason = sessionEndReason(error);
   if (reason && endSessionOnAuthError) endSession(reason);
   throw error;
@@ -127,6 +143,13 @@ export async function apiFetch(path: string, options: ApiRequestOptions): Promis
 
 export async function apiJson<T>(path: string, options: ApiRequestOptions): Promise<T> {
   return readJson(await apiFetch(path, options));
+}
+
+// Como apiJson, pero devuelve también el X-Request-Id: la capa de datos lo usa para que los eventos
+// de telemetría que nacen de esta respuesta lleven su `requestId` (decisión C9).
+export async function apiJsonWithRequestId<T>(path: string, options: ApiRequestOptions): Promise<ApiResult<T>> {
+  const { res, requestId } = await send(path, options);
+  return { data: await readJson<T>(res), requestId };
 }
 
 // Lee el cuerpo JSON de una respuesta correcta; si no se puede, lanza un ApiError legible.

@@ -94,7 +94,7 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     setSubmitting(true);
     setApiFields({});
     try {
-      const exit = await createExit(toExitInput(values));
+      const exit = await createExit(toExitInput(values), selected ? { ingredient: selected } : undefined);
       setValues((prev) => ({ ...prev, quantity: "" }));
       setAttempted(false);
       show({

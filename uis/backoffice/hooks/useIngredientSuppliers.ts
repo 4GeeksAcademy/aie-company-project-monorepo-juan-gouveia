@@ -8,7 +8,9 @@ import type { Ingredient } from "@/types/inventory";
 type SuppliersState =
   | { id: number; status: "loading" }
   | { id: number; status: "error"; message: string }
-  | { id: number; status: "success"; names: string[] };
+  // idsByName: id de cada proveedor en el directorio, para la telemetría (`supplier_id`; la entrada
+  // solo guarda el nombre, que es único en el directorio).
+  | { id: number; status: "success"; names: string[]; idsByName: Record<string, number> };
 
 export type IngredientSuppliers = { status: "idle" } | SuppliersState;
 
@@ -32,7 +34,9 @@ export function useIngredientSuppliers(ingredient: Ingredient | undefined) {
       try {
         const suppliers = await listSuppliers(filters);
         if (cancelled) return;
-        setState({ id: ingredientId, status: "success", names: activeSupplierNames(suppliers) });
+        const names = activeSupplierNames(suppliers);
+        const idsByName = Object.fromEntries(suppliers.filter((s) => names.includes(s.name)).map((s) => [s.name, s.id]));
+        setState({ id: ingredientId, status: "success", names, idsByName });
       } catch (err) {
         if (cancelled) return;
         setState({
