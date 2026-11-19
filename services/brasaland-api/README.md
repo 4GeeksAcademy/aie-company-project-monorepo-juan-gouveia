@@ -153,6 +153,7 @@ app/
     │   ├── cache.py        # Cache for GET /products (60 s) and GET /orders (5 min); writes clear it
     │   └── seed.py         # Briefing seed data (`uv run seed-inventory`)
     ├── telemetry/
+    │   ├── models.py       # telemetry_events table (SQLModel with its own registry, outside init_db)
     │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch and TelemetryReceipt
     │   └── router.py       # POST /telemetry/events: validates, logs and answers; stores nothing
     └── suppliers/
@@ -425,6 +426,14 @@ Returns `{"status": "ok"}` (`HealthResponse`). It is outside `/api/v1` and has n
   ```
 
 - **CORS:** the browser calls this endpoint directly, not through the BFF. That is why it is the only route with CORS (`app/core/cors.py`): it only allows `POST` from the `FRONTEND_URL` origin.
+
+### `telemetry_events` table (storage phase)
+
+Events are stored in the Supabase `telemetry_events` table ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 14): eight columns (`id`, `timestamp`, `service`, `event_type`, `level`, `value`, `message` and `tags` as JSONB), indexes on `timestamp` and `event_type` and a GIN index on `tags`.
+
+- **Only the migration creates it.** Run [`migrations/002_telemetry_events.sql`](./migrations/002_telemetry_events.sql) once in the Supabase SQL Editor. It is idempotent. The API does not create this table at startup: its model (`app/domains/telemetry/models.py`) has its own registry, outside the `init_db` `create_all`, so the table can never exist without the GIN index, the trigger or RLS.
+- **Insert only.** The API never updates or deletes events, and in the database a trigger rejects any `UPDATE`, `DELETE` or `TRUNCATE`. Exceptional purges (retention, right to erasure) are done by hand, as the migration itself explains.
+- **No access from the Supabase REST API.** RLS is enabled with no policies, and the `anon` and `authenticated` roles have no privileges. The API connects as `postgres`, which is not subject to RLS.
 
 ## Timing log
 

@@ -153,6 +153,7 @@ app/
     │   ├── cache.py        # Caché de GET /products (60 s) y GET /orders (5 min); las escrituras la limpian
     │   └── seed.py         # Datos semilla del briefing (`uv run seed-inventory`)
     ├── telemetry/
+    │   ├── models.py       # Tabla telemetry_events (SQLModel con registro propio, fuera de init_db)
     │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch y TelemetryReceipt
     │   └── router.py       # POST /telemetry/events: valida, registra en el log y responde; no guarda nada
     └── suppliers/
@@ -425,6 +426,14 @@ Receptor **provisional** de la fase de captura ([plan de telemetría](../../docs
   ```
 
 - **CORS:** el navegador llama a este endpoint directamente, sin pasar por el BFF. Por eso es la única ruta con CORS (`app/core/cors.py`): solo admite `POST` desde el origen de `FRONTEND_URL`.
+
+### Tabla `telemetry_events` (fase de almacenamiento)
+
+Los eventos se guardan en la tabla `telemetry_events` de Supabase ([plan de telemetría](../../docs/telemetry/telemetry-plan.md), sección 14): ocho columnas (`id`, `timestamp`, `service`, `event_type`, `level`, `value`, `message` y `tags` en JSONB), índices en `timestamp` y `event_type` y un índice GIN en `tags`.
+
+- **La crea solo la migración.** Hay que ejecutar una vez [`migrations/002_telemetry_events.sql`](./migrations/002_telemetry_events.sql) en el SQL Editor de Supabase. Es idempotente. La API no crea esta tabla al arrancar: su modelo (`app/domains/telemetry/models.py`) tiene un registro propio, fuera del `create_all` de `init_db`, para que no pueda quedar una tabla sin el índice GIN, el trigger ni RLS.
+- **Solo inserciones.** La API nunca actualiza ni borra eventos, y en la base un trigger rechaza cualquier `UPDATE`, `DELETE` o `TRUNCATE`. Las purgas excepcionales (retención, derecho de supresión) se hacen a mano, como explica la propia migración.
+- **Sin acceso desde la API REST de Supabase.** RLS está activado y sin políticas, y los roles `anon` y `authenticated` no tienen permisos. La API se conecta como `postgres`, que no está sujeto a RLS.
 
 ## Log de timing
 

@@ -189,6 +189,7 @@ El procesador de reportes de incidentes (`scripts/incident-report/`) está compl
 **Almacenamiento de eventos de telemetría en curso en la rama `feature/telemetry-storage`**, creada desde `feature/telemetry-capture` (`84772fe`) el 2026-11-19 porque los PR #17 a #22 siguen abiertos. El receptor `POST /telemetry/events` deja de ser provisional: valida cada evento por separado y guarda los válidos en la tabla `telemetry_events` de Supabase con una sola sentencia por lote; el backoffice no cambia. Decisiones S1 a S11 aprobadas (en `docs/_private/plan-almacenamiento-telemetria.md`); un commit por fase.
 
 - **Fase 0 (plan y esquemas):** sección 14 nueva del plan ("Fase de almacenamiento": la tabla de ocho columnas con sus tres índices, la inmutabilidad con trigger y RLS, el mapeo de evento a fila y el receptor con validación por evento) y fichas en la 15, con el `level`, el `value` y la plantilla del `message` de cada evento. R2 y R4 ajustados a la tabla inmutable. `event-schemas.json` (catálogo 1.2.0) añade `x-level`, `x-value` y `x-message` a los 44 eventos, validado sin fallos; el catálogo del backoffice se regenera idéntico.
+- **Fase 1 (tabla):** `services/brasaland-api/migrations/002_telemetry_events.sql` crea `telemetry_events` (ocho columnas, `level` limitado a `info`/`warn`/`error`, `tags` JSONB), sus tres índices (`timestamp`, `event_type` y GIN en `tags`), un trigger que rechaza `UPDATE`, `DELETE` y `TRUNCATE`, y RLS sin políticas con los permisos de `anon` y `authenticated` retirados. Es idempotente; probada en PostgreSQL 17 (PGlite) con los roles de Supabase. **En Supabase falta ejecutarla** (lo hace el desarrollador). Modelo `TelemetryEventRow` con un registro propio: `init_db` no crea la tabla. API: 1037 pruebas (5 nuevas).
 
 **Pull requests (comprobados en GitHub el 2026-11-18).** Forman una cadena: cada PR parte de la rama del anterior.
 
@@ -352,7 +353,7 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 ### Inmediatos (Sprint Actual)
 
-0. **Almacenamiento de eventos de telemetría (rama `feature/telemetry-storage`)** — En curso (2026-11-19). Fase 0 (plan y esquemas) lista. Siguen la migración `002_telemetry_events.sql` (la ejecuta el desarrollador en Supabase), el receptor real y la verificación de punta a punta. PR contra `feature/telemetry-capture` con el título `feat: telemetry event storage`.
+0. **Almacenamiento de eventos de telemetría (rama `feature/telemetry-storage`)** — En curso (2026-11-19). Fases 0 (plan y esquemas) y 1 (migración `002_telemetry_events.sql`, que el desarrollador ejecuta en Supabase) listas. Siguen el receptor real y la verificación de punta a punta. PR contra `feature/telemetry-capture` con el título `feat: telemetry event storage`.
 
 0. **Captura de eventos de telemetría (rama `feature/telemetry-capture`)** — Completada (2026-11-19). El backoffice captura 34 de los 44 eventos del plan (los 6 obligatorios y el piso técnico incluidos) con una única función `track()` y los envía en lotes al receptor provisional `POST /telemetry/events`, verificado en DevTools. PR #22 abierto contra `feature/telemetry-plan`. Siguiente fase de la serie: el receptor real con persistencia en Supabase (en curso, misma URL) y el emisor de la API para los 10 eventos restantes. Divergencias en `docs/BRIEFING_DIVERGENCES.md`, sección 16.
 
