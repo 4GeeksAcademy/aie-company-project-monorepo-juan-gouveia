@@ -764,6 +764,13 @@ Las fichas (sección 15) muestran el `level`, el `value` y la plantilla de cada 
 - **Catálogo 1.2.0** (`urn:brasaland:telemetry:event-schemas:1.2.0`): cada evento lleva `x-level`, `x-value` y `x-message`. Son anotaciones: no cambian qué eventos son válidos, así que ninguna versión de evento cambia y el backoffice no se toca.
 - **R2 y R4** (§11.3) se ajustan a la tabla inmutable de ocho columnas.
 
+### 14.5 Verificación
+
+**2026-11-19**, con la API en local contra Supabase y `next dev`, sin cambios en el backoffice:
+
+- **Eventos reales.** Desde el backoffice se registraron una entrada (`inbound_order_created`), una salida por merma (`stock_waste_registered`), un login fallido y otro correcto, y un "Ajustar stock" (`direct_stock_edit_rejected`), además de las vistas, las latencias y los formularios abandonados que se generan solos. Los 13 lotes del backoffice respondieron 200, sin ningún rechazo. En `telemetry_events` aparecen con `service`, `level`, `value`, `message` y `tags`; `tags` conserva las dimensiones del briefing (`location_id`, `country`, `product_id`, `product_category`, `quantity`, `unit`, `currency`, `supplier_id`, `reason`) y los cinco campos del envelope.
+- **Rechazo parcial.** Un lote enviado con curl con 2 eventos válidos y 5 inválidos (timestamp mal formado, clave fuera del allowlist, tipo fuera del catálogo, campo del envelope ausente y un elemento que no es un objeto) respondió `200 {"received": 7, "stored": 2, "rejected": 5}`; el log nombra cada rechazo sin copiar sus valores.
+
 ## 15. Fichas de los eventos
 
 Una ficha por evento, en el mismo orden y con las mismas propiedades que `event-schemas.json`. **El allowlist de cada evento son exactamente las propiedades de su tabla:** cualquier otra clave hace que el evento no se emita. "Obligatoria: sí" significa que la clave debe estar siempre; las opcionales se omiten cuando no hay valor.
