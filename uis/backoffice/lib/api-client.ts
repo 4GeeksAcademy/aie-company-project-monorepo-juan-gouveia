@@ -1,5 +1,6 @@
 import { clearToken, getToken } from "@/lib/auth/token";
 import { currentPath, LOGIN_PATH, loginUrl, type LoginReason } from "@/lib/auth/navigation";
+import { uuidV4 } from "@/lib/telemetry/ids";
 import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 
 // Cliente común para la API de Brasaland. Las rutas son las del intermediario
@@ -7,6 +8,11 @@ import type { ApiErrorBody, ApiFieldError } from "@/types/api";
 // El tracker (lib/talento/api.ts) no usa apiFetch: llama a una API de terceros que no debe recibir el
 // token. Sí reutiliza errorFromStatus y readJson para que sus errores se muestren igual.
 const BFF_PREFIX = "/api";
+
+// Correlación (telemetría, decisión C9): cada llamada lleva un UUID propio en esta cabecera. El BFF
+// lo reenvía a la API, que lo escribe en su log y lo devuelve en la respuesta. Es el `requestId` de los
+// eventos de telemetría que nacen de esa llamada.
+export const REQUEST_ID_HEADER = "X-Request-Id";
 
 const SERVER_ERROR_MESSAGE = "El servidor tuvo un problema y no pudo completar la operación. Inténtalo de nuevo en unos minutos.";
 
@@ -19,7 +25,9 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly code: string,
-    readonly details: ApiFieldError[] = []
+    readonly details: ApiFieldError[] = [],
+    // X-Request-Id de la llamada que falló (vacío si el error no viene de apiFetch).
+    public requestId: string | null = null
   ) {
     super(message);
     this.name = "ApiError";
@@ -98,17 +106,20 @@ export async function apiFetch(path: string, options: ApiRequestOptions): Promis
   const requestHeaders = new Headers(headers);
   const token = getToken();
   if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+  const requestId = uuidV4();
+  requestHeaders.set(REQUEST_ID_HEADER, requestId);
 
   let res: Response;
   try {
     res = await fetch(`${BFF_PREFIX}${path}`, { cache: "no-store", ...init, headers: requestHeaders });
   } catch {
-    throw new ApiError("No se pudo conectar con el backoffice. Revisa tu conexión.", 0, "network_error");
+    throw new ApiError("No se pudo conectar con el backoffice. Revisa tu conexión.", 0, "network_error", [], requestId);
   }
 
   if (res.ok) return res;
 
   const error = await toApiError(res, fallback);
+  error.requestId = requestId;
   const reason = sessionEndReason(error);
   if (reason && endSessionOnAuthError) endSession(reason);
   throw error;

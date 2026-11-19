@@ -17,6 +17,8 @@ Copia `.env.example` como `.env.local` e indica las URL de las API:
 ```bash
 NEXT_PUBLIC_API_BASE_URL=<url-base-de-la-api>     # API del tracker
 API_BASE_URL=http://localhost:8000/api/v1         # API de Brasaland (services/brasaland-api)
+NEXT_PUBLIC_TELEMETRY_ENDPOINT=http://localhost:8000/telemetry/events  # receptor de telemetría
+NEXT_PUBLIC_TELEMETRY_ENVIRONMENT=development     # entorno de los eventos
 ```
 
 Las herramientas que usan la API de Brasaland necesitan que esté arrancada; las instrucciones están en [`services/brasaland-api/README.es.md`](../../services/brasaland-api/README.es.md).
@@ -30,11 +32,12 @@ npm run lint
 npm run build
 npm test                # pruebas unitarias con Jest (__tests__/)
 npm run test:coverage   # lo mismo, con cobertura (informe en coverage/)
+npm run telemetry:catalog  # regenera lib/telemetry/catalog.ts tras cambiar docs/telemetry/event-schemas.json
 ```
 
 `npm install` enlaza `@repo/brasa-core` desde `packages/brasa-core`, así que hay que ejecutarlo después de clonar el repositorio.
 
-Las pruebas de Jest cubren la lógica de autenticación de `lib/auth/` (`__tests__/auth/`, ticket AUTH-088), las utilidades `lib/format.ts`, `toUserMessage` y `readJson` (`__tests__/utils/`, ticket FE-019) y la sección de inventario (`__tests__/inventory/`, ticket BRD-0512): llamadas de `lib/inventory.ts` con `fetch` simulado, niveles de stock, validación de los formularios y unión del historial. Cada carpeta se ejecuta sola con `npm test -- __tests__/auth`, `__tests__/utils` o `__tests__/inventory`. Qué prueba cada archivo y su cobertura están en [`services/brasaland-api/TESTING.es.md`](../../services/brasaland-api/TESTING.es.md#pruebas-del-backoffice-jest) y en su sección de FE-019.
+Las pruebas de Jest cubren la lógica de autenticación de `lib/auth/` (`__tests__/auth/`, ticket AUTH-088), las utilidades `lib/format.ts`, `toUserMessage` y `readJson` (`__tests__/utils/`, ticket FE-019) y la sección de inventario (`__tests__/inventory/`, ticket BRD-0512): llamadas de `lib/inventory.ts` con `fetch` simulado, niveles de stock, validación de los formularios y unión del historial. El servicio de telemetría tiene las suyas en `__tests__/telemetry/` (cola, envío, envelope, sesión, validación y catálogo). Cada carpeta se ejecuta sola con `npm test -- __tests__/auth`, `__tests__/utils`, `__tests__/inventory` o `__tests__/telemetry`. Qué prueba cada archivo y su cobertura están en [`services/brasaland-api/TESTING.es.md`](../../services/brasaland-api/TESTING.es.md#pruebas-del-backoffice-jest) y en su sección de FE-019.
 
 ## Sesión
 
@@ -86,13 +89,30 @@ Las áreas internas, incluida la formación, se incorporan aquí como herramient
 
 Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/api-client.ts`, que añaden el token, convierten los errores en `ApiError` (`status`, `code`, `message`, `details` por campo) y cierran la sesión ante un 401.
 
+## Telemetría
+
+El backoffice captura eventos de uso con un servicio propio, `lib/telemetry/` ([plan de telemetría](../../docs/telemetry/telemetry-plan.md), sección 13). **Todo el tracking pasa por una única función**:
+
+```ts
+import { track } from "@/lib/telemetry";
+
+track("page_viewed", { route: "/inventario/ordenes", navigation_type: "client" });
+```
+
+- **Quien llama solo pasa el tipo y las propiedades.** El servicio añade el envelope: `eventId` (UUID generado al capturar), `timestamp` de la captura, `sessionId`, `userId`, `schemaVersion` del esquema de ese evento, `requestId`, `source: "browser"` y `environment`.
+- **Allowlist.** `track()` comprueba cada evento contra `lib/telemetry/catalog.ts`, que se genera desde `docs/telemetry/event-schemas.json` (`npm run telemetry:catalog`). Un tipo desconocido, una propiedad obligatoria ausente o una clave fuera del allowlist hacen que el evento se descarte, con un aviso en la consola en desarrollo.
+- **Envío por lotes.** Los eventos se acumulan en memoria y salen a `NEXT_PUBLIC_TELEMETRY_ENDPOINT` cada 10 segundos o al llegar a 20, lo que ocurra primero. Si el envío falla, se reintenta 3 veces (esperas de 1, 2 y 4 s) y después el lote se descarta. Al ocultar o cerrar la pestaña, lo pendiente sale con `navigator.sendBeacon`. Sin la variable, la telemetría está desactivada.
+- **Sesión.** `sessionId` se crea al iniciar sesión y se guarda en `sessionStorage` (uno por pestaña). `userId` es el `sub` del token (el UUID de la cuenta, nunca el email). Sin sesión, los dos son `null`.
+- **Correlación.** `apiFetch` envía un UUID nuevo en `X-Request-Id` en cada llamada; el intermediario lo reenvía y la API lo escribe en su log. Los eventos que nacen de una respuesta de la API llevan ese `requestId`, que la capa de datos fija con `withRequestId()` (`lib/telemetry/request-context.ts`).
+- **Receptor.** La URL apunta directamente a la API (`http://localhost:8000/telemetry/events`), sin pasar por el intermediario: es la única llamada del navegador a otro origen, y la API admite CORS solo para ella.
+
 ## Estructura
 
 - `app/`: layout raíz (sin cabecera) y dos grupos de rutas:
   - `(protegido)/`: portada y una carpeta por herramienta, con el guard de sesión;
   - `(publico)/`: `login/` y `register/`, con una cabecera sin navegación.
 - `app/api/[...path]/route.ts`: intermediario (BFF) hacia la API de Brasaland.
-  - Reenvía `GET`, `POST`, `PUT`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL/<ruta>`, con las cabeceras `Content-Type`, `Accept` y `Authorization`, sin aplicar lógica.
+  - Reenvía `GET`, `POST`, `PUT`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL/<ruta>`, con las cabeceras `Content-Type`, `Accept`, `Authorization` y `X-Request-Id`, sin aplicar lógica. De la respuesta copia `Content-Type`, `Content-Disposition`, `X-Request-Id` y `X-Cache`.
   - La URL de la API se queda en el servidor y no hace falta CORS.
   - Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`); si tarda más de 15 segundos, corta la petición y responde 504 (`api_timeout`). En los tres casos el usuario recibe un mensaje genérico, y el log del servidor registra una línea `[BFF]` con el método, la ruta (sin query) y la causa; nunca cabeceras ni cuerpo.
 - `components/`:
@@ -100,7 +120,8 @@ Las llamadas a la API de Brasaland se hacen con `apiJson` o `apiFetch` de `lib/a
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` y los formularios de login, registro y recuperación de contraseña) y `account/` (perfil y cambio de contraseña);
   - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/` e `inventario/`.
 - `hooks/`: hooks personalizados, entre ellos `useSession` y `useShowMore` (listas largas por partes).
-- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/` y una carpeta por herramienta. El inventario usa archivos `lib/inventory*.ts`: `inventory.ts` es su módulo de integración, el único que llama a `/api/inventory/...`.
+- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, `telemetry/` (servicio de telemetría; ver [Telemetría](#telemetría)) y una carpeta por herramienta. El inventario usa archivos `lib/inventory*.ts`: `inventory.ts` es su módulo de integración, el único que llama a `/api/inventory/...`.
+- `scripts/generate-telemetry-catalog.mjs`: genera `lib/telemetry/catalog.ts` desde `docs/telemetry/event-schemas.json`.
 - `types/`: tipos de la API (`api.ts` para los errores y `auth.ts` para usuarios y perfiles).
 
 ## Limitaciones conocidas

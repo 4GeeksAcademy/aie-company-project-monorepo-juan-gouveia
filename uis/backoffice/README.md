@@ -17,6 +17,8 @@ Copy `.env.example` as `.env.local` and set the API URLs:
 ```bash
 NEXT_PUBLIC_API_BASE_URL=<api-base-url>           # Tracker API
 API_BASE_URL=http://localhost:8000/api/v1         # Brasaland API (services/brasaland-api)
+NEXT_PUBLIC_TELEMETRY_ENDPOINT=http://localhost:8000/telemetry/events  # telemetry receiver
+NEXT_PUBLIC_TELEMETRY_ENVIRONMENT=development     # environment of the events
 ```
 
 Tools that use the Brasaland API need it to be running; see [`services/brasaland-api/README.md`](../../services/brasaland-api/README.md).
@@ -30,11 +32,12 @@ npm run lint
 npm run build
 npm test                # Jest unit tests (__tests__/)
 npm run test:coverage   # the same, with coverage (report in coverage/)
+npm run telemetry:catalog  # regenerates lib/telemetry/catalog.ts after changing docs/telemetry/event-schemas.json
 ```
 
 `npm install` links `@repo/brasa-core` from `packages/brasa-core`, so run it again after a fresh clone.
 
-The Jest tests cover the authentication logic in `lib/auth/` (`__tests__/auth/`, ticket AUTH-088), the `lib/format.ts`, `toUserMessage` and `readJson` utilities (`__tests__/utils/`, ticket FE-019) and the inventory section (`__tests__/inventory/`, ticket BRD-0512): `lib/inventory.ts` calls with a mocked `fetch`, stock levels, form validation and the merged order history. Each folder runs on its own with `npm test -- __tests__/auth`, `__tests__/utils` or `__tests__/inventory`. What each file tests and its coverage are in [`services/brasaland-api/TESTING.md`](../../services/brasaland-api/TESTING.md#backoffice-tests-jest) and in its FE-019 section.
+The Jest tests cover the authentication logic in `lib/auth/` (`__tests__/auth/`, ticket AUTH-088), the `lib/format.ts`, `toUserMessage` and `readJson` utilities (`__tests__/utils/`, ticket FE-019) and the inventory section (`__tests__/inventory/`, ticket BRD-0512): `lib/inventory.ts` calls with a mocked `fetch`, stock levels, form validation and the merged order history. The telemetry service has its own in `__tests__/telemetry/` (queue, sending, envelope, session, validation and catalog). Each folder runs on its own with `npm test -- __tests__/auth`, `__tests__/utils`, `__tests__/inventory` or `__tests__/telemetry`. What each file tests and its coverage are in [`services/brasaland-api/TESTING.md`](../../services/brasaland-api/TESTING.md#backoffice-tests-jest) and in its FE-019 section.
 
 ## Session
 
@@ -86,13 +89,30 @@ Internal areas, including training, join this project as tools, not as separate 
 
 Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client.ts`, which add the token, turn errors into an `ApiError` (`status`, `code`, `message`, per-field `details`) and end the session on a 401.
 
+## Telemetry
+
+The backoffice captures usage events with its own service, `lib/telemetry/` ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 13). **All tracking goes through a single function**:
+
+```ts
+import { track } from "@/lib/telemetry";
+
+track("page_viewed", { route: "/inventario/ordenes", navigation_type: "client" });
+```
+
+- **Callers only pass the type and the properties.** The service adds the envelope: `eventId` (UUID generated at capture time), the capture `timestamp`, `sessionId`, `userId`, the `schemaVersion` of that event's schema, `requestId`, `source: "browser"` and `environment`.
+- **Allowlist.** `track()` checks every event against `lib/telemetry/catalog.ts`, generated from `docs/telemetry/event-schemas.json` (`npm run telemetry:catalog`). An unknown type, a missing required property or a key outside the allowlist drops the event, with a console warning in development.
+- **Batched sending.** Events pile up in memory and go to `NEXT_PUBLIC_TELEMETRY_ENDPOINT` every 10 seconds or when 20 accumulate, whichever comes first. If sending fails, it retries 3 times (1, 2 and 4 s waits) and then drops the batch. When the tab is hidden or closed, whatever is pending goes out with `navigator.sendBeacon`. Without the variable, telemetry is disabled.
+- **Session.** `sessionId` is created at login and kept in `sessionStorage` (one per tab). `userId` is the token's `sub` (the account UUID, never the email). Without a session, both are `null`.
+- **Correlation.** `apiFetch` sends a new UUID in `X-Request-Id` with every call; the intermediary forwards it and the API writes it to its log. Events born from an API response carry that `requestId`, which the data layer sets with `withRequestId()` (`lib/telemetry/request-context.ts`).
+- **Receiver.** The URL points straight at the API (`http://localhost:8000/telemetry/events`), not through the intermediary: it is the browser's only call to another origin, and the API allows CORS just for it.
+
 ## Structure
 
 - `app/`: root layout (no header) and two route groups:
   - `(protegido)/`: home page and one folder per tool, with the session guard;
   - `(publico)/`: `login/` and `register/`, with a header without navigation.
 - `app/api/[...path]/route.ts`: intermediary (BFF) to the Brasaland API.
-  - It forwards `GET`, `POST`, `PUT`, `PATCH` and `DELETE` on `/api/<path>` to `API_BASE_URL/<path>`, with the `Content-Type`, `Accept` and `Authorization` headers, applying no logic.
+  - It forwards `GET`, `POST`, `PUT`, `PATCH` and `DELETE` on `/api/<path>` to `API_BASE_URL/<path>`, with the `Content-Type`, `Accept`, `Authorization` and `X-Request-Id` headers, applying no logic. From the response it copies `Content-Type`, `Content-Disposition`, `X-Request-Id` and `X-Cache`.
   - The API URL stays on the server and CORS is not needed.
   - If the variable is missing it returns 500 (`api_not_configured`); if the API does not respond, 502 (`api_unavailable`); if it takes longer than 15 seconds, it cuts the request and returns 504 (`api_timeout`). In all three cases the user gets a generic message, and the server log records a `[BFF]` line with the method, the path (without query) and the cause; never headers or body.
 - `components/`:
@@ -100,7 +120,8 @@ Calls to the Brasaland API go through `apiJson` or `apiFetch` in `lib/api-client
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` and the login, registration and password recovery forms) and `account/` (profile and password change);
   - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/` and `inventario/`.
 - `hooks/`: custom hooks, including `useSession` and `useShowMore` (long lists rendered in parts).
-- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, and one folder per tool. The inventory uses `lib/inventory*.ts` files: `inventory.ts` is its integration module, the only one that calls `/api/inventory/...`.
+- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, `telemetry/` (telemetry service; see [Telemetry](#telemetry)), and one folder per tool. The inventory uses `lib/inventory*.ts` files: `inventory.ts` is its integration module, the only one that calls `/api/inventory/...`.
+- `scripts/generate-telemetry-catalog.mjs`: generates `lib/telemetry/catalog.ts` from `docs/telemetry/event-schemas.json`.
 - `types/`: API types (`api.ts` for errors and `auth.ts` for users and profiles).
 
 ## Known limitations

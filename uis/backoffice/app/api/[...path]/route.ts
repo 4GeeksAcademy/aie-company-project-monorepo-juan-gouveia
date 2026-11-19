@@ -11,8 +11,10 @@ const API_BASE_URL = process.env.API_BASE_URL;
 const API_TIMEOUT_MS = 15_000;
 
 // Cabeceras que se copian en cada sentido; el resto (host, cookies…) no se reenvía.
-const REQUEST_HEADERS = ["content-type", "accept", "authorization"];
-const RESPONSE_HEADERS = ["content-type", "content-disposition"];
+// x-request-id: correlación de la telemetría (el navegador lo crea, la API lo registra y lo devuelve).
+// x-cache: HIT o MISS de la caché del inventario, para `api_latency_recorded`.
+const REQUEST_HEADERS = ["content-type", "accept", "authorization", "x-request-id"];
+const RESPONSE_HEADERS = ["content-type", "content-disposition", "x-request-id", "x-cache"];
 
 interface RouteContext {
   params: Promise<{ path: string[] }>;

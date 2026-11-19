@@ -74,6 +74,8 @@ services:
       API_BASE_URL: ${API_BASE_URL:-http://api:8000/api/v1}
       # La usa el navegador (tracker /talento): debe ser una URL accesible desde el host.
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
+      NEXT_PUBLIC_TELEMETRY_ENDPOINT: ${NEXT_PUBLIC_TELEMETRY_ENDPOINT:-http://localhost:8000/telemetry/events}
+      NEXT_PUBLIC_TELEMETRY_ENVIRONMENT: ${NEXT_PUBLIC_TELEMETRY_ENVIRONMENT:-development}
       # Recarga en caliente por sondeo (watchOptions.pollIntervalMs de next.config.ts, con webpack).
       NEXT_WATCH_POLL_INTERVAL_MS: ${NEXT_WATCH_POLL_INTERVAL_MS:-1000}
     depends_on:

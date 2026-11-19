@@ -37,6 +37,9 @@ module.exports = {
     "lib/api-client.ts",
     "lib/format.ts",
     "lib/error-message.ts",
+    // Servicio de telemetría (captura de eventos). El catálogo es generado: lo comprueba catalog.test.ts.
+    "lib/telemetry/**/*.ts",
+    "!lib/telemetry/catalog.ts",
   ],
   coverageDirectory: "coverage",
 };

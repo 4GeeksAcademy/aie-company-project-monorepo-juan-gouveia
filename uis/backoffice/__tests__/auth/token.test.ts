@@ -3,7 +3,7 @@
  */
 // Token de la sesión en localStorage (lib/auth/token.ts), con un navegador simulado (jsdom).
 // El navegador puede bloquear localStorage: entonces no hay sesión, pero nada debe romperse.
-import { clearToken, getToken, setToken, subscribeToToken, TokenStorageError } from "@/lib/auth/token";
+import { clearToken, getToken, readTokenClaims, setToken, subscribeToToken, TokenStorageError } from "@/lib/auth/token";
 
 const TOKEN_KEY = "brasaland.access_token";
 
@@ -84,4 +84,30 @@ describe("subscribeToToken", () => {
 
     expect(onChange.mock.calls).toEqual([["other-tab"], ["other-tab"]]);
   });
+});
+
+
+// Telemetría: `sub` e `iat` del JWT, leídos sin verificar la firma (solo para medir y correlacionar).
+describe("readTokenClaims", () => {
+  function encode(value: unknown): string {
+    return btoa(JSON.stringify(value)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  }
+
+  it("lee sub e iat del payload", () => {
+    const token = `${encode({ alg: "HS256" })}.${encode({ sub: "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2", iat: 1763547000 })}.firma`;
+    expect(readTokenClaims(token)).toEqual({ sub: "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2", iat: 1763547000 });
+  });
+
+  it("decodifica base64url con caracteres que no existen en base64 (- y _)", () => {
+    // "¿?>" en el payload produce "-" o "_" al codificarlo en base64url.
+    const token = `x.${encode({ sub: "abc", nota: "¿?>¿?>" })}.y`;
+    expect(readTokenClaims(token)).toEqual({ sub: "abc", iat: null });
+  });
+
+  it.each([null, "", "sin-puntos", "a.%%%.c", `a.${btoa("[1,2]")}.c`, `a.${btoa('{"iat":1}')}.c`])(
+    "devuelve null si el token no tiene el formato esperado (%p)",
+    (token) => {
+      expect(readTokenClaims(token)).toBeNull();
+    }
+  );
 });
