@@ -27,6 +27,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 14. [Estrategia de caching](#estrategia-de-caching) (briefing "Caching", rama `feature/caching-optimisation`)
 15. [Plan de Telemetría](#plan-de-telemetría) (briefing de Brasaland "Proyectos de Telemetría" y enunciado del RFI, rama `feature/telemetry-plan`)
 16. [Captura de eventos de telemetría](#captura-de-eventos-de-telemetría) (enunciado "Sistema de captura", rama `feature/telemetry-capture`)
+17. [Almacenamiento de eventos de telemetría](#almacenamiento-de-eventos-de-telemetría) (enunciado "Telemetría — Almacenamiento", rama `feature/telemetry-storage`)
 
 ---
 
@@ -1390,3 +1391,123 @@ La rama sale de `feature/telemetry-plan` y el PR apunta a ella, porque los PR #1
 | La pestaña Network muestra lotes con el formato correcto y respuesta 200 | ✅ | Capturas de DevTools (Payload con `inbound_order_created` y Headers con `200 OK`), también del lote enviado con `sendBeacon` |
 | Web Vitals con la ruta en `properties` (adicional) | ✅ | `page_performance_recorded` con `route`, LCP, CLS e INP |
 | Autenticación en los hooks y componentes de auth, sin email ni contraseña (adicional) | ✅ | `lib/auth/api.ts`, `SessionProvider` y `apiFetch`; `__tests__/telemetry/auth-events.test.ts` |
+
+---
+
+## Almacenamiento de eventos de telemetría
+
+Segunda implementación del plan de telemetría, en la rama `feature/telemetry-storage`. El receptor `POST /telemetry/events` deja de ser provisional: valida cada evento por separado, guarda los válidos en la tabla `telemetry_events` de Supabase con una sola sentencia por lote y responde `{"received", "stored", "rejected"}`. El backoffice no cambia. Coincide con el enunciado en lo siguiente:
+
+- **Tabla:** `telemetry_events` en Supabase con las ocho columnas (`id`, `timestamp`, `service`, `event_type`, `level`, `value`, `message` y `tags` en JSONB), los tres índices (`timestamp`, `event_type` y GIN en `tags`) y sin lógica de `UPDATE` ni `DELETE`.
+- **Receptor:** la misma URL y el mismo lote `{"events": [...]}`, leído de forma laxa; cada evento se valida con `TelemetryEvent.model_validate`, el modelo de la fase anterior sin cambios; los inválidos se rechazan uno a uno sin cancelar el lote; los válidos se insertan con una única sentencia; la respuesta lleva `received`, `stored` y `rejected`.
+- **`tags`:** el objeto `properties` del envelope, solo con las claves del allowlist, que conserva las dimensiones del briefing (`location_id`, `country`, `product_id`, `product_category`, `quantity`, `unit`, `currency`, `supplier_id`, `reason`).
+- **Frontend:** ni una línea cambiada; `NEXT_PUBLIC_TELEMETRY_ENDPOINT` sigue apuntando a `http://localhost:8000/telemetry/events`.
+
+Las decisiones (S1 a S11) se tomaron con el desarrollador el 19 de noviembre de 2026. El plan (`docs/telemetry/telemetry-plan.md`, sección 14) y el esquema (catálogo 1.2.0) se actualizaron con ellas antes de escribir código.
+
+> **Estado:** completado y verificado de punta a punta con Supabase (2026-11-19), un commit por fase, hechos por el desarrollador.
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Estructura de la tabla | "Con la siguiente estructura" (la tabla no aparece en la página del enunciado) | Las ocho columnas, índices y mapeo de un documento de la academia | Es el contrato que piden los criterios ("las ocho columnas") |
+| Reglas de `service`, `level`, `value` y `message` | "Ajusta las reglas al plan del estudiante" | `service` sale de `source`; `level`, `value` y `message`, de anotaciones `x-*` por evento en `event-schemas.json` | Una sola fuente para el plan, el esquema y el receptor |
+| Restricciones de la tabla | `level` con default `'info'`; `tags` con default `'{}'` | Además, `NOT NULL` en los dos y `CHECK` de `level` a `info`, `warn` y `error` | La base no admite valores fuera del dominio |
+| `id` de la fila | Default `gen_random_uuid()` | El `eventId` del envelope (el default se conserva), con `ON CONFLICT (id) DO NOTHING` | Los reintentos y los `sendBeacon` repetidos no duplican filas |
+| Campos del envelope | "Pueden ir en `tags` si el plan los necesita" | `session_id`, `user_id`, `request_id`, `schema_version` y `environment` en `tags` | Los análisis por sesión y usuario, la correlación con la API y separar entornos |
+| Validación del evento | `TelemetryEvent.model_validate` | Además, `properties` contra el catálogo generado desde `event-schemas.json` | Sin ella, `tags` guardaría claves fuera del allowlist |
+| Inmutabilidad | Sin lógica de `UPDATE` ni `DELETE` en el código | Además, un trigger que los rechaza (y `TRUNCATE`) y RLS sin políticas | La garantiza la base, no solo la API |
+| Creación de la tabla | "Crea la tabla en Supabase" | Solo con `migrations/002_telemetry_events.sql`; la API no la crea al arrancar | `create_all` la crearía sin índice GIN, trigger ni RLS |
+| Fallo de la base | 200 mientras el envelope sea parseable | 503 `telemetry_storage_unavailable` | El backoffice reintenta los 5xx; con 200 el lote se perdería en silencio |
+| Lotes límite | — | Más de 100 eventos: 422 `too_many_events`; `events: []`: 200 con ceros | El máximo de la fase de captura se mantiene |
+| SQLAlchemy en ejecución | Regla del Hito 5: solo `sqlmodel` | El dominio `telemetry` importa SQLAlchemy (`insert` de cada dialecto, `JSONB`, registro propio) | `sqlmodel` no expone `ON CONFLICT` ni `JSONB` |
+| Riesgos R2 y R4 del plan | Plan: anonimizar eventos al borrar una cuenta; guardar la hora de recepción | Sin reescrituras; sin columna de recepción | La tabla es inmutable y tiene ocho columnas |
+| Destino del PR | La rama principal (`main`) | `feature/telemetry-capture` | Los PR #17 a #22 siguen abiertos; decisión del desarrollador |
+| Tablas del inventario en Supabase | Fuera del enunciado | Migración 003: RLS sin políticas y sin permisos para `anon` ni `authenticated` | Supabase las marcaba como *unrestricted*; decisión del desarrollador hacerlo en esta rama |
+
+### 1. La estructura de la tabla viene de otro documento de la academia
+
+La Fase 1 del enunciado dice "crea la tabla `telemetry_events` con la siguiente estructura" y "mapea cada `TelemetryEvent` con este contrato", pero las dos tablas no aparecen en la página, y los criterios piden "las ocho columnas". El desarrollador las encontró en otro documento de la academia: columnas, tipos, restricciones, índices y un mapeo indicativo que deja las reglas de `service` y `level` "al plan del estudiante". La implementación sigue ese contrato al pie de la letra en nombres, tipos, defaults e índices.
+
+### 2. `service`, `level`, `value` y `message` salen del plan
+
+- **`service`:** de `source` (`browser` → `backoffice`; `api`, `bff` y `process` igual), no una constante. Hoy todo es `backoffice`, pero los eventos de la API llegarán como `api` sin tocar el receptor.
+- **`level`:** fijo por tipo de evento: `error` en los fallos (4 eventos), `warn` en los rechazos y alertas que alguien debería mirar (11, entre ellos `direct_stock_edit_rejected` y `stock_threshold_triggered`) e `info` en el resto.
+- **`value`:** como mucho una propiedad numérica principal por evento (la cantidad en el inventario, la duración en el rendimiento, el porcentaje en las variaciones de precio). No tiene unidad propia: la da el `event_type`, así que nunca se suma entre tipos.
+- **`message`:** una plantilla en español por evento, con huecos que solo pueden usar claves del allowlist, de 200 caracteres como máximo.
+
+Las cuatro reglas viven como anotaciones (`x-level`, `x-value`, `x-message`) en `event-schemas.json` y llegan al receptor por un catálogo generado (`uv run telemetry-catalog`). Una prueba falla si el catálogo se desfasa.
+
+**Coste:** tres anotaciones más por evento que mantener en el esquema.
+
+### 3. El `id` es el `eventId` y los repetidos no se duplican
+
+El contrato deja `id` con `gen_random_uuid()`. El receptor envía el `eventId` del envelope como `id` (el default se conserva para cualquier otra inserción) y el bulk insert lleva `ON CONFLICT (id) DO NOTHING`. Un lote puede llegar dos veces: un reintento tras un timeout cuya respuesta se perdió, o un `sendBeacon` que sale justo después de un `fetch` que sí llegó. Los repetidos cuentan en `stored`, porque ya están guardados, así que `received = stored + rejected` siempre; el log dice cuántos eran repetidos.
+
+**Coste:** ninguno en la operación: sigue siendo una sentencia por lote.
+
+### 4. Cinco campos del envelope van en `tags`
+
+El documento de la academia permite guardar en `tags` los campos del envelope que el plan necesite. Van `session_id`, `user_id`, `request_id`, `schema_version` y `environment`, en snake_case como el resto de las claves y siempre presentes (con `null` si no hay valor). `eventId` y `source` no se repiten, porque ya son `id` y `service`. Una prueba comprueba que ninguna propiedad del catálogo usa esos cinco nombres.
+
+**Coste:** `tags` deja de ser exactamente `properties`; las consultas por dimensiones de negocio no cambian.
+
+### 5. `properties` también se valida contra el catálogo
+
+`TelemetryEvent` se reutiliza sin cambios (criterio de evaluación), pero solo comprueba que `properties` es un objeto. Para que `tags` "preserve los allowlists", el receptor comprueba además cada evento contra el catálogo generado desde `event-schemas.json`, con la misma regla que `track()` en el backoffice: tipo conocido, propiedades obligatorias presentes y ninguna clave fuera del allowlist. También rechaza los valores que PostgreSQL no puede guardar en JSONB (NaN, infinitos, el carácter NUL): sin ese filtro, un solo valor así haría fallar el INSERT del lote entero.
+
+**Coste:** un evento con una clave nueva se rechaza hasta que el esquema la incluya y se regenere el catálogo. Es el comportamiento buscado.
+
+### 6. La base garantiza la inmutabilidad
+
+El criterio pide que no haya lógica de `UPDATE` ni `DELETE`: el dominio solo inserta, y una prueba lo comprueba. Además, la migración crea un trigger que rechaza `UPDATE`, `DELETE` y `TRUNCATE` venga de donde venga (la consola de Supabase, un script), y activa RLS sin políticas con los permisos de `anon` y `authenticated` retirados: Supabase publica las tablas de `public` en su API REST, y sin esto cualquiera con la clave `anon` podría leer o escribir eventos. La API se conecta como `postgres`, que no está sujeto a RLS.
+
+**Coste:** una purga excepcional (retención, derecho de supresión) exige desactivar el trigger a mano en una transacción; la migración documenta cómo.
+
+### 7. La tabla la crea solo la migración
+
+La API crea las tablas del inventario al arrancar con `create_all`. Si el modelo de telemetría estuviera en ese `metadata`, una API arrancada antes de ejecutar la migración crearía `telemetry_events` sin índice GIN, sin trigger y sin RLS. Por eso `TelemetryEventRow` tiene un registro propio y la tabla solo la crea `migrations/002_telemetry_events.sql`, idempotente, que el desarrollador ejecutó en el SQL Editor. Sin la tabla, el receptor responde 503 y su log pide la migración.
+
+**Coste:** un paso manual al desplegar en una base nueva.
+
+### 8. Un fallo de la base responde 503
+
+El enunciado pide 200 mientras el envelope sea parseable. Eso se cumple para la validación: un lote en el que se rechazan todos los eventos sigue respondiendo 200. Pero si la base no puede guardar (caída, o falta la tabla), el receptor responde 503 `telemetry_storage_unavailable` y no guarda nada. El `TelemetryService` reintenta los 5xx con su backoff, y el `ON CONFLICT` hace seguros los reintentos. Con un 200, el backoffice daría el lote por entregado y se perdería en silencio.
+
+**Coste:** ninguno para el frontend, que ya trataba los 5xx así.
+
+### 9. Lotes límite
+
+Más de 100 eventos responden 422 `too_many_events` (el máximo de la fase de captura se mantiene, con su propio código: un cliente con un fallo no puede inundar la tabla sin que se note). `events: []` responde 200 con ceros sin tocar la base. Las claves junto a `events` se ignoran, como pide la lectura laxa. Un elemento que no es un objeto cuenta en `rejected`.
+
+### 10. SQLAlchemy en el dominio de telemetría
+
+El Hito 5 fijó que la API solo use `sqlmodel` en ejecución. `sqlmodel` exporta un `insert` genérico, pero `ON CONFLICT DO NOTHING` solo existe en el `insert` de cada dialecto (`sqlalchemy.dialects.postgresql` en Supabase, `sqlalchemy.dialects.sqlite` en las pruebas), y `JSONB` también viene del dialecto. La excepción se limita al dominio `telemetry`; el inventario sigue igual.
+
+**Coste:** el dominio depende de la API de SQLAlchemy además de la de SQLModel.
+
+### 11. R2 y R4 del plan se ajustan
+
+El plan prometía poner `userId` a `null` en los eventos de una cuenta borrada (R2) y guardar la hora de recepción (R4). La primera sería un `UPDATE` sobre una tabla inmutable; la segunda, una novena columna. Ahora los eventos no se reescriben (al borrar la cuenta, su UUID deja de corresponder a nadie; si una solicitud de supresión obliga a borrarlos, se usa la purga manual) y la hora de recepción queda en el log `api.telemetry`.
+
+### 12. Pull Request contra la rama anterior
+
+El enunciado pide el PR contra la rama principal. La rama sale de `feature/telemetry-capture` y el PR apunta a ella, porque los PR #17 a #22 siguen abiertos; lo decidió el desarrollador. El título es `feat: telemetry event storage`.
+
+### 13. RLS en las tablas del inventario (migración 003)
+
+Al crear `telemetry_events`, el Table Editor de Supabase mostró las tres tablas del inventario (Hito 5) como *unrestricted*: sin RLS, cualquiera con la URL del proyecto y la clave `anon` podía leerlas y modificarlas por la API REST de Supabase, saltándose la autenticación de la API de Brasaland y la regla de que el stock solo cambia con órdenes. No lo pide el enunciado, pero el desarrollador decidió corregirlo al final de esta rama. `migrations/003_inventory_rls.sql` hace con ellas lo mismo que la 002 con `telemetry_events` (RLS sin políticas y sin permisos para `anon` ni `authenticated`, también en sus secuencias). Ningún componente del proyecto usa esa API REST, y la API de Brasaland se conecta como `postgres`, que no está sujeto a RLS. `tests/core/test_migrations.py` falla si una tabla de la API queda sin RLS.
+
+**Coste:** volver a ejecutar la 003 si las tablas se recrean en una base nueva, porque la API las crea al arrancar con `create_all`.
+
+### Verificación de los criterios
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| `telemetry_events` existe en Supabase con las ocho columnas, los tres índices y sin lógica de UPDATE/DELETE | ✅ | `migrations/002_telemetry_events.sql`, ejecutada en Supabase; probada en PostgreSQL 17 (trigger, RLS e idempotencia); `tests/telemetry/test_telemetry_models.py` |
+| El endpoint hace bulk insert y devuelve `{ "received", "stored", "rejected" }` | ✅ | `app/domains/telemetry/service.py` (`store_events`) y `router.py`; `tests/integration/test_telemetry_router.py` |
+| Los inválidos se rechazan uno a uno sin cancelar el lote, con `model_validate` y sin body tipado | ✅ | `TelemetryBatch.events: list[Any]` y `parse_batch`; con curl contra Supabase, `{"received":7,"stored":2,"rejected":5}` |
+| `TelemetryEvent` no se modificó | ✅ | Su clase es idéntica a la de `84772fe` (comparada por árbol sintáctico) |
+| El frontend no cambió ni una línea | ✅ | `git diff feature/telemetry-capture -- uis/` vacío |
+| Los eventos aparecen con `event_type`, `timestamp` y `tags` poblados, técnicos y de negocio | ✅ | Captura de `telemetry_events` en Supabase: `inbound_order_created`, `stock_waste_registered`, `direct_stock_edit_rejected`, `login_failed`, `page_viewed`, `api_latency_recorded`… |
+| `tags` preserva los allowlists y las dimensiones del briefing | ✅ | Validación contra el catálogo; en Supabase, `inbound_order_created` con `location_id`, `country`, `product_id`, `product_category`, `quantity`, `unit`, `currency`, `supplier_id` y `unit_cost` |
+| Un solo INSERT por lote | ✅ | `INSERT … VALUES (…), (…) ON CONFLICT (id) DO NOTHING`; `test_writes_the_whole_batch_with_a_single_insert` cuenta las sentencias |

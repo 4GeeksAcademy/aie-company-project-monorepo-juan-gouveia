@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "urn:brasaland:telemetry:event-schemas:1.1.0",
+  "$id": "urn:brasaland:telemetry:event-schemas:1.2.0",
   "title": "Brasaland — esquemas de eventos de telemetría",
-  "description": "Un evento válido cumple exactamente uno de los esquemas de `definitions/events` (por su `event_type`). Cada evento comparte el envelope de `definitions/envelope`, y su `properties` solo admite las claves de su allowlist (`additionalProperties: false`). Las claves `x-*` son anotaciones documentales (clasificación, categoría, emisor, disparo, datos sensibles, entrega): los validadores de draft-07 las ignoran. Documentación: telemetry-plan.md.",
+  "description": "Un evento válido cumple exactamente uno de los esquemas de `definitions/events` (por su `event_type`). Cada evento comparte el envelope de `definitions/envelope`, y su `properties` solo admite las claves de su allowlist (`additionalProperties: false`). Las claves `x-*` son anotaciones documentales (clasificación, categoría, emisor, disparo, datos sensibles, entrega y, para la tabla `telemetry_events`, `x-level`, `x-value` y `x-message`): los validadores de draft-07 las ignoran. Documentación: telemetry-plan.md.",
   "definitions": {
     "envelope": {
       "type": "object",
@@ -364,6 +364,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Consolidar compras y negociar precios son decisiones semanales o mensuales de Lucía; nadie actúa sobre una entrega concreta en minutos."
         },
+        "x-level": "info",
+        "x-value": "quantity",
+        "x-message": "Entrada de {quantity} {unit} de {product_id} en {location_id} (proveedor {supplier_id}, {unit_cost} {currency})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -467,6 +470,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "La sugerencia automática de pedidos se recalcula con el consumo acumulado del día; un consumo concreto no cambia la decisión en minutos."
         },
+        "x-level": "info",
+        "x-value": "quantity",
+        "x-message": "Consumo de {quantity} {unit} de {product_id} en {location_id}; quedan {stock_after} {unit}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -566,6 +572,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Priorizar auditorías de merma es una decisión semanal por local; la merma de hoy ya ocurrió y no se corrige en minutos."
         },
+        "x-level": "info",
+        "x-value": "quantity",
+        "x-message": "Merma de {quantity} {unit} de {product_id} en {location_id} ({reason})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -677,6 +686,9 @@
           "justification": "Un local que se queda corto de un ingrediente clave necesita reponer **ese mismo día**: el supervisor debe enterarse en minutos, no al día siguiente. Además alimenta en batch el ajuste del mínimo.",
           "throttle": "Natural: solo se emite al **cruzar** el mínimo (§3.2), así que un producto bajo no repite la alerta en cada consumo."
         },
+        "x-level": "warn",
+        "x-value": "quantity",
+        "x-message": "Stock bajo de {product_id}: {quantity} {unit}, por debajo del mínimo de {threshold_quantity} {unit}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -781,6 +793,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Reforzar capacitación o permisos es una decisión semanal de Jake; el sistema ya rechazó el intento, no hay daño que contener en minutos."
         },
+        "x-level": "warn",
+        "x-value": "quantity",
+        "x-message": "Edición directa del stock rechazada: {method} {route} → {status_code} (rol {user_role})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -919,6 +934,9 @@
           "cadence": "segundos",
           "justification": "Es una alerta para Lucía y Mariana: renegociar o cambiar de proveedor **antes** de aceptar más entregas al precio nuevo. Un día de retraso son más compras al precio anómalo."
         },
+        "x-level": "warn",
+        "x-value": "variance_pct",
+        "x-message": "Coste de {product_id} del proveedor {supplier_id}: {unit_cost} {currency}, {variance_pct} % frente a la media de {historical_avg_unit_cost}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1056,6 +1074,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Corregir datos de catálogo y capacitar se decide con el acumulado de la semana."
         },
+        "x-level": "warn",
+        "x-value": null,
+        "x-message": "Orden de {order_type} rechazada: {error_code} ({status_code})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1172,6 +1193,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "El conteo físico se programa con el acumulado del día por producto y local; el rechazo ya protegió el stock."
         },
+        "x-level": "warn",
+        "x-value": "quantity",
+        "x-message": "Salida de {quantity} {unit} de {product_id} rechazada: solo hay {available_quantity} {unit}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1282,6 +1306,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Revisar duplicados del catálogo es una tarea periódica de Compras."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Ingrediente {product_id} creado ({product_category}, {unit}, {country})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1363,6 +1390,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Planificar capacitación y ventanas de mantenimiento usa patrones de semanas."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Inicio de sesión ({user_role})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1422,6 +1452,9 @@
           "justification": "Un ataque de fuerza bruta se detiene en minutos o no se detiene: la decisión (bloqueo temporal) solo sirve si llega a tiempo.",
           "throttle": "Sin muestreo ni límite: cada intento cuenta para detectar la ráfaga. En el navegador, su frecuencia es la de los envíos del formulario de login."
         },
+        "x-level": "warn",
+        "x-value": null,
+        "x-message": "Inicio de sesión fallido ({failure_reason})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1487,6 +1520,9 @@
           "justification": "Ajustar la duración del token es una decisión de configuración que se toma con semanas de datos.",
           "throttle": "Uno por token: varias peticiones en paralelo con el mismo token caducado (resumen y listado) emiten un solo evento por (`userId`, `iat`) en 60 s."
         },
+        "x-level": "info",
+        "x-value": "token_age_minutes",
+        "x-message": "Sesión caducada en {route} tras {token_age_minutes} min",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1553,6 +1589,9 @@
           "justification": "Tokens manipulados o sesiones revocadas que insisten son un posible incidente de seguridad: investigar y rotar `SECRET_KEY` no puede esperar al día siguiente.",
           "throttle": "Uno por token y motivo cada 60 s (las peticiones en paralelo comparten token)."
         },
+        "x-level": "warn",
+        "x-value": null,
+        "x-message": "Token rechazado en {route} ({rejection_reason})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1621,6 +1660,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "El cierre automático por inactividad se decide con el patrón de semanas."
         },
+        "x-level": "info",
+        "x-value": "session_duration_seconds",
+        "x-message": "Cierre de sesión tras {session_duration_seconds} s",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1691,6 +1733,9 @@
           "cadence": "segundos",
           "justification": "Con el registro abierto, una cuenta creada por alguien ajeno ya puede leer el inventario: hay que poder revisarla y desactivarla en minutos."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Usuario registrado ({user_role})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1762,6 +1807,9 @@
           "cadence": "segundos",
           "justification": "Una concesión de administrador fuera de proceso es una escalada de privilegios: se revisa en el momento."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Acceso de un usuario cambiado: {change} ({previous_role} → {new_role})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1869,6 +1917,9 @@
           "cadence": "segundos",
           "justification": "Una ráfaga contra cuentas inexistentes (enumeración) solo se frena si se detecta mientras ocurre."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Restablecimiento de contraseña solicitado (cuenta encontrada: {account_found})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1938,6 +1989,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Simplificar el flujo de recuperación se decide con la tasa semanal."
         },
+        "x-level": "info",
+        "x-value": "link_age_minutes",
+        "x-message": "Contraseña restablecida con un enlace de {link_age_minutes} min",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -1998,6 +2052,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Ajustar la caducidad del enlace o el texto del correo es una decisión de configuración."
         },
+        "x-level": "warn",
+        "x-value": null,
+        "x-message": "Enlace de restablecimiento rechazado en {stage} ({rejection_reason})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2072,6 +2129,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Exigir o no la renovación periódica es una política, no una reacción."
         },
+        "x-level": "info",
+        "x-value": "days_since_last_change",
+        "x-message": "Contraseña cambiada ({channel})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2142,6 +2202,9 @@
           "justification": "Reordenar el menú o retirar secciones se decide con semanas de uso.",
           "throttle": "Se ignora una segunda vista de la misma ruta en menos de 1 s (doble montaje de React en desarrollo, recargas dobles)."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Vista de {route}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2227,6 +2290,9 @@
           "justification": "Rediseñar campos se decide con el acumulado.",
           "throttle": "Uno por formulario cada 2 s (doble clic en enviar)."
         },
+        "x-level": "warn",
+        "x-value": "error_count",
+        "x-message": "Formulario {form_id} bloqueado por {error_count} campos inválidos",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2306,6 +2372,9 @@
           "justification": "Simplificar formularios se decide con el acumulado.",
           "throttle": "Uno por formulario abierto: se emite una sola vez, al salir."
         },
+        "x-level": "info",
+        "x-value": "time_in_form_seconds",
+        "x-message": "Formulario {form_id} abandonado tras {time_in_form_seconds} s ({exit})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2398,6 +2467,9 @@
           "justification": "Mover filtros a la API se decide con el uso de semanas.",
           "throttle": "Debounce de 500 ms en los filtros de texto: solo se emite cuando se deja de escribir."
         },
+        "x-level": "info",
+        "x-value": "result_count",
+        "x-message": "Filtro {filter_name} en {list_id}: {result_count} resultados",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2490,6 +2562,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Fijar las filas iniciales o añadir paginación se decide con el acumulado."
         },
+        "x-level": "info",
+        "x-value": "visible_rows",
+        "x-message": "Lista {list_id}: {visible_rows} de {total_rows} filas visibles",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2569,6 +2644,9 @@
           "justification": "Decidir dónde cachear o fijar objetivos de latencia usa percentiles por hora y por día. Las caídas, que sí son urgentes, las detectan `server_error_occurred` y `api_connection_failed` en stream.",
           "throttle": "**Muestreo:** se emite siempre si `duration_ms` ≥ 300 o `status_code` ≥ 400; el resto, 1 de cada 10 peticiones, elegidas por el `requestId` (determinista). `sample_rate` indica la tasa aplicada (1 o 0,1) para reconstruir los recuentos."
         },
+        "x-level": "info",
+        "x-value": "duration_ms",
+        "x-message": "{method} {route} → {status_code} en {duration_ms} ms",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2660,6 +2738,9 @@
           "justification": "Priorizar optimizaciones y fijar presupuestos de rendimiento usa la distribución de días.",
           "throttle": "Uno por vista mostrada."
         },
+        "x-level": "info",
+        "x-value": "lcp_ms",
+        "x-message": "Carga de {route}: LCP {lcp_ms} ms, CLS {cls}, INP {inp_ms} ms",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2765,6 +2846,9 @@
           "justification": "Ajustar TTL es una decisión de configuración con tendencias de horas.",
           "throttle": "Ya es un agregado: uno por caché cada 5 minutos."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Caché {cache_name}: {hits} aciertos y {misses} fallos",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2857,6 +2941,9 @@
           "justification": "Corregir flujos que provocan errores evitables se decide con el acumulado; los errores graves (500) van por su propio evento en stream.",
           "throttle": "Un mismo (`route`, `error_code`, `userId`) se emite como máximo una vez cada 10 s: un script que repite la misma petición fallida no multiplica el volumen."
         },
+        "x-level": "warn",
+        "x-value": null,
+        "x-message": "{method} {route} → {status_code} {error_code}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -2937,6 +3024,9 @@
           "justification": "Un 500 es un fallo de la API que hay que atender ya: puede estar impidiendo registrar órdenes en todos los locales.",
           "throttle": "Una vez por `error_fingerprint` cada 60 s, con el recuento en el log del emisor."
         },
+        "x-level": "error",
+        "x-value": null,
+        "x-message": "{method} {route} → 500 ({exception_type})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3014,6 +3104,9 @@
           "justification": "La decisión es priorizar correcciones por número de sesiones afectadas, con datos de horas. Un despliegue roto se ve también en `api_error_returned` y en las consultas de soporte.",
           "throttle": "Una vez por `error_fingerprint` y sesión cada 60 s, y como máximo 20 por sesión (un error en bucle no inunda la telemetría)."
         },
+        "x-level": "error",
+        "x-value": null,
+        "x-message": "{error_name} en {route}: {message_sanitized}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3103,6 +3196,9 @@
           "justification": "Sin API, ningún local puede registrar órdenes: es un incidente de disponibilidad que se abre en minutos.",
           "throttle": "Una vez por sesión cada 30 s mientras la API no responde."
         },
+        "x-level": "error",
+        "x-value": "duration_ms",
+        "x-message": "{method} {route} sin respuesta de la API ({failure}, {status_code})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3203,6 +3299,9 @@
           "cadence": "segundos",
           "justification": "Hay un usuario esperando su enlace de recuperación ahora mismo; una configuración rota afecta a todos los siguientes."
         },
+        "x-level": "error",
+        "x-value": null,
+        "x-message": "Correo {email_kind} no enviado ({failure})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3282,6 +3381,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Consolidar categorías de proveedores es una decisión trimestral."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Proveedor {supplier_id} dado de alta en {country} ({status})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3367,6 +3469,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Renegociar se planifica con el histórico de cambios; la tarifa ya está registrada."
         },
+        "x-level": "info",
+        "x-value": "change_pct",
+        "x-message": "Tarifa del proveedor {supplier_id}: {previous_rate} → {new_rate} {currency} ({change_pct} %)",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3460,6 +3565,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Buscar proveedores alternativos se decide con la cobertura por categoría, revisada a diario."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Proveedor {supplier_id}: {previous_status} → {new_status}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3545,6 +3653,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Revisar si el borrado debió ser suspensión es una tarea periódica."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Proveedor {supplier_id} eliminado ({status_at_deletion})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3625,6 +3736,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Planificar visitas y mantenimiento usa el acumulado por sede. La atención de cada incidencia ya ocurre en el gestor, no en la telemetría."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Incidencia {incident_id} ({category}) registrada en {branch}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3705,6 +3819,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Los tiempos objetivo de respuesta se fijan y revisan con datos de semanas."
         },
+        "x-level": "info",
+        "x-value": "minutes_in_previous_status",
+        "x-message": "Incidencia {incident_id}: {previous_status} → {new_status} tras {minutes_in_previous_status} min",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3799,6 +3916,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Revisar el ciclo de vida o la interfaz se decide con el acumulado."
         },
+        "x-level": "warn",
+        "x-value": null,
+        "x-message": "Incidencia {incident_id}: transición {current_status} → {requested_status} rechazada",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3869,6 +3989,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "La capacitación por calidad de los reportes es periódica."
         },
+        "x-level": "info",
+        "x-value": "invalid_rows",
+        "x-message": "Informe de incidencias analizado: {valid_rows} filas válidas y {invalid_rows} inválidas de {total_rows}",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -3992,6 +4115,9 @@
           "cadence": "diario (cierre 02:00 hora local)",
           "justification": "Mantener o sustituir la exportación se decide con meses de uso."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "Informe de incidencias exportado {analysis_age_minutes} min después del análisis",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -4052,6 +4178,9 @@
           "cadence": "segundos",
           "justification": "Un reinicio inesperado o un arranque con el correo desactivado en producción hay que verlo en el momento, antes de que lo noten los usuarios."
         },
+        "x-level": "info",
+        "x-value": null,
+        "x-message": "API iniciada (versión {app_version})",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"
@@ -4125,6 +4254,9 @@
           "cadence": "segundos",
           "justification": "Un script de carga ejecutado contra producción mete datos sin trazabilidad en los indicadores de negocio: hay que detectarlo y retirarlos antes del batch diario."
         },
+        "x-level": "info",
+        "x-value": "affected_rows",
+        "x-message": "Semilla {script} en {target} ({mode}): {affected_rows} filas",
         "allOf": [
           {
             "$ref": "#/definitions/envelope"

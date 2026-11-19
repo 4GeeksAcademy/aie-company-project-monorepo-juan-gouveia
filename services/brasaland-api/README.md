@@ -15,7 +15,7 @@ Brasaland's central API, built with FastAPI and organized by domain as described
 - **Inventory (Milestone 5, branch `feature/inventory-orm`):** 6 routes under `/api/v1/inventory`, with calculated stock and no way to edit it directly. See [`inventory` domain](#inventory-domain).
 - **Passwords (AUTH-03, branch `feature/password-reset`):** reset by email (Resend) and change while signed in. See [Password reset and change](#password-reset-and-change).
 - **Incident manager (branch `feature/incident-manager`):** creation, filtered list, detail, status changes and metrics. See [Centralized incident manager](#centralized-incident-manager).
-- **Telemetry (branch `feature/telemetry-capture`):** temporary receiver `POST /telemetry/events`, which validates the format of the backoffice batches and answers `{"received": N}` without storing anything. See [Telemetry receiver](#telemetry-receiver-post-telemetryevents).
+- **Telemetry (branches `feature/telemetry-capture` and `feature/telemetry-storage`):** `POST /telemetry/events` validates each event of the backoffice batches on its own, stores the valid ones in the Supabase `telemetry_events` table with a single INSERT per batch and answers `{"received", "stored", "rejected"}`. See [Telemetry receiver](#telemetry-receiver-post-telemetryevents).
 - **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03), `GET /health` and `POST /telemetry/events` (telemetry receiver). That includes the 7 `incidents` routes (2 from the analyzer and 5 from the manager) the 6 `suppliers` routes and the 6 `inventory` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
 - **Storage:**
   - The latest incident analysis is kept in memory and is lost when the API restarts.
@@ -153,8 +153,12 @@ app/
     │   ├── cache.py        # Cache for GET /products (60 s) and GET /orders (5 min); writes clear it
     │   └── seed.py         # Briefing seed data (`uv run seed-inventory`)
     ├── telemetry/
-    │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch and TelemetryReceipt
-    │   └── router.py       # POST /telemetry/events: validates, logs and answers; stores nothing
+    │   ├── models.py       # telemetry_events table (SQLModel with its own registry, outside init_db)
+    │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch (loose) and TelemetryReceipt
+    │   ├── catalog.py      # GENERATED from event-schemas.json: allowlist, level, value and message per event
+    │   ├── generate_catalog.py # `uv run telemetry-catalog`: regenerates catalog.py
+    │   ├── service.py      # Per-event validation, event to row and bulk insert with ON CONFLICT
+    │   └── router.py       # POST /telemetry/events: validates, stores, logs and answers
     └── suppliers/
         ├── models.py       # Pydantic models: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Suppliers table; path and opening come from core/storage.py
@@ -288,6 +292,7 @@ Entity and field names are exactly the briefing's. The ORM models (`models.py`) 
 - **`user_uuid`** is the TinyDB `id` of the authenticated user; the API sets it from the token. Sending it in the body returns 422. It is not an FK: users are not replicated in Supabase.
 - **`created_at`** is set by the API, in UTC.
 - **`unit_cost` and `waste_reason`** (telemetry capture, gaps B5 and B6 of the [plan](../../docs/telemetry/telemetry-plan.md)): responses return them as `null` for older orders. On an existing database, `create_all` does not add these columns: run [`migrations/001_inventory_unit_cost_waste_reason.sql`](./migrations/001_inventory_unit_cost_waste_reason.sql) once in the Supabase SQL Editor **before** starting the API with this code.
+- **RLS in Supabase** (telemetry storage, Phase 4): Supabase exposes the `public` tables through its REST API to the `anon` and `authenticated` roles, and the inventory tables were created without RLS. [`migrations/003_inventory_rls.sql`](./migrations/003_inventory_rls.sql) enables RLS with no policies and revokes those roles' privileges (also on the `id` sequences), as 002 does for `telemetry_events`. The API connects as `postgres`, which is not subject to RLS, so nothing changes for it. Run it once in the SQL Editor, and again if the tables are recreated on a new database. `tests/core/test_migrations.py` fails if an API table is left without RLS in some migration.
 
 ### Endpoints
 
@@ -412,19 +417,32 @@ Returns `{"status": "ok"}` (`HealthResponse`). It is outside `/api/v1` and has n
 
 ## Telemetry receiver (`POST /telemetry/events`)
 
-**Temporary** receiver for the capture phase ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 13). The backoffice sends its events in batches and this endpoint checks that they arrive in the right format. **It stores nothing**: storage is the next phase, which will change the body of the route without changing its contract.
+Receiver of the storage phase ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 14). The backoffice sends its events in batches; the receiver validates **each event on its own**, stores the valid ones in the Supabase `telemetry_events` table with a single statement and answers what it stored and what it rejected. An invalid event does not fail the batch. The URL and the batch format are those of the capture phase: the backoffice did not change.
 
 - **Route:** outside `/api/v1` and **public**, like `/health`. Telemetry is a separate entry point, not a versioned business resource, and `navigator.sendBeacon` cannot send `Authorization`.
-- **Body:** `{"events": [...]}`, with 1 to 100 events. Each one is validated with `TelemetryEvent`, the plan's Event Envelope: `eventId`, `timestamp` (ISO 8601 in UTC with milliseconds), `sessionId`, `userId`, `event_type` (`entity_action`), `schemaVersion` (SemVer), `requestId` and `properties`, plus `source` and `environment`. Every field is required (it can be `null` where the plan allows it) and extra fields are rejected. `properties` is only validated as an object; the backoffice already checks each event's allowlist before sending it.
+- **Body:** `{"events": [...]}`, read loosely: each element arrives unvalidated and any other key is ignored. If the body is not a JSON object with an `events` list, it answers `422 invalid_request`; with more than 100 events, `422 too_many_events`.
+- **Per-event validation:**
+  1. the envelope, with `TelemetryEvent.model_validate` (the capture-phase model, unchanged): `eventId`, `timestamp` (ISO 8601 in UTC with milliseconds), `sessionId`, `userId`, `event_type`, `schemaVersion`, `requestId`, `properties`, `source` and `environment`, with no extra fields;
+  2. `properties`, against the catalog generated from `docs/telemetry/event-schemas.json` (`app/domains/telemetry/catalog.py`): the `event_type` must exist, the required keys must be present and no key may fall outside the allowlist. Values PostgreSQL cannot store (NaN, infinities, the NUL character) are rejected too.
+- **Storage:** `INSERT … VALUES (…), (…) ON CONFLICT (id) DO NOTHING`, one statement per batch in one transaction. The row `id` is the `eventId`, so a retry or a repeated `sendBeacon` does not create another row. Each event becomes a row as section 14.2 of the plan says: `service` comes from `source` (`browser` → `backoffice`), `level`, `value` and `message` come from the catalog, and `tags` is `properties` plus `session_id`, `user_id`, `request_id`, `schema_version` and `environment`.
 - **Content type:** `application/json` (`fetch`) or `text/plain` (`sendBeacon`, which cannot send JSON to another origin without a CORS preflight). Both are read as JSON.
-- **Response:** `200 {"received": N}`. A batch that does not follow the format answers `422 invalid_request`, with the fields in `details`, and a body over 256 KB, `413 batch_too_large`.
-- **Log:** one line per batch in the `api.telemetry` logger, with the count and the `event_type` of each event:
+- **Response:** `200 {"received": N, "stored": M, "rejected": R}`, with `N = M + R`, even if every event is rejected. Repeated events count as `stored`, because they are already stored. If the database cannot store the batch (down, or the table is missing), `503 telemetry_storage_unavailable` and nothing is stored: the backoffice retries 5xx. A body over 256 KB, `413 batch_too_large`.
+- **Log:** one line per batch in the `api.telemetry` logger, with the received, stored, repeated and rejected counts, the stored types and, for each rejection (up to 10), its position, type and the field that failed. **It never copies values**: key names that do not look like an identifier are hidden.
 
   ```
-  INFO:     api.telemetry - Lote de telemetría recibido: 2 eventos | page_viewed, login_failed
+  WARNING:  api.telemetry - Lote de telemetría: 3 recibidos, 2 guardados (1 repetidos), 1 rechazados | page_viewed, login_failed | rechazos: events[2] login_failed: properties.email: fuera del allowlist
   ```
 
+- **Catalog:** after changing `event-schemas.json`, `uv run telemetry-catalog` regenerates `catalog.py`. A test fails if they do not match.
 - **CORS:** the browser calls this endpoint directly, not through the BFF. That is why it is the only route with CORS (`app/core/cors.py`): it only allows `POST` from the `FRONTEND_URL` origin.
+
+### `telemetry_events` table (storage phase)
+
+Events are stored in the Supabase `telemetry_events` table ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 14): eight columns (`id`, `timestamp`, `service`, `event_type`, `level`, `value`, `message` and `tags` as JSONB), indexes on `timestamp` and `event_type` and a GIN index on `tags`.
+
+- **Only the migration creates it.** Run [`migrations/002_telemetry_events.sql`](./migrations/002_telemetry_events.sql) once in the Supabase SQL Editor. It is idempotent. The API does not create this table at startup: its model (`app/domains/telemetry/models.py`) has its own registry, outside the `init_db` `create_all`, so the table can never exist without the GIN index, the trigger or RLS.
+- **Insert only.** The API never updates or deletes events, and in the database a trigger rejects any `UPDATE`, `DELETE` or `TRUNCATE`. Exceptional purges (retention, right to erasure) are done by hand, as the migration itself explains.
+- **No access from the Supabase REST API.** RLS is enabled with no policies, and the `anon` and `authenticated` roles have no privileges. The API connects as `postgres`, which is not subject to RLS.
 
 ## Timing log
 
