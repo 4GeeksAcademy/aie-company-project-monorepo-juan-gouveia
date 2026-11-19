@@ -9,6 +9,7 @@ import {
   TELEMETRY_ENVIRONMENT,
 } from "@/lib/telemetry/config";
 import { buildEnvelope } from "@/lib/telemetry/envelope";
+import { listenForHide, setBeaconFlush } from "@/lib/telemetry/lifecycle";
 import { createTelemetryQueue, type TelemetryQueue } from "@/lib/telemetry/queue";
 import { compactProperties, validateEvent } from "@/lib/telemetry/validate";
 
@@ -46,14 +47,15 @@ function getQueue(endpoint: string): TelemetryQueue {
     onDiscard: (count, reason) => warn(`${count} evento(s) descartado(s): ${reason}.`),
   });
   // Al ocultar o cerrar la pestaña, el navegador cancela las peticiones en curso: lo pendiente sale
-  // con sendBeacon. pagehide cubre los navegadores que no emiten visibilitychange al cerrar.
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") created.flushWithBeacon();
-  });
-  window.addEventListener("pagehide", () => created.flushWithBeacon());
+  // con sendBeacon (lib/telemetry/lifecycle.ts).
+  setBeaconFlush(() => created.flushWithBeacon());
   queue = created;
   return created;
 }
+
+// Se escucha desde que se carga el servicio, para que las tareas previas al ocultarse (las métricas
+// de carga de la vista) se ejecuten aunque todavía no se haya emitido nada.
+listenForHide();
 
 export function track(eventType: string, properties: Record<string, unknown>): void {
   if (typeof window === "undefined") return;

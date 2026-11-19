@@ -22,3 +22,17 @@ export function apiRouteTemplate(path: string): string {
   );
   return `/api/v1/${templated.join("/")}`;
 }
+
+// Rutas dinámicas del backoffice (app/): el segmento variable se sustituye por el nombre de su carpeta.
+const DYNAMIC_PAGES: ReadonlyArray<[RegExp, string]> = [[/^\/talento\/candidates\/[^/]+/, "/talento/candidates/[id]"]];
+
+// Ruta de una vista del backoffice como plantilla: sin query string, sin barra final y con los ids
+// sustituidos (/talento/candidates/abc → /talento/candidates/[id]). Los ids de candidatos vienen de
+// una API externa y pueden identificar a una persona: nunca salen en un evento.
+export function pageRouteTemplate(pathname: string): string {
+  const path = pathname.split(/[?#]/)[0].replace(/\/+$/, "") || "/";
+  for (const [pattern, template] of DYNAMIC_PAGES) {
+    if (pattern.test(path)) return path.replace(pattern, template);
+  }
+  return path;
+}

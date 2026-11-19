@@ -1,4 +1,5 @@
 import type { ApiError } from "@/lib/api-client";
+import { getToken, readTokenClaims } from "@/lib/auth/token";
 import { track } from "@/lib/telemetry";
 import { withRequestId } from "@/lib/telemetry/request-context";
 import { apiRouteTemplate } from "@/lib/telemetry/routes";
@@ -33,9 +34,55 @@ function productIdFromPath(path: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-export function reportApiError(method: string, path: string, error: ApiError): void {
+// --- Sesión (§5.2) ---------------------------------------------------------------------------------
+// Varias peticiones en paralelo con el mismo token caducado (resumen y listado) son un solo hecho: un
+// evento por token y motivo cada 60 s (§10).
+const SESSION_REPEAT_MS = 60_000;
+const lastSessionEvent = new Map<string, number>();
+
+function firstInWindow(key: string, now: number): boolean {
+  const previous = lastSessionEvent.get(key);
+  if (previous !== undefined && now - previous < SESSION_REPEAT_MS) return false;
+  lastSessionEvent.set(key, now);
+  return true;
+}
+
+function trackSessionRejection(path: string, error: ApiError, now: number): void {
+  if (error.status !== 401) return;
+  const claims = readTokenClaims(getToken());
+  const tokenKey = `${claims?.sub ?? "?"}:${claims?.iat ?? "?"}`;
+  const route = apiRouteTemplate(path);
+  if (error.code === "token_expired" && firstInWindow(`expired:${tokenKey}`, now)) {
+    track("session_expired", {
+      route,
+      // Antigüedad del token caducado, desde su `iat` (leído sin verificar la firma).
+      token_age_minutes: claims?.iat ? Math.max(0, Math.floor((now / 1000 - claims.iat) / 60)) : undefined,
+    });
+  }
+  if ((error.code === "invalid_token" || error.code === "session_revoked") && firstInWindow(`${error.code}:${tokenKey}`, now)) {
+    track("auth_token_rejected", { rejection_reason: error.code, route });
+  }
+}
+
+// --- Enlace de recuperación de contraseña (§5.2) ---------------------------------------------------
+const RESET_LINK_REJECTIONS = new Set(["invalid_reset_token", "reset_token_expired", "reset_token_used"]);
+
+function trackResetLinkRejection(path: string, error: ApiError): void {
+  if (!RESET_LINK_REJECTIONS.has(error.code)) return;
+  const stage = path === "/auth/reset-password/validate" ? "validate" : path === "/auth/reset-password" ? "reset" : null;
+  if (stage) track("password_reset_link_rejected", { rejection_reason: error.code, stage });
+}
+
+// Solo para las pruebas.
+export function resetApiEventThrottle(): void {
+  lastSessionEvent.clear();
+}
+
+export function reportApiError(method: string, path: string, error: ApiError, now: number = Date.now()): void {
   try {
     withRequestId(error.requestId, () => {
+      trackSessionRejection(path, error, now);
+      trackResetLinkRejection(path, error);
       const rejection = directStockEditRejection(method, path, error);
       if (rejection) {
         track("direct_stock_edit_rejected", {

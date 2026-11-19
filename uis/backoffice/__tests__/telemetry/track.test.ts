@@ -233,7 +233,8 @@ describe("envío", () => {
     track("page_viewed", PAGE_VIEW);
 
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-    document.dispatchEvent(new Event("visibilitychange"));
+    // Como en el navegador, el evento sube de document a window.
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
 
     expect(sendBeacon).toHaveBeenCalledTimes(1);
     expect(sendBeacon.mock.calls[0][0]).toBe(ENDPOINT);

@@ -5,7 +5,7 @@ import { createContext, useCallback, useEffect, useMemo, useRef, useState } from
 import { getCurrentUser } from "@/lib/auth/api";
 import { currentPath, LOGIN_PATH, loginUrl } from "@/lib/auth/navigation";
 import { clearToken, getToken, subscribeToToken } from "@/lib/auth/token";
-import { rememberUserRole } from "@/lib/telemetry/session";
+import { onSessionValidated, trackLogout } from "@/lib/telemetry/auth-events";
 import type { CurrentUser } from "@/types/auth";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -49,8 +49,8 @@ export default function SessionProvider({ children }: { children: React.ReactNod
     getCurrentUser()
       .then((current) => {
         if (id !== requestId.current) return;
-        // Telemetría: el rol no está en el token; los eventos que lo llevan lo toman de aquí.
-        rememberUserRole(current.role);
+        // Telemetría: guarda el rol (no está en el token) y emite `login_succeeded` tras un login.
+        onSessionValidated(current.role);
         setUserState(current);
         setStatus("authenticated");
       })
@@ -87,6 +87,8 @@ export default function SessionProvider({ children }: { children: React.ReactNod
 
   const logout = useCallback(() => {
     requestId.current++;
+    // Telemetría: antes de borrar el token, para medir la duración de la sesión.
+    trackLogout();
     clearToken();
     setUserState(null);
     router.replace(LOGIN_PATH);
