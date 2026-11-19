@@ -15,7 +15,8 @@ Brasaland's central API, built with FastAPI and organized by domain as described
 - **Inventory (Milestone 5, branch `feature/inventory-orm`):** 6 routes under `/api/v1/inventory`, with calculated stock and no way to edit it directly. See [`inventory` domain](#inventory-domain).
 - **Passwords (AUTH-03, branch `feature/password-reset`):** reset by email (Resend) and change while signed in. See [Password reset and change](#password-reset-and-change).
 - **Incident manager (branch `feature/incident-manager`):** creation, filtered list, detail, status changes and metrics. See [Centralized incident manager](#centralized-incident-manager).
-- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03) and `GET /health`. That includes the 7 `incidents` routes (2 from the analyzer and 5 from the manager) the 6 `suppliers` routes and the 6 `inventory` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
+- **Telemetry (branch `feature/telemetry-capture`):** temporary receiver `POST /telemetry/events`, which validates the format of the backoffice batches and answers `{"received": N}` without storing anything. See [Telemetry receiver](#telemetry-receiver-post-telemetryevents).
+- **Protected routes (AUTH-01):** every route requires a valid token except `POST /auth/login`, `POST /users` (sign-up), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (all three from AUTH-03), `GET /health` and `POST /telemetry/events` (telemetry receiver). That includes the 7 `incidents` routes (2 from the analyzer and 5 from the manager) the 6 `suppliers` routes and the 6 `inventory` routes, which are protected when their routers are registered in `main.py`. A test walks the OpenAPI schema and fails if a new route is accidentally left unprotected.
 - **Storage:**
   - The latest incident analysis is kept in memory and is lost when the API restarts.
   - Suppliers and the manager's incidents are stored in a TinyDB file, `storage/brasaland-db.json`, which survives restarts. Each has its own table, and they share one lock per file. TinyDB is temporary until Postgres with an ORM exists.
@@ -71,8 +72,9 @@ The API **does not start** if `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` or `DA
 | `BRASALAND_DB_PATH` | No | TinyDB file for suppliers; defaults to `storage/brasaland-db.json` |
 | `RESEND_API_KEY` | No | [Resend](https://resend.com/api-keys) API key with "Sending access". **It is a secret: it only goes in `.env`.** Without it, the API starts, logs a warning and does not send password reset emails |
 | `EMAIL_FROM` | No | Sender of the emails; defaults to `Brasaland <onboarding@resend.dev>`. Without a verified domain in Resend, that sender only delivers to the Resend account's email |
-| `FRONTEND_URL` | No | Backoffice address, used for the `<FRONTEND_URL>/reset-password?token=...` link; defaults to `http://localhost:3001` |
+| `FRONTEND_URL` | No | Backoffice address, used for the `<FRONTEND_URL>/reset-password?token=...` link; defaults to `http://localhost:3001`. Its origin is also the only one allowed by the `/telemetry` CORS |
 | `PASSWORD_RESET_EXPIRE_MINUTES` | No | Minutes a reset link stays valid, between 15 and 60; defaults to 30. With a value outside that range, the API does not start |
+| `TELEMETRY_ENDPOINT` | No | URL of the telemetry receiver (today, `http://localhost:8000/telemetry/events`). Declared from the start to set the pattern: the API does not send events yet, so it is only validated (a full `http(s)://` URL; otherwise the API does not start) and logged at startup |
 
 ## Tests
 
@@ -106,7 +108,9 @@ app/
 │   ├── security.py         # bcrypt hashing and JWTs: access tokens and reset tokens (purpose, jti)
 │   ├── email.py            # EmailMessage and senders: Resend, or disabled without RESEND_API_KEY
 │   ├── storage.py          # Shared brasaland-db.json: path, opening, per-file lock and insert_with_file_id
-│   ├── timing.py           # Timing middleware: one log line per request (api.timing logger)
+│   ├── timing.py           # Timing middleware and X-Request-Id: one log line per request (api.timing logger)
+│   ├── logs.py             # console_logger: own loggers with console output
+│   ├── cors.py             # CORS limited to a route prefix (only /telemetry)
 │   ├── cache.py            # TTLCache: thread-safe in-memory cache with TTL and invalidation
 │   └── errors.py           # Single error format
 └── domains/
@@ -148,6 +152,9 @@ app/
     │   ├── router.py       # /inventory endpoints
     │   ├── cache.py        # Cache for GET /products (60 s) and GET /orders (5 min); writes clear it
     │   └── seed.py         # Briefing seed data (`uv run seed-inventory`)
+    ├── telemetry/
+    │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch and TelemetryReceipt
+    │   └── router.py       # POST /telemetry/events: validates, logs and answers; stores nothing
     └── suppliers/
         ├── models.py       # Pydantic models: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Suppliers table; path and opening come from core/storage.py
@@ -402,13 +409,31 @@ Ticket AUTH-03. Emails are sent with [Resend](https://resend.com), chosen over S
 
 Returns `{"status": "ok"}` (`HealthResponse`). It is outside `/api/v1` and has no authentication.
 
+## Telemetry receiver (`POST /telemetry/events`)
+
+**Temporary** receiver for the capture phase ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 13). The backoffice sends its events in batches and this endpoint checks that they arrive in the right format. **It stores nothing**: storage is the next phase, which will change the body of the route without changing its contract.
+
+- **Route:** outside `/api/v1` and **public**, like `/health`. Telemetry is a separate entry point, not a versioned business resource, and `navigator.sendBeacon` cannot send `Authorization`.
+- **Body:** `{"events": [...]}`, with 1 to 100 events. Each one is validated with `TelemetryEvent`, the plan's Event Envelope: `eventId`, `timestamp` (ISO 8601 in UTC with milliseconds), `sessionId`, `userId`, `event_type` (`entity_action`), `schemaVersion` (SemVer), `requestId` and `properties`, plus `source` and `environment`. Every field is required (it can be `null` where the plan allows it) and extra fields are rejected. `properties` is only validated as an object; the backoffice already checks each event's allowlist before sending it.
+- **Content type:** `application/json` (`fetch`) or `text/plain` (`sendBeacon`, which cannot send JSON to another origin without a CORS preflight). Both are read as JSON.
+- **Response:** `200 {"received": N}`. A batch that does not follow the format answers `422 invalid_request`, with the fields in `details`, and a body over 256 KB, `413 batch_too_large`.
+- **Log:** one line per batch in the `api.telemetry` logger, with the count and the `event_type` of each event:
+
+  ```
+  INFO:     api.telemetry - Lote de telemetría recibido: 2 eventos | page_viewed, login_failed
+  ```
+
+- **CORS:** the browser calls this endpoint directly, not through the BFF. That is why it is the only route with CORS (`app/core/cors.py`): it only allows `POST` from the `FRONTEND_URL` origin.
+
 ## Timing log
 
-`app/core/timing.py` writes one line per request to the `api.timing` logger, with the method, the path (without the query string), the status and the duration inside the API:
+`app/core/timing.py` writes one line per request to the `api.timing` logger, with the method, the path (without the query string), the status, the duration inside the API and the request id:
 
 ```
-INFO:     api.timing - GET /api/v1/inventory/products → 200 | 98.6ms
+INFO:     api.timing - GET /api/v1/inventory/products → 200 | 98.6ms | 0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19
 ```
+
+**Request id:** the backoffice sends a UUID in `X-Request-Id` with every call, and the BFF forwards it. The middleware uses it if it is a valid UUID; if it is missing or invalid, it creates one. It also returns it in the response's `X-Request-Id` header. It is the `requestId` of the telemetry events: with it, a browser event can be joined with the log line of the same request.
 
 It is used to choose, with data, which endpoints deserve a cache. Unhandled errors are logged too, as 500. With `--no-access-log`, uvicorn leaves only these lines.
 
@@ -474,7 +499,7 @@ Both show the absolute path of the database they use, on purpose: only the perso
 
 ## Who uses it
 
-- **`uis/backoffice`:** through its intermediary `app/api/[...path]/route.ts` (BFF pattern), with the server variable `API_BASE_URL=http://localhost:8000/api/v1`. The browser never calls the API directly, so no CORS is needed. The `/incidencias` and `/proveedores` tools use it, and so do the session views (`/login`, `/register`). The browser stores the token in `localStorage` and sends it in `Authorization: Bearer`; the intermediary forwards it as is (ticket AUTH-02).
+- **`uis/backoffice`:** through its intermediary `app/api/[...path]/route.ts` (BFF pattern), with the server variable `API_BASE_URL=http://localhost:8000/api/v1`. The browser does not call the API directly, so no CORS is needed; the only exception is the telemetry receiver (see [Telemetry receiver](#telemetry-receiver-post-telemetryevents)). The `/incidencias` and `/proveedores` tools use it, and so do the session views (`/login`, `/register`). The browser stores the token in `localStorage` and sends it in `Authorization: Bearer`; the intermediary forwards it as is (ticket AUTH-02).
 - **`scripts/incident-report/analyze.py`:** uses the same rules as the API, from `packages/shared`; it does not use HTTP.
 - **`scripts/seed_incidents.py`:** loads the historical CSV into the incident manager through the API repository (`IncidentRepository`) on the same TinyDB file; it does not use HTTP.
 

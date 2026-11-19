@@ -36,6 +36,7 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-}
       FRONTEND_URL: ${FRONTEND_URL:-}
       PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-}
+      TELEMETRY_ENDPOINT: ${TELEMETRY_ENDPOINT:-}
       # Recarga en caliente por sondeo (los bind mounts no propagan los eventos de archivos).
       WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
     healthcheck:

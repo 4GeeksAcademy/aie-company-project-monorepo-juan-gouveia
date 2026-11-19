@@ -8,13 +8,20 @@ Restablecimiento de contraseña y correo (ticket AUTH-03):
 - PASSWORD_RESET_EXPIRE_MINUTES: validez del enlace, 30 por defecto y entre 15 y 60.
 - RESEND_API_KEY: opcional. Sin ella la API arranca, pero no envía correos (lo avisa en el log).
 - EMAIL_FROM: remitente; por defecto, el de pruebas de Resend.
-- FRONTEND_URL: dirección del backoffice, para construir el enlace de restablecimiento.
+- FRONTEND_URL: dirección del backoffice, para construir el enlace de restablecimiento. Su origen
+  es también el único que puede enviar telemetría desde el navegador (CORS de /telemetry).
+
+Telemetría (captura de eventos):
+- TELEMETRY_ENDPOINT: opcional. URL del receptor de telemetría (hoy, el stub POST /telemetry/events
+  de esta misma API). Se declara desde el principio para fijar el patrón: el emisor de eventos de la
+  API la usará en la fase de almacenamiento. Hoy solo se valida y se registra al arrancar.
 """
 
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 # Prefijo común de las rutas de la API (propuesta de arquitectura, 3.3).
 API_PREFIX = "/api/v1"
@@ -35,6 +42,7 @@ EMAIL_FROM_ENV = "EMAIL_FROM"
 DEFAULT_EMAIL_FROM = "Brasaland <onboarding@resend.dev>"
 FRONTEND_URL_ENV = "FRONTEND_URL"
 DEFAULT_FRONTEND_URL = "http://localhost:3001"
+TELEMETRY_ENDPOINT_ENV = "TELEMETRY_ENDPOINT"
 
 
 class ConfigError(RuntimeError):
@@ -52,6 +60,8 @@ class Settings:
     email_from: str = DEFAULT_EMAIL_FROM
     # Sin barra final: el enlace se construye como f"{frontend_url}/reset-password?token=...".
     frontend_url: str = DEFAULT_FRONTEND_URL
+    # None: no hay receptor configurado. Hoy no se usa para enviar nada (ver el docstring).
+    telemetry_endpoint: str | None = None
 
     @property
     def email_enabled(self) -> bool:
@@ -85,6 +95,7 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         resend_api_key=environ.get(RESEND_API_KEY_ENV, "").strip() or None,
         email_from=environ.get(EMAIL_FROM_ENV, "").strip() or DEFAULT_EMAIL_FROM,
         frontend_url=_load_frontend_url(environ),
+        telemetry_endpoint=_load_telemetry_endpoint(environ),
     )
 
 
@@ -109,6 +120,26 @@ def _load_frontend_url(environ: Mapping[str, str]) -> str:
     if not url.startswith(("http://", "https://")):
         raise ConfigError(f"{FRONTEND_URL_ENV} debe empezar por http:// o https://.")
     return url
+
+
+def _load_telemetry_endpoint(environ: Mapping[str, str]) -> str | None:
+    url = environ.get(TELEMETRY_ENDPOINT_ENV, "").strip()
+    if not url:
+        return None
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ConfigError(f"{TELEMETRY_ENDPOINT_ENV} debe ser una URL completa que empiece por http:// o https://.")
+    return url
+
+
+def frontend_origin(environ: Mapping[str, str] = os.environ) -> str:
+    """Origen (esquema, host y puerto) de FRONTEND_URL, para CORS.
+
+    No pasa por get_settings: el middleware se registra al importar la aplicación, antes de que
+    existan las variables obligatorias en las pruebas, y solo necesita esta variable opcional.
+    """
+    parts = urlsplit(_load_frontend_url(environ))
+    return f"{parts.scheme}://{parts.netloc}"
 
 
 @lru_cache

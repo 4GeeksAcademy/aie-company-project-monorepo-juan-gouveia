@@ -15,7 +15,8 @@ API central de Brasaland, hecha con FastAPI y organizada por dominios según [`d
 - **Inventario (Hito 5, rama `feature/inventory-orm`):** 6 rutas bajo `/api/v1/inventory`, con el stock calculado y sin ninguna forma de editarlo directamente. Ver [Dominio `inventory`](#dominio-inventory).
 - **Contraseñas (AUTH-03, rama `feature/password-reset`):** restablecimiento por correo (Resend) y cambio con la sesión iniciada. Ver [Restablecimiento y cambio de contraseña](#restablecimiento-y-cambio-de-contraseña).
 - **Gestor de incidencias (rama `feature/incident-manager`):** alta, listado con filtros, detalle, cambio de estado y métricas. Ver [Gestor de incidencias centralizado](#gestor-de-incidencias-centralizado).
-- **Rutas protegidas (AUTH-01):** todas las rutas exigen un token válido salvo `POST /auth/login`, `POST /users` (registro), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (las tres de AUTH-03) y `GET /health`. Eso incluye las 7 de `incidents` (2 del analizador y 5 del gestor) las 6 de `suppliers` y las 6 de `inventory`, que se protegen al registrar sus routers en `main.py`. Una prueba recorre el esquema OpenAPI y falla si una ruta nueva queda sin proteger por olvido.
+- **Telemetría (rama `feature/telemetry-capture`):** receptor provisional `POST /telemetry/events`, que valida el formato de los lotes del backoffice y responde `{"received": N}` sin guardar nada. Ver [Receptor de telemetría](#receptor-de-telemetría-post-telemetryevents).
+- **Rutas protegidas (AUTH-01):** todas las rutas exigen un token válido salvo `POST /auth/login`, `POST /users` (registro), `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/reset-password/validate` (las tres de AUTH-03), `GET /health` y `POST /telemetry/events` (receptor de telemetría). Eso incluye las 7 de `incidents` (2 del analizador y 5 del gestor) las 6 de `suppliers` y las 6 de `inventory`, que se protegen al registrar sus routers en `main.py`. Una prueba recorre el esquema OpenAPI y falla si una ruta nueva queda sin proteger por olvido.
 - **Almacenamiento:**
   - El último análisis de incidentes se guarda en memoria y se pierde al reiniciar la API.
   - Los proveedores y las incidencias del gestor se guardan en un archivo TinyDB, `storage/brasaland-db.json`, que se conserva entre reinicios. Cada uno tiene su tabla, y comparten un bloqueo por archivo. TinyDB es provisional hasta que exista Postgres con ORM.
@@ -71,8 +72,9 @@ La API **no arranca** si falta `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` o `DA
 | `BRASALAND_DB_PATH` | No | Archivo TinyDB de proveedores; por defecto, `storage/brasaland-db.json` |
 | `RESEND_API_KEY` | No | API key de [Resend](https://resend.com/api-keys), con permiso "Sending access". **Es un secreto: va solo en `.env`.** Sin ella, la API arranca, lo avisa en el log y no envía los correos de restablecimiento |
 | `EMAIL_FROM` | No | Remitente de los correos; por defecto, `Brasaland <onboarding@resend.dev>`. Sin dominio verificado en Resend, ese remitente solo entrega al email de la cuenta de Resend |
-| `FRONTEND_URL` | No | Dirección del backoffice, para el enlace `<FRONTEND_URL>/reset-password?token=...`; por defecto, `http://localhost:3001` |
+| `FRONTEND_URL` | No | Dirección del backoffice, para el enlace `<FRONTEND_URL>/reset-password?token=...`; por defecto, `http://localhost:3001`. Su origen es también el único que admite el CORS de `/telemetry` |
 | `PASSWORD_RESET_EXPIRE_MINUTES` | No | Minutos de validez del enlace de restablecimiento, entre 15 y 60; por defecto, 30. Con un valor fuera de ese rango, la API no arranca |
+| `TELEMETRY_ENDPOINT` | No | URL del receptor de telemetría (hoy, `http://localhost:8000/telemetry/events`). Se declara desde ya para fijar el patrón: la API todavía no envía eventos, así que solo se valida (URL `http(s)://` completa; si no lo es, la API no arranca) y se registra al arrancar |
 
 ## Pruebas
 
@@ -106,7 +108,9 @@ app/
 │   ├── security.py         # Hash bcrypt y JWT: tokens de acceso y de restablecimiento (purpose, jti)
 │   ├── email.py            # EmailMessage y emisores: Resend, o desactivado sin RESEND_API_KEY
 │   ├── storage.py          # brasaland-db.json compartido: ruta, apertura, bloqueo por archivo e insert_with_file_id
-│   ├── timing.py           # Middleware de timing: una línea de log por petición (logger api.timing)
+│   ├── timing.py           # Middleware de timing y X-Request-Id: una línea de log por petición (logger api.timing)
+│   ├── logs.py             # console_logger: loggers propios con salida por consola
+│   ├── cors.py             # CORS limitado a un prefijo de rutas (solo /telemetry)
 │   ├── cache.py            # TTLCache: caché en memoria con TTL e invalidación, segura entre hilos
 │   └── errors.py           # Formato único de errores, 400 de validación del gestor y 500 genérico
 └── domains/
@@ -148,6 +152,9 @@ app/
     │   ├── router.py       # Endpoints de /inventory
     │   ├── cache.py        # Caché de GET /products (60 s) y GET /orders (5 min); las escrituras la limpian
     │   └── seed.py         # Datos semilla del briefing (`uv run seed-inventory`)
+    ├── telemetry/
+    │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch y TelemetryReceipt
+    │   └── router.py       # POST /telemetry/events: valida, registra en el log y responde; no guarda nada
     └── suppliers/
         ├── models.py       # Modelos Pydantic: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Tabla de proveedores; la ruta y la apertura vienen de core/storage.py
@@ -402,13 +409,31 @@ Ticket AUTH-03. El correo se envía con [Resend](https://resend.com), elegido fr
 
 Devuelve `{"status": "ok"}` (`HealthResponse`). Está fuera de `/api/v1` y no lleva autenticación.
 
+## Receptor de telemetría (`POST /telemetry/events`)
+
+Receptor **provisional** de la fase de captura ([plan de telemetría](../../docs/telemetry/telemetry-plan.md), sección 13). El backoffice envía sus eventos en lotes y este endpoint comprueba que llegan con el formato correcto. **No guarda nada**: el almacenamiento es la fase siguiente, que cambiará el cuerpo de la ruta sin cambiar su contrato.
+
+- **Ruta:** fuera de `/api/v1` y **pública**, como `/health`. La telemetría es una vía de entrada aparte, no un recurso versionado del negocio, y `navigator.sendBeacon` no puede enviar `Authorization`.
+- **Cuerpo:** `{"events": [...]}`, con entre 1 y 100 eventos. Cada uno se valida con `TelemetryEvent`, el Event Envelope del plan: `eventId`, `timestamp` (ISO 8601 en UTC con milisegundos), `sessionId`, `userId`, `event_type` (`entidad_acción`), `schemaVersion` (SemVer), `requestId` y `properties`, más `source` y `environment`. Los campos son obligatorios (pueden ser `null` donde el plan lo permite) y no se admiten campos extra. `properties` se valida solo como objeto; el backoffice ya comprueba el allowlist de cada evento antes de enviarlo.
+- **Tipo de contenido:** `application/json` (`fetch`) o `text/plain` (`sendBeacon`, que no puede enviar JSON a otro origen sin una comprobación previa de CORS). Los dos se leen como JSON.
+- **Respuesta:** `200 {"received": N}`. Un lote que no cumple el formato responde `422 invalid_request`, con los campos en `details`, y un cuerpo de más de 256 KB, `413 batch_too_large`.
+- **Log:** una línea por lote en el logger `api.telemetry`, con la cantidad y el `event_type` de cada evento:
+
+  ```
+  INFO:     api.telemetry - Lote de telemetría recibido: 2 eventos | page_viewed, login_failed
+  ```
+
+- **CORS:** el navegador llama a este endpoint directamente, sin pasar por el BFF. Por eso es la única ruta con CORS (`app/core/cors.py`): solo admite `POST` desde el origen de `FRONTEND_URL`.
+
 ## Log de timing
 
-`app/core/timing.py` registra una línea por petición en el logger `api.timing`, con el método, la ruta (sin la query), el estado y la duración dentro de la API:
+`app/core/timing.py` registra una línea por petición en el logger `api.timing`, con el método, la ruta (sin la query), el estado, la duración dentro de la API y el id de la petición:
 
 ```
-INFO:     api.timing - GET /api/v1/inventory/products → 200 | 98.6ms
+INFO:     api.timing - GET /api/v1/inventory/products → 200 | 98.6ms | 0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19
 ```
+
+**Id de la petición:** el backoffice envía un UUID en `X-Request-Id` por cada llamada, y el BFF lo reenvía. El middleware lo usa si es un UUID válido; si falta o no lo es, crea uno. Además, lo devuelve en la cabecera `X-Request-Id` de la respuesta. Es el `requestId` de los eventos de telemetría: con él, un evento del navegador se une con la línea de log de la misma petición.
 
 Sirve para elegir con datos qué endpoints merecen caché. Los errores no controlados también se registran, como 500. Con `--no-access-log`, uvicorn deja solo estas líneas.
 
@@ -474,7 +499,7 @@ Los dos muestran la ruta absoluta de la base de datos que usan, a propósito: so
 
 ## Quién la usa
 
-- **`uis/backoffice`:** a través de su intermediario `app/api/[...path]/route.ts` (patrón BFF), con la variable de servidor `API_BASE_URL=http://localhost:8000/api/v1`. El navegador nunca llama a la API directamente, así que no hace falta CORS. Lo usan las herramientas `/incidencias` y `/proveedores`, y las vistas de sesión (`/login`, `/register`). El navegador guarda el token en `localStorage` y lo envía en `Authorization: Bearer`; el intermediario lo reenvía tal cual (ticket AUTH-02).
+- **`uis/backoffice`:** a través de su intermediario `app/api/[...path]/route.ts` (patrón BFF), con la variable de servidor `API_BASE_URL=http://localhost:8000/api/v1`. El navegador no llama a la API directamente, así que no hace falta CORS; la única excepción es el receptor de telemetría (ver [Receptor de telemetría](#receptor-de-telemetría-post-telemetryevents)). Lo usan las herramientas `/incidencias` y `/proveedores`, y las vistas de sesión (`/login`, `/register`). El navegador guarda el token en `localStorage` y lo envía en `Authorization: Bearer`; el intermediario lo reenvía tal cual (ticket AUTH-02).
 - **`scripts/incident-report/analyze.py`:** usa las mismas reglas que la API, desde `packages/shared`; no usa HTTP.
 - **`scripts/seed_incidents.py`:** carga el histórico del CSV en el gestor de incidencias usando el repositorio de la API (`IncidentRepository`) sobre el mismo archivo TinyDB; no usa HTTP.
 

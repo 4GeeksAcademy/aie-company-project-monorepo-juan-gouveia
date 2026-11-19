@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import ConfigError, get_settings, load_settings
+from app.core.config import ConfigError, frontend_origin, get_settings, load_settings
 from app.main import app
 
 VALID_KEY = "k" * 32
@@ -87,3 +87,26 @@ def test_custom_sender_and_frontend_url():
 def test_frontend_url_must_be_http():
     with pytest.raises(ConfigError, match="FRONTEND_URL"):
         load_settings({**BASE, "FRONTEND_URL": "backoffice.brasaland.com"})
+
+
+# --- Telemetría ------------------------------------------------------------------------------------
+
+
+def test_telemetry_endpoint_is_optional():
+    assert load_settings(BASE).telemetry_endpoint is None
+
+
+def test_reads_telemetry_endpoint():
+    settings = load_settings({**BASE, "TELEMETRY_ENDPOINT": " http://localhost:8000/telemetry/events "})
+    assert settings.telemetry_endpoint == "http://localhost:8000/telemetry/events"
+
+
+@pytest.mark.parametrize("url", ["localhost:8000/telemetry/events", "ftp://api/telemetry", "http://"])
+def test_telemetry_endpoint_must_be_a_full_http_url(url):
+    with pytest.raises(ConfigError, match="TELEMETRY_ENDPOINT"):
+        load_settings({**BASE, "TELEMETRY_ENDPOINT": url})
+
+
+def test_frontend_origin_drops_the_path():
+    assert frontend_origin({}) == "http://localhost:3001"
+    assert frontend_origin({"FRONTEND_URL": "https://bo.brasaland.com/app/"}) == "https://bo.brasaland.com"
