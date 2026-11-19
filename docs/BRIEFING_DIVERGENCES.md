@@ -26,6 +26,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 13. [Auditoría de serialización del backend](#auditoría-de-serialización-del-backend) (briefing "Auditoría de serialización", rama `feature/serialization-audit`)
 14. [Estrategia de caching](#estrategia-de-caching) (briefing "Caching", rama `feature/caching-optimisation`)
 15. [Plan de Telemetría](#plan-de-telemetría) (briefing de Brasaland "Proyectos de Telemetría" y enunciado del RFI, rama `feature/telemetry-plan`)
+16. [Captura de eventos de telemetría](#captura-de-eventos-de-telemetría) (enunciado "Sistema de captura", rama `feature/telemetry-capture`)
 
 ---
 
@@ -1262,3 +1263,130 @@ Son obligatorias en los otros 5 eventos obligatorios. En este son opcionales y s
 ### 3. Pull Request contra la rama anterior
 
 El enunciado oculta la rama destino y recuerda hacer merge a `main` antes de empezar la rama siguiente. Los PR #17 a #20 siguen abiertos, así que esta rama sale de `feature/caching-optimisation` y el PR apunta a ella, con el título exacto `docs: telemetry design plan`. GitHub cambiará su destino a `main` cuando se fusionen los anteriores, como en el resto de la cadena.
+
+---
+## Captura de eventos de telemetría
+
+Primera implementación del plan de telemetría, en la rama `feature/telemetry-capture`. El backoffice captura los eventos con un `TelemetryService` (`uis/backoffice/lib/telemetry/`) y los envía en lotes a un receptor provisional de la API (`POST /telemetry/events`), que valida el formato y responde `{"received": N}` sin guardar nada. Coincide con el enunciado en lo siguiente:
+
+- **Receptor:** el router propio en `services/`, el modelo Pydantic `TelemetryEvent` con los campos del envelope, el log con la cantidad y el `event_type` de cada evento, `TELEMETRY_ENDPOINT` en la configuración del backend y la URL del frontend en `NEXT_PUBLIC_TELEMETRY_ENDPOINT`.
+- **Servicio:** una única función pública `track(eventType, properties)`; cola local; lotes de 20 eventos o cada 10 s; `sendBeacon` en `visibilitychange`; 3 reintentos con espera exponencial; `eventId`, `sessionId`, `userId`, `timestamp`, `schemaVersion` y `requestId` puestos por el servicio.
+- **Eventos:** todas las métricas obligatorias, el piso técnico (errores de JavaScript, rendimiento y vistas), los eventos de negocio, con los nombres y el allowlist de `event-schemas.json`, sin PII.
+- **Actividad adicional:** Web Vitals con `useReportWebVitals` y la autenticación capturada en sus módulos, con la razón del login fallido y sin email ni contraseña.
+
+Las decisiones (C1 a C9) se tomaron con el desarrollador el 19 de noviembre de 2026. El plan (`docs/telemetry/telemetry-plan.md`, sección 13) y el esquema (catálogo 1.1.0) se actualizaron con ellas antes de escribir código.
+
+> **Estado:** completado y verificado en DevTools (2026-11-19), un commit por fase, hechos por el desarrollador.
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Emisor de los eventos que el plan asignaba a la API | Plan: 32 eventos emitidos por la API | 26 pasan al navegador (`source: "browser"`), emitidos al recibir la respuesta de la API | El enunciado pide capturarlos en el backoffice con `track()` |
+| Ruta del receptor | `POST /telemetry/events` | `POST /telemetry/events`, fuera de `/api/v1`, pública, con CORS solo para el backoffice | Coincide con la consigna; se aparta de la convención `/api/v1` de la API |
+| Ubicación del servicio | `uis/backoffice/src/services/telemetry.ts` (o equivalente) | `uis/backoffice/lib/telemetry/` | El backoffice no tiene `src/`; sus clientes viven en `lib/` |
+| Campos de `TelemetryEvent` | 8 campos del envelope | Los 8, más `source` y `environment` | Son parte del envelope aprobado en el plan |
+| Motivos de `login_failed` | `invalid_credentials`, `session_expired`, `network_error` | `invalid_credentials`, `inactive_user`, `network_error`; la sesión caducada es `session_expired` | Un intento de login no caduca; la cuenta desactivada sí es un motivo real |
+| Alcance | "Cada evento de tu catálogo" / "tantas como te alcance el día" | 34 de 44; 10 esperan al emisor de la API | Sin control en el backoffice o con datos que solo tiene el servidor |
+| Datos provisionales de los obligatorios | Mínimos por local, país del local, id del proveedor | Umbral de stock bajo por unidad sobre el stock global; país del ingrediente; id del directorio por nombre | Brechas B3, B7 y B8 del plan, abiertas |
+| `direct_stock_edit_rejected` | Un usuario intenta modificar el stock directamente | Acción "Ajustar stock" que envía el cambio real y recibe el 405 | El backoffice no tenía ninguna forma de intentarlo |
+| `sessionId` | "Generado al login y guardado en memoria de sesión" | Creado al iniciar sesión y guardado en `sessionStorage` | En memoria, cada recarga sería una sesión nueva |
+| Huella de `frontend_error_captured` | Plan: SHA-256 truncado | FNV-1a de 64 bits | `crypto.subtle` no existe sin HTTPS |
+| `page_performance_recorded` | Plan: uno por vista, con `data_ready_ms` | Uno por carga, sin `data_ready_ms` | Web Vitals solo mide la carga inicial |
+| `updated_at` en el listado de incidencias | Auditoría de serialización: se quitó | Vuelve a `IncidentListItem` | `incident_status_changed` lo necesita |
+| Destino del PR | Rama oculta en la captura | `feature/telemetry-plan` | Los PR #17 a #21 siguen abiertos |
+
+### 1. Los eventos de la API se emiten en el navegador
+
+El plan asignaba a la API 32 eventos, entre ellos las 6 métricas obligatorias, porque la API es la fuente de verdad. El enunciado de esta fase pide capturar cada evento del catálogo en el backoffice, con una única función `track()`, y deja el almacenamiento para la siguiente.
+
+El backoffice los emite **al recibir la respuesta de la API**: un 2xx confirma que la operación ya está guardada (después del `commit`), y un rechazo trae su código de error. Así no se emite nada que el sistema no haya confirmado. Cada evento lleva el `requestId` de su llamada, que la API escribe en su línea de `api.timing`.
+
+**Coste:** el riesgo R3 del plan queda asumido en esta fase. Una pestaña que se cierra antes de enviar o una orden registrada fuera del backoffice (con `curl`, por ejemplo) no dejan evento hasta que exista el emisor de la API. La cola, los reintentos y `sendBeacon` lo reducen. Se verificó el envío con `sendBeacon` al redirigir al login tras un 401.
+
+### 2. El receptor está fuera de `/api/v1`
+
+La ruta es la de la consigna, `POST /telemetry/events`, pero la API publica todos sus recursos bajo `/api/v1`. La recepción de telemetría es una vía de entrada aparte, no un recurso versionado del negocio. Además, el navegador la llama directamente, sin pasar por el BFF, y `sendBeacon` no puede enviar `Authorization`. Por eso es pública, como `/health`, y es la única ruta con CORS (`app/core/cors.py`), limitado a `POST` desde el origen de `FRONTEND_URL`. Los lotes de `sendBeacon` van como `text/plain`, porque no pueden enviar `application/json` a otro origen sin una comprobación previa de CORS; el receptor los lee como JSON igualmente.
+
+Se consideró quitar `/api/v1` de toda la API para unificar. Se descartó: es un cambio de arquitectura ajeno a esta tarea.
+
+**Coste:** un endpoint público sin autenticación. Lo limitan su CORS, su lote máximo de 100 eventos y el 413 a más de 256 KB.
+
+### 3. `lib/telemetry/` en lugar de `src/services/telemetry.ts`
+
+El backoffice no tiene carpeta `src/`, y sus clientes de la API viven en `lib/` (`lib/api-client.ts`, `lib/inventory.ts`). Una carpeta `services/` nueva se confundiría con el `services/` del monorepo, que es el backend. `lib/telemetry/index.ts` exporta solo `track()`.
+
+Los demás módulos del servicio son internos:
+- la cola, la sesión y el envelope;
+- `withRequestId`, para la capa de datos;
+- el catálogo, que se genera desde `event-schemas.json`.
+
+### 4. `TelemetryEvent` con `source` y `environment`
+
+El enunciado enumera los 8 campos del envelope. El plan aprobado añade `source` (emisor) y `environment` (para no mezclar datos de prueba, como las semillas `VOL-`, con los reales). El modelo los incluye todos con sus tipos y dominios, y no admite campos extra. Así se reutiliza sin cambios cuando el receptor guarde los eventos. Una prueba valida con él los 44 ejemplos de `event-schemas.json`.
+
+### 5. Motivos de `login_failed` (esquema 2.0.0)
+
+La actividad adicional pone como ejemplos de motivo `invalid_credentials`, `session_expired` y `network_error`. Un intento de login no puede fallar por sesión caducada: ese hecho es `session_expired`, un evento propio que emite `apiFetch` ante un 401 `token_expired`. Los motivos son, por tanto, `invalid_credentials` (401), `inactive_user` (403, la cuenta desactivada) y `network_error` (sin conexión, o 502/504 del intermediario).
+
+El esquema del plan exigía además `account_fingerprint` (HMAC del email con una clave del servidor) y `client_network` (IP truncada). El navegador no puede calcularlos sin enviar el email, así que la versión 2.0.0 los quita. Volverán con el emisor de la API.
+
+### 6. Alcance: 34 de los 44 eventos
+
+El enunciado pide capturar cada evento del catálogo y, a la vez, "tantas del resto de tu catálogo como te alcance el día". Se capturan los 34 que nacen o pueden observarse en el backoffice. Los otros 10 esperan al emisor de la API:
+- **Sin control en el backoffice:** `product_created`, `user_access_changed` y `supplier_deleted`.
+- **Necesitan datos que solo tiene el servidor:** `password_reset_requested` (si la cuenta existe y la huella del email) y `server_error_occurred` (tipo de excepción).
+- **Solo existen dentro del servidor o de los scripts:** `cache_stats_recorded`, `email_delivery_failed`, `api_instance_started` y `data_seed_executed`.
+- **Falta un dato:** `incident_report_exported`, por la brecha B13.
+
+La sección 13.4 del plan los lista con su motivo, y la 13.6 dice dónde se captura cada uno de los 34.
+
+### 7. Valores provisionales en las métricas obligatorias
+
+Para emitir los 6 obligatorios sin inventar datos se cerraron las brechas B5 y B6: el coste unitario de las entradas y el motivo de la merma. Las dos columnas se añaden en Supabase con `services/brasaland-api/migrations/001_inventory_unit_cost_waste_reason.sql`. Tres brechas siguen abiertas y se cubren con lo que ya existe:
+- **B3, mínimos por local:** `stock_threshold_triggered` usa el umbral de stock bajo del backoffice por unidad (40 kg, 25 litros, 100 unidades) sobre el stock global del producto.
+- **B7, entidad de locales:** `country` y `currency` salen del país del ingrediente. Por eso una orden de un ingrediente de Estados Unidos registrada en el local 1 sale con `country: "US"`.
+- **B8, id del proveedor en la entrada:** `supplier_id` se busca en el directorio por el nombre elegido, que es único.
+
+**Coste:** hasta cerrar B3 y B7, el umbral y el país no se pueden agregar por local.
+
+### 8. "Ajustar stock" para `direct_stock_edit_rejected`
+
+El backoffice no tenía ninguna forma de intentar cambiar el stock directamente, así que la métrica no podía ocurrir desde la interfaz. La acción "Ajustar stock" de `/inventario/ingredientes` envía el `PATCH` real con `current_stock`. La API lo rechaza con 405, se emite el evento, y el modal explica que el stock solo cambia con órdenes, con enlaces a la entrada y a la salida. El rechazo lo sigue decidiendo el sistema. Chrome muestra ese 405 como error en la consola, como cualquier respuesta 4xx: es el comportamiento esperado.
+
+### 9. `sessionId` en `sessionStorage`
+
+El enunciado pide generarlo al iniciar sesión y guardarlo "en memoria de sesión". Se guarda en `sessionStorage`: en una variable en memoria, cada recarga (F5) empezaría una sesión nueva y falsearía las métricas por sesión. Es propio de cada pestaña y se borra al cerrar la sesión o cuando caduca. Antes del login vale `null`.
+
+### 10. Huella de los errores: FNV-1a
+
+El plan definía `error_fingerprint` como SHA-256 truncado. En el navegador, `crypto.subtle` solo existe con HTTPS o en `localhost`, y una tablet que abra el backoffice por la IP de la red local no lo tendría. La huella debe ser la misma en todos los dispositivos para agrupar el mismo fallo, así que es FNV-1a de 64 bits: los mismos 16 caracteres hexadecimales y síncrona. La descripción del esquema se actualizó.
+
+### 11. `page_performance_recorded` una vez por carga
+
+Web Vitals (`useReportWebVitals`) mide la carga inicial del documento, no las navegaciones sin recarga. Por eso hay un evento por carga del backoffice, con la ruta de esa carga, y no uno por cada vista. Se emite al ocultar la pestaña, cuando CLS e INP son definitivas, justo antes del envío con `sendBeacon`. Para eso, el listener de ocultación está en `window` y se ejecuta después de los de Web Vitals. `data_ready_ms`, opcional, todavía no se emite.
+
+### 12. `updated_at` vuelve al listado de incidencias
+
+La auditoría de serialización quitó `updated_at` de `IncidentListItem` porque ninguna pantalla lo leía. `incident_status_changed` necesita saber cuánto tiempo pasó la incidencia en su estado anterior (`minutes_in_previous_status`), y el listado es lo que tiene el gestor al cambiar el estado. Volver a pedir el detalle de cada incidencia sería una llamada extra solo para la telemetría. El cambio está registrado en `docs/serialization-audit.md`, sección 11, junto con el receptor de telemetría (la operación 36).
+
+### 13. Pull Request contra la rama anterior
+
+La rama sale de `feature/telemetry-plan` y el PR apunta a ella, porque los PR #17 a #21 siguen abiertos. El título es `feat: telemetry event capture`; el desarrollador indicó que puede ir con iniciales en mayúscula, porque no se evalúa.
+
+### Verificación de los criterios
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| El stub `POST /telemetry/events` existe, acepta arreglos con `TelemetryEvent` y devuelve `{ "received": N }` | ✅ | `app/domains/telemetry/router.py`; `tests/integration/test_telemetry_router.py`; en vivo, 200 `{"received": N}` |
+| `TelemetryEvent` refleja el envelope con todos sus campos | ✅ | `app/domains/telemetry/schemas.py`; la prueba valida los 44 ejemplos de `event-schemas.json` |
+| La URL se lee de `NEXT_PUBLIC_TELEMETRY_ENDPOINT`, sin hardcodear | ✅ | `lib/telemetry/config.ts`; sin la variable, la telemetría se desactiva |
+| El backend declara `TELEMETRY_ENDPOINT` | ✅ | `app/core/config.py`, `.env.example`, `docker-compose.yml`; aviso al arrancar |
+| Cola local, lote de 10 s o 20 eventos, `sendBeacon` y reintentos con backoff | ✅ | `lib/telemetry/queue.ts` y `lifecycle.ts`; `__tests__/telemetry/queue.test.ts`; `sendBeacon` verificado en DevTools |
+| El servicio genera `eventId`, `sessionId`, `userId`, `timestamp`, `schemaVersion` y `requestId` | ✅ | `lib/telemetry/envelope.ts`, `session.ts` y `request-context.ts`; `__tests__/telemetry/track.test.ts` |
+| No hay `fetch`/`axios` de telemetría fuera del servicio | ✅ | El único `fetch` de telemetría está en `lib/telemetry/` (cola y beacon); el resto del backoffice solo llama a `track()` |
+| Todas las métricas obligatorias instrumentadas | ✅ | Las 6, en `lib/inventory.ts` y `lib/telemetry/api-events.ts`; `__tests__/inventory/telemetry.test.ts`; `inbound_order_created` visto en DevTools |
+| Piso técnico transversal (errores, rendimiento, navegación) | ✅ | `TelemetryRoot` en el layout raíz (`page_viewed`, `frontend_error_captured`, Web Vitals) y `api_latency_recorded` en `apiFetch` |
+| `event_type` y allowlists del plan, no genéricos | ✅ | `track()` descarta cualquier evento fuera del catálogo generado desde `event-schemas.json`; las propiedades de los 34 eventos cumplen el esquema |
+| Sin PII (email, nombre, contraseña) | ✅ | Allowlists sin claves personales (prueba del catálogo); `login_failed` solo con el motivo; formularios solo con nombres de campo; mensajes de error saneados |
+| La pestaña Network muestra lotes con el formato correcto y respuesta 200 | ✅ | Capturas de DevTools (Payload con `inbound_order_created` y Headers con `200 OK`), también del lote enviado con `sendBeacon` |
+| Web Vitals con la ruta en `properties` (adicional) | ✅ | `page_performance_recorded` con `route`, LCP, CLS e INP |
+| Autenticación en los hooks y componentes de auth, sin email ni contraseña (adicional) | ✅ | `lib/auth/api.ts`, `SessionProvider` y `apiFetch`; `__tests__/telemetry/auth-events.test.ts` |

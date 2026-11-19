@@ -5,7 +5,7 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 - **Entregables:** este documento y [`event-schemas.json`](event-schemas.json) (los esquemas de cada evento).
 - **Fuentes:** el briefing de Brasaland (métricas obligatorias, entidades y restricciones), el enunciado del RFI y el código actual del monorepo.
 - **Estado:** aprobado, con la revisión de la fase de captura (catálogo 1.1.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice y una ficha por cada uno de los 44 eventos.
-- **Fase de captura:** 34 de los 44 eventos se emiten desde el backoffice con una única función `track()`, al recibir la respuesta de la API que confirma o rechaza cada hecho. Los 10 restantes esperan al emisor de la API (sección 13).
+- **Fase de captura:** implementada y verificada (2026-11-19). 34 de los 44 eventos se emiten desde el backoffice con una única función `track()`, al recibir la respuesta de la API que confirma o rechaza cada hecho; la sección 13.6 dice dónde se captura cada uno. Los 10 restantes esperan al emisor de la API (sección 13).
 
 ## Índice
 
@@ -647,6 +647,49 @@ El receptor está en otro origen (la API, en el puerto 8000) y `sendBeacon` no p
 - **`api_connection_failed` 1.1.0.** Admite `api_timeout` (504), que el intermediario ya devuelve.
 - **Envelope:** `sessionId` se crea al iniciar sesión (§7).
 - **Catálogo:** `urn:brasaland:telemetry:event-schemas:1.1.0`.
+
+### 13.6 Dónde se captura cada evento
+
+Ningún componente llama a `track()` por su cuenta: los eventos salen de la capa de datos (`lib/`), de los hooks compartidos o de un único componente en el layout raíz. Las rutas son relativas a `uis/backoffice/`.
+
+| `event_type` | Clase | Dónde se captura | Cuándo |
+|---|---|---|---|
+| `inbound_order_created` | **Obligatorio** | `lib/inventory.ts` (`createEntry`) | 201 de la entrada |
+| `ingredient_price_variance_detected` | **Obligatorio** | `lib/inventory.ts` (`createEntry`) | El coste se desvía más del 10 % de la media de 90 días (historial de `GET /inventory/orders`) |
+| `outbound_order_created` | **Obligatorio** | `lib/inventory.ts` (`createExit`) | 201 de una salida de consumo |
+| `stock_waste_registered` | **Obligatorio** | `lib/inventory.ts` (`createExit`) | 201 de una salida de merma |
+| `stock_threshold_triggered` | **Obligatorio** | `lib/inventory.ts` (`createExit`) | La salida hace cruzar el umbral de stock bajo |
+| `direct_stock_edit_rejected` | **Obligatorio** | `lib/api-client.ts` → `lib/telemetry/api-events.ts` | 405 de "Ajustar stock" (`components/inventario/StockAdjustModal.tsx`) o 422 por `current_stock` |
+| `order_validation_failed` | Oportunidad | `lib/api-client.ts` → `api-events.ts` | 422 o 404 al registrar una orden |
+| `outbound_order_rejected` | Oportunidad | `lib/inventory.ts` (`createExit`) | 400 `insufficient_stock` |
+| `login_succeeded` | Oportunidad | `lib/auth/api.ts` (`login`) + `components/auth/SessionProvider.tsx` | Al validar la sesión tras un login (el rol llega con `/auth/me`) |
+| `login_failed` | Oportunidad | `lib/auth/api.ts` (`login`) | 401, 403 `inactive_user` o la petición no llega a la API |
+| `session_expired` | Oportunidad | `lib/api-client.ts` → `api-events.ts` | 401 `token_expired` |
+| `auth_token_rejected` | Oportunidad | `lib/api-client.ts` → `api-events.ts` | 401 `invalid_token` o `session_revoked` |
+| `logout_completed` | Oportunidad | `components/auth/SessionProvider.tsx` (`logout`) | "Cerrar sesión", antes de borrar el token |
+| `user_registered` | Oportunidad | `lib/auth/api.ts` (`register`) | 201 de `POST /users` |
+| `password_reset_completed` | Oportunidad | `lib/auth/api.ts` (`resetPassword`) | 200 del restablecimiento |
+| `password_reset_link_rejected` | Oportunidad | `lib/api-client.ts` → `api-events.ts` | Enlace inválido, caducado o usado |
+| `password_changed` | Oportunidad | `lib/auth/api.ts` (`changePassword`) | 200 del cambio de contraseña |
+| `page_viewed` | Oportunidad | `components/telemetry/TelemetryRoot.tsx` (layout raíz) | Cada vista, la inicial y las navegaciones sin recarga |
+| `form_validation_failed` | Oportunidad | `hooks/useFormTelemetry.ts` | La validación del navegador bloquea el envío (entrada, salida, incidencia, proveedor, login y registro) |
+| `form_abandoned` | Oportunidad | `hooks/useFormTelemetry.ts` | Salir, cerrar el modal o cerrar la pestaña con el formulario empezado |
+| `list_filter_applied` | Oportunidad | `hooks/useListFilterTelemetry.ts` | Cambio de filtro en el historial, el gestor o el directorio |
+| `list_page_extended` | Oportunidad | `hooks/useShowMore.ts` | "Mostrar más" en el historial o el gestor |
+| `api_latency_recorded` | Oportunidad | `lib/api-client.ts` → `api-events.ts` | Toda llamada con respuesta (muestreada) |
+| `page_performance_recorded` | Oportunidad | `TelemetryRoot.tsx` (`useReportWebVitals`) → `lib/telemetry/performance.ts` | Al ocultar la pestaña, una vez por carga |
+| `api_error_returned` | Oportunidad | `lib/api-client.ts` → `api-events.ts` | Cualquier 4xx |
+| `frontend_error_captured` | Oportunidad | `TelemetryRoot.tsx` y `hooks/useReportBoundaryError.ts` (`error.tsx`, `global-error.tsx`) | `window.onerror`, `unhandledrejection` y las pantallas de error |
+| `api_connection_failed` | Oportunidad | `lib/api-client.ts` → `api-events.ts` | 502, 504 o 500 del intermediario |
+| `supplier_created` | Oportunidad | `lib/proveedores/api.ts` (`createSupplier`) | 201 del alta |
+| `supplier_rate_updated` | Oportunidad | `lib/proveedores/api.ts` (`updateRate`) | 200 del cambio de tarifa |
+| `supplier_status_changed` | Oportunidad | `lib/proveedores/api.ts` (`updateStatus`) | 200 del cambio de estado |
+| `incident_created` | Oportunidad | `lib/gestor-incidencias/api.ts` (`createIncident`) | 201 del alta |
+| `incident_status_changed` | Oportunidad | `lib/gestor-incidencias/api.ts` (`updateIncidentStatus`) | 200 del cambio de estado |
+| `incident_transition_rejected` | Oportunidad | `lib/gestor-incidencias/api.ts` (`updateIncidentStatus`) | 400 `invalid_transition` |
+| `incident_report_analyzed` | Oportunidad | `lib/incidencias/api.ts` (`analyzeIncidents`) | 200 del análisis |
+
+**Verificación (2026-11-19):** en Chrome, con la API y `next dev` en local, la pestaña Network muestra los lotes `POST http://localhost:8000/telemetry/events` con el envelope completo y respuesta 200, también los enviados con `sendBeacon` al redirigir al login tras un 401. El receptor registra la cantidad y los `event_type` de cada lote.
 
 ## 14. Fichas de los eventos
 
@@ -1325,7 +1368,7 @@ Métricas de carga de una vista.
 | **Clasificación** | Oportunidad identificada |
 | **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
-| **Se emite** | Al ocultarse la vista o salir de ella (cuando las métricas son definitivas). |
+| **Se emite** | Al ocultarse o cerrarse la pestaña, cuando las métricas son definitivas, una vez por carga del backoffice: Web Vitals (useReportWebVitals) solo mide la carga inicial, no las navegaciones sin recarga. `data_ready_ms` todavía no se emite. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
 | **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | `null`: no está ligado a una petición a la API. |
@@ -1416,7 +1459,7 @@ Una excepción no controlada produce un 500.
 | `method` | enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | sí | Método HTTP. |
 | `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
 | `exception_type` | string | sí | Clase de la excepción (p. ej. `OperationalError`). |
-| `error_fingerprint` | string | sí | SHA-256 truncado del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo. |
+| `error_fingerprint` | string | sí | Huella de 16 caracteres hexadecimales del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo. En el navegador es FNV-1a de 64 bits: crypto.subtle (SHA-256) no existe sin HTTPS. |
 
 #### `frontend_error_captured`
 
@@ -1440,7 +1483,7 @@ Un error de JavaScript no controlado en el backoffice.
 | `route` | string | sí | Plantilla de la ruta, nunca la URL real: `/api/v1/inventory/products/{ingredient_id}` en la API, `/talento/candidates/[id]` en el backoffice. Sin query string. |
 | `error_name` | string (máx. 60) | sí | Tipo de error (p. ej. `TypeError`). |
 | `message_sanitized` | string (máx. 200) | sí | Mensaje recortado y saneado. **[sanitizado]** |
-| `error_fingerprint` | string | sí | SHA-256 truncado del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo. |
+| `error_fingerprint` | string | sí | Huella de 16 caracteres hexadecimales del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo. En el navegador es FNV-1a de 64 bits: crypto.subtle (SHA-256) no existe sin HTTPS. |
 | `source` | enum: `window_error`, `unhandled_rejection`, `error_boundary` | sí | Dónde se capturó. |
 
 #### `api_connection_failed`

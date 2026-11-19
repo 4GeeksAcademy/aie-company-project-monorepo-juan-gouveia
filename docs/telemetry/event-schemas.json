@@ -347,7 +347,7 @@
       "error_fingerprint": {
         "type": "string",
         "pattern": "^[0-9a-f]{16}$",
-        "description": "SHA-256 truncado del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo."
+        "description": "Huella de 16 caracteres hexadecimales del tipo de error y del primer marco de la pila (archivo y función, sin números de línea), para agrupar el mismo fallo. En el navegador es FNV-1a de 64 bits: crypto.subtle (SHA-256) no existe sin HTTPS."
       }
     },
     "events": {
@@ -2652,7 +2652,7 @@
         "x-classification": "oportunidad",
         "x-category": "rendimiento",
         "x-emitter": "browser",
-        "x-trigger": "Al ocultarse la vista o salir de ella (cuando las métricas son definitivas).",
+        "x-trigger": "Al ocultarse o cerrarse la pestaña, cuando las métricas son definitivas, una vez por carga del backoffice: Web Vitals (useReportWebVitals) solo mide la carga inicial, no las navegaciones sin recarga. `data_ready_ms` todavía no se emite.",
         "x-pii": "Ninguno. No se emite el user agent completo: solo la clase de dispositivo.",
         "x-delivery": {
           "mode": "batch",
