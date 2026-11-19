@@ -281,12 +281,13 @@ Los nombres de entidades y campos son exactamente los del briefing. Los modelos 
 | Entidad (tabla) | Campos | Reglas |
 |---|---|---|
 | `Ingredient` (`ingredients`) | `id`, `name`, `sku`, `unit`, `category`, `country` | `sku` único; `unit`: `kg`, `litro` o `unidad`; `category`: `meat`, `produce`, `sauce`, `beverage`, `packaging` o `cleaning`; `country`: `CO` o `US`. **Sin columna de stock**: `current_stock` solo existe en la respuesta |
-| `IngredientEntry` (`ingredient_entries`) | `id`, `ingredient_id` (FK), `quantity`, `supplier_name`, `location_id`, `created_at`, `user_uuid` | `quantity` > 0; `location_id` de 1 a 14 (no es FK) |
-| `IngredientExit` (`ingredient_exits`) | `id`, `ingredient_id` (FK), `quantity`, `reason`, `location_id`, `created_at`, `user_uuid` | `reason`: `consumption` o `waste` |
+| `IngredientEntry` (`ingredient_entries`) | `id`, `ingredient_id` (FK), `quantity`, `supplier_name`, `unit_cost`, `location_id`, `created_at`, `user_uuid` | `quantity` > 0; `unit_cost` > 0, obligatorio, en la moneda del país del ingrediente (COP o USD); `location_id` de 1 a 14 (no es FK) |
+| `IngredientExit` (`ingredient_exits`) | `id`, `ingredient_id` (FK), `quantity`, `reason`, `waste_reason`, `location_id`, `created_at`, `user_uuid` | `reason`: `consumption` o `waste`; `waste_reason` (`expired`, `kitchen_error` o `theft_suspected`) es obligatorio en las mermas y no se admite en los consumos (422 en el campo) |
 
 - **`current_stock`** = suma de las entradas − suma de las salidas del ingrediente, calculado por la base de datos en cada lectura. El alcance es global por ingrediente: `location_id` se guarda, pero no parte el stock.
 - **`user_uuid`** es el `id` de TinyDB del usuario autenticado; lo pone la API a partir del token. Enviarlo en el cuerpo da 422. No es FK: los usuarios no se replican en Supabase.
 - **`created_at`** lo pone la API, en UTC.
+- **`unit_cost` y `waste_reason`** (captura de telemetría, brechas B5 y B6 del [plan](../../docs/telemetry/telemetry-plan.md)): las respuestas los devuelven como `null` en las órdenes anteriores. En una base que ya existía, `create_all` no añade estas columnas: hay que ejecutar una vez [`migrations/001_inventory_unit_cost_waste_reason.sql`](./migrations/001_inventory_unit_cost_waste_reason.sql) en el SQL Editor de Supabase **antes** de arrancar la API con este código.
 
 ### Endpoints
 
@@ -307,7 +308,7 @@ Una salida que dejaría el stock en negativo se rechaza **antes de escribir nada
 {"error": {"code": "insufficient_stock", "message": "Stock insuficiente para el ingrediente 'Falda de ternera'. Disponible: 52, solicitado: 60."}}
 ```
 
-La salida bloquea la fila del ingrediente (`SELECT ... FOR UPDATE`) mientras calcula el stock, así que dos salidas simultáneas no pueden gastar el mismo stock. No hay rutas para editar ni borrar ingredientes u órdenes.
+La salida bloquea la fila del ingrediente (`SELECT ... FOR UPDATE`) mientras calcula el stock, así que dos salidas simultáneas no pueden gastar el mismo stock. No hay rutas para editar ni borrar ingredientes u órdenes: un `PUT`, `PATCH` o `DELETE` sobre ellas responde 405, y es el rechazo que mide la métrica `direct_stock_edit_rejected` (el backoffice lo provoca con la acción "Ajustar stock").
 
 ### Consultas sin N+1
 

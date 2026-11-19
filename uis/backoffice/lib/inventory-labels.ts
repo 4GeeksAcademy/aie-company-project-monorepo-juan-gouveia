@@ -1,4 +1,4 @@
-import type { Country, ExitReason } from "@/types/inventory";
+import type { Country, ExitReason, WasteReason } from "@/types/inventory";
 
 // Vocabulario del inventario (decisión F3): los términos del briefing del Hito 5 en español, nunca
 // los genéricos de la consigna ("producto"). Los valores se muestran con su código exacto; solo se
@@ -15,8 +15,10 @@ export const FIELD_LABELS = {
   current_stock: "Stock actual",
   quantity: "Cantidad",
   supplier_name: "Proveedor",
+  unit_cost: "Coste unitario",
   location_id: "Local",
   reason: "Motivo",
+  waste_reason: "Motivo de la merma",
   created_at: "Fecha",
   user_uuid: "Usuario",
 } as const;
@@ -31,6 +33,26 @@ export const REASON_DESCRIPTIONS: Record<ExitReason, string> = {
 export const REASON_OPTIONS: Record<ExitReason, string> = {
   consumption: "consumption (consumo)",
   waste: "waste (merma)",
+};
+
+// Motivos de merma del briefing de telemetría: "producto vencido, error de cocina, o pérdida/robo".
+export const WASTE_REASON_DESCRIPTIONS: Record<WasteReason, string> = {
+  expired: "producto vencido",
+  kitchen_error: "error de cocina",
+  theft_suspected: "pérdida o robo",
+};
+
+// Opciones del desplegable del motivo de la merma: código exacto con su descripción.
+export const WASTE_REASON_OPTIONS: Record<WasteReason, string> = {
+  expired: "expired (producto vencido)",
+  kitchen_error: "kitchen_error (error de cocina)",
+  theft_suspected: "theft_suspected (pérdida o robo)",
+};
+
+// Moneda de cada país: los costes unitarios van en la moneda del local, sin conversión.
+export const COUNTRY_CURRENCY: Record<Country, "COP" | "USD"> = {
+  CO: "COP",
+  US: "USD",
 };
 
 // Briefing, tabla de Ingredient: "CO" (Colombia) o "US" (Estados Unidos).

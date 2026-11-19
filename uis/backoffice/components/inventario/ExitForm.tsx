@@ -12,7 +12,15 @@ import { useIngredientStock } from "@/hooks/useIngredientStock";
 import { useIngredients } from "@/hooks/useIngredients";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createExit } from "@/lib/inventory";
-import { FIELD_LABELS, LOCATION_OPTIONS, REASON_DESCRIPTIONS, REASON_OPTIONS, formatQuantity } from "@/lib/inventory-labels";
+import {
+  FIELD_LABELS,
+  LOCATION_OPTIONS,
+  REASON_DESCRIPTIONS,
+  REASON_OPTIONS,
+  WASTE_REASON_DESCRIPTIONS,
+  WASTE_REASON_OPTIONS,
+  formatQuantity,
+} from "@/lib/inventory-labels";
 import {
   EMPTY_EXIT_FORM,
   exceedsStock,
@@ -91,7 +99,7 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
       setAttempted(false);
       show({
         tone: "success",
-        text: `Salida #${exit.id} registrada: ${formatQuantity(exit.quantity, exit.ingredient_unit)} de ${exit.ingredient_name} (${exit.reason}: ${REASON_DESCRIPTIONS[exit.reason]}).`,
+        text: `Salida #${exit.id} registrada: ${formatQuantity(exit.quantity, exit.ingredient_unit)} de ${exit.ingredient_name} (${exit.reason}: ${REASON_DESCRIPTIONS[exit.reason]}${exit.waste_reason ? `, ${WASTE_REASON_DESCRIPTIONS[exit.waste_reason]}` : ""}).`,
       });
       refresh();
     } catch (err) {
@@ -179,6 +187,25 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
           {errors.reason && <span className="text-xs text-red-700">{errors.reason}</span>}
         </LabeledSelect>
       </div>
+
+      {/* Motivo de la merma (brecha B6): solo en las mermas. Un consumo no lo envía. */}
+      {values.reason === "waste" && (
+        <LabeledSelect
+          label={FIELD_LABELS.waste_reason}
+          value={values.waste_reason}
+          options={WASTE_REASON_OPTIONS}
+          onChange={(value) => setField("waste_reason", value)}
+          placeholder="Elige el motivo de la merma"
+          required
+          size="lg"
+          fullWidth
+          invalid={Boolean(errors.waste_reason)}
+          disabled={submitting}
+        >
+          <span className="text-xs text-gray-600">Por qué se desecha: producto vencido, error de cocina o pérdida/robo.</span>
+          {errors.waste_reason && <span className="text-xs text-red-700">{errors.waste_reason}</span>}
+        </LabeledSelect>
+      )}
 
       <LabeledSelect
         label={FIELD_LABELS.location_id}

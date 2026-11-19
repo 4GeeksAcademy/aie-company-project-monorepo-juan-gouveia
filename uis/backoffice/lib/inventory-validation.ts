@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/api-client";
 import { formErrorsFromApi, type FormApiErrors } from "@/lib/auth/api-errors";
-import type { ExitReason, IngredientEntryInput, IngredientExitInput } from "@/types/inventory";
+import type { ExitReason, IngredientEntryInput, IngredientExitInput, WasteReason } from "@/types/inventory";
 
 // Validación en el cliente de los formularios de entrada y salida, antes de enviar. La API vuelve a
 // validar todo (422 con el campo) y aplica la regla del stock (400 `insufficient_stock`).
@@ -15,6 +15,7 @@ export interface EntryFormValues {
   ingredient_id: string;
   quantity: string;
   supplier_name: string;
+  unit_cost: string;
   location_id: string;
 }
 
@@ -22,6 +23,8 @@ export interface ExitFormValues {
   ingredient_id: string;
   quantity: string;
   reason: ExitReason | "";
+  // Solo se usa cuando `reason` es "waste".
+  waste_reason: WasteReason | "";
   location_id: string;
 }
 
@@ -31,11 +34,11 @@ export type EntryFormErrors = Partial<Record<EntryFormField, string>>;
 export type ExitFormErrors = Partial<Record<ExitFormField, string>>;
 
 // Nombres de campo de la API: así formErrorsFromApi coloca cada `details` junto a su campo.
-export const ENTRY_FORM_FIELDS: readonly EntryFormField[] = ["ingredient_id", "quantity", "supplier_name", "location_id"];
-export const EXIT_FORM_FIELDS: readonly ExitFormField[] = ["ingredient_id", "quantity", "reason", "location_id"];
+export const ENTRY_FORM_FIELDS: readonly EntryFormField[] = ["ingredient_id", "quantity", "supplier_name", "unit_cost", "location_id"];
+export const EXIT_FORM_FIELDS: readonly ExitFormField[] = ["ingredient_id", "quantity", "reason", "waste_reason", "location_id"];
 
-export const EMPTY_ENTRY_FORM: EntryFormValues = { ingredient_id: "", quantity: "", supplier_name: "", location_id: "" };
-export const EMPTY_EXIT_FORM: ExitFormValues = { ingredient_id: "", quantity: "", reason: "", location_id: "" };
+export const EMPTY_ENTRY_FORM: EntryFormValues = { ingredient_id: "", quantity: "", supplier_name: "", unit_cost: "", location_id: "" };
+export const EMPTY_EXIT_FORM: ExitFormValues = { ingredient_id: "", quantity: "", reason: "", waste_reason: "", location_id: "" };
 
 // `?ingredient_id=` de los enlaces de la lista de ingredientes: el id en texto si es un entero
 // positivo, o "" si falta o no es válido (se repite, es "abc", "0", "-3" o "1.5").
@@ -61,6 +64,15 @@ function quantityError(text: string): string | undefined {
   return undefined;
 }
 
+// Coste unitario (brecha B5): número mayor que 0, en la moneda del país del ingrediente.
+function unitCostError(text: string): string | undefined {
+  if (!text.trim()) return "Escribe el coste por unidad.";
+  const value = parseQuantity(text);
+  if (value === null) return "Escribe un número, por ejemplo 38500 o 6.8.";
+  if (value <= 0) return "El coste debe ser mayor que 0.";
+  return undefined;
+}
+
 function locationError(text: string): string | undefined {
   const id = Number(text);
   if (!text || !Number.isInteger(id) || id < MIN_LOCATION_ID || id > MAX_LOCATION_ID) return "Elige el local.";
@@ -77,6 +89,8 @@ export function validateEntryForm(values: EntryFormValues): EntryFormErrors {
   else if (supplier.length > MAX_SUPPLIER_NAME_LENGTH) {
     errors.supplier_name = `El proveedor no puede superar ${MAX_SUPPLIER_NAME_LENGTH} caracteres.`;
   }
+  const unitCost = unitCostError(values.unit_cost);
+  if (unitCost) errors.unit_cost = unitCost;
   const location = locationError(values.location_id);
   if (location) errors.location_id = location;
   return errors;
@@ -88,6 +102,7 @@ export function validateExitForm(values: ExitFormValues): ExitFormErrors {
   const quantity = quantityError(values.quantity);
   if (quantity) errors.quantity = quantity;
   if (!values.reason) errors.reason = "Elige el motivo: consumo o merma.";
+  else if (values.reason === "waste" && !values.waste_reason) errors.waste_reason = "Elige el motivo de la merma.";
   const location = locationError(values.location_id);
   if (location) errors.location_id = location;
   return errors;
@@ -117,15 +132,19 @@ export function toEntryInput(values: EntryFormValues): IngredientEntryInput {
     ingredient_id: Number(values.ingredient_id),
     quantity: parseQuantity(values.quantity) as number,
     supplier_name: values.supplier_name.trim(),
+    unit_cost: parseQuantity(values.unit_cost) as number,
     location_id: Number(values.location_id),
   };
 }
 
 export function toExitInput(values: ExitFormValues): IngredientExitInput {
+  const reason = values.reason as ExitReason;
   return {
     ingredient_id: Number(values.ingredient_id),
     quantity: parseQuantity(values.quantity) as number,
-    reason: values.reason as ExitReason,
+    reason,
+    // Solo en las mermas: la API rechaza un consumo con motivo de merma.
+    ...(reason === "waste" ? { waste_reason: values.waste_reason as WasteReason } : {}),
     location_id: Number(values.location_id),
   };
 }

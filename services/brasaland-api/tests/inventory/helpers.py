@@ -15,10 +15,13 @@ def ingredient_data(**changes) -> dict:
 
 
 def entry_data(**changes) -> dict:
-    data = {"ingredient_id": 1, "quantity": 50.0, "supplier_name": "Carnes del Valle S.A.", "location_id": 1}
+    data = {"ingredient_id": 1, "quantity": 50.0, "supplier_name": "Carnes del Valle S.A.", "unit_cost": 38500.0, "location_id": 1}
     return {**data, **changes}
 
 
 def exit_data(**changes) -> dict:
     data = {"ingredient_id": 1, "quantity": 5.0, "reason": "consumption", "location_id": 1}
+    # Una merma necesita su motivo (brecha B6): si la prueba no lo indica, se usa "expired".
+    if changes.get("reason") == "waste" and "waste_reason" not in changes:
+        data["waste_reason"] = "expired"
     return {**data, **changes}

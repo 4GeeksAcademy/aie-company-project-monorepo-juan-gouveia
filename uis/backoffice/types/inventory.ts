@@ -5,6 +5,8 @@ export type Unit = "kg" | "litro" | "unidad";
 export type Category = "meat" | "produce" | "sauce" | "beverage" | "packaging" | "cleaning";
 export type Country = "CO" | "US";
 export type ExitReason = "consumption" | "waste";
+// Motivo de una merma (brecha B6 del plan de telemetría), con los valores del briefing.
+export type WasteReason = "expired" | "kitchen_error" | "theft_suspected";
 
 // `Ingredient` con su stock calculado (entradas − salidas).
 export interface Ingredient {
@@ -36,11 +38,16 @@ interface OrderBase {
 // Orden de entrada: entrega de un proveedor.
 export interface IngredientEntry extends OrderBase {
   supplier_name: string;
+  // Coste por unidad en la moneda del país del ingrediente (COP o USD); null en entradas anteriores
+  // a la brecha B5.
+  unit_cost: number | null;
 }
 
 // Orden de salida: consumo o merma.
 export interface IngredientExit extends OrderBase {
   reason: ExitReason;
+  // Solo en las mermas; null en los consumos y en mermas anteriores a la brecha B6.
+  waste_reason: WasteReason | null;
 }
 
 // Respuesta de GET /inventory/orders: cada lista de la más reciente a la más antigua.
@@ -54,13 +61,16 @@ export interface IngredientEntryInput {
   ingredient_id: number;
   quantity: number;
   supplier_name: string;
+  unit_cost: number;
   location_id: number;
 }
 
-// Cuerpo de POST /inventory/orders/outbound.
+// Cuerpo de POST /inventory/orders/outbound. `waste_reason` es obligatorio en las mermas y no se
+// envía en los consumos.
 export interface IngredientExitInput {
   ingredient_id: number;
   quantity: number;
   reason: ExitReason;
+  waste_reason?: WasteReason;
   location_id: number;
 }

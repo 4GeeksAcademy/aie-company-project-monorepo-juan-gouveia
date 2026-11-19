@@ -15,8 +15,8 @@ import {
   validateExitForm,
 } from "@/lib/inventory-validation";
 
-const VALID_ENTRY = { ingredient_id: "1", quantity: "50", supplier_name: "  Carnes del Valle S.A. ", location_id: "1" };
-const VALID_EXIT = { ingredient_id: "1", quantity: "3,5", reason: "waste" as const, location_id: "14" };
+const VALID_ENTRY = { ingredient_id: "1", quantity: "50", supplier_name: "  Carnes del Valle S.A. ", unit_cost: "38500", location_id: "1" };
+const VALID_EXIT = { ingredient_id: "1", quantity: "3,5", reason: "waste" as const, waste_reason: "expired" as const, location_id: "14" };
 
 describe("exitErrorsFromApi", () => {
   it("coloca el 400 insufficient_stock junto a la cantidad", () => {
@@ -82,9 +82,9 @@ describe("validateEntryForm", () => {
     expect(validateEntryForm(VALID_ENTRY)).toEqual({});
   });
 
-  it("vacío marca los cuatro campos", () => {
+  it("vacío marca los cinco campos", () => {
     expect(Object.keys(validateEntryForm(EMPTY_ENTRY_FORM)).sort()).toEqual(
-      ["ingredient_id", "location_id", "quantity", "supplier_name"].sort()
+      ["ingredient_id", "location_id", "quantity", "supplier_name", "unit_cost"].sort()
     );
   });
 
@@ -94,6 +94,9 @@ describe("validateEntryForm", () => {
     [{ supplier_name: "   " }, "supplier_name", "Elige el proveedor."],
     [{ supplier_name: "x".repeat(121) }, "supplier_name", "El proveedor no puede superar 120 caracteres."],
     [{ location_id: "15" }, "location_id", "Elige el local."],
+    [{ unit_cost: "" }, "unit_cost", "Escribe el coste por unidad."],
+    [{ unit_cost: "0" }, "unit_cost", "El coste debe ser mayor que 0."],
+    [{ unit_cost: "caro" }, "unit_cost", "Escribe un número, por ejemplo 38500 o 6.8."],
   ])("con %p marca %s", (changes, field, message) => {
     expect(validateEntryForm({ ...VALID_ENTRY, ...changes })).toEqual({ [field]: message });
   });
@@ -103,6 +106,7 @@ describe("validateEntryForm", () => {
       ingredient_id: 1,
       quantity: 50,
       supplier_name: "Carnes del Valle S.A.",
+      unit_cost: 38500,
       location_id: 1,
     });
   });
@@ -119,8 +123,18 @@ describe("validateExitForm", () => {
     );
   });
 
-  it("toExitInput admite la coma decimal", () => {
-    expect(toExitInput(VALID_EXIT)).toEqual({ ingredient_id: 1, quantity: 3.5, reason: "waste", location_id: 14 });
+  it("toExitInput admite la coma decimal y envía el motivo de la merma", () => {
+    expect(toExitInput(VALID_EXIT)).toEqual({ ingredient_id: 1, quantity: 3.5, reason: "waste", waste_reason: "expired", location_id: 14 });
+  });
+
+  it("una merma sin motivo marca waste_reason", () => {
+    expect(validateExitForm({ ...VALID_EXIT, waste_reason: "" })).toEqual({ waste_reason: "Elige el motivo de la merma." });
+  });
+
+  it("un consumo no necesita motivo de merma y no lo envía aunque quede uno elegido", () => {
+    const consumption = { ...VALID_EXIT, reason: "consumption" as const };
+    expect(validateExitForm({ ...consumption, waste_reason: "" })).toEqual({});
+    expect(toExitInput(consumption)).not.toHaveProperty("waste_reason");
   });
 });
 

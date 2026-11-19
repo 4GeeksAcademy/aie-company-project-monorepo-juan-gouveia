@@ -13,7 +13,7 @@ import { useIngredients } from "@/hooks/useIngredients";
 import { formErrorsFromApi } from "@/lib/auth/api-errors";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createEntry } from "@/lib/inventory";
-import { FIELD_LABELS, LOCATION_OPTIONS, formatQuantity } from "@/lib/inventory-labels";
+import { COUNTRY_CURRENCY, FIELD_LABELS, LOCATION_OPTIONS, formatQuantity } from "@/lib/inventory-labels";
 import {
   EMPTY_ENTRY_FORM,
   ENTRY_FORM_FIELDS,
@@ -48,6 +48,8 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
   // Un id del enlace que no está en la lista (ingrediente borrado o enlace manipulado).
   const unknownIngredient = fetchState.status === "success" && Boolean(values.ingredient_id) && !selected;
   const { suppliers, reload: reloadSuppliers } = useIngredientSuppliers(selected);
+  // Moneda del coste unitario: la del país del ingrediente (COP en Colombia, USD en Estados Unidos).
+  const currency = selected ? COUNTRY_CURRENCY[selected.country] : null;
 
   function localErrors(): EntryFormErrors {
     const errors = validateEntryForm(values);
@@ -174,6 +176,22 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
         onChange={(value) => setField("supplier_name", value)}
         error={errors.supplier_name}
         disabled={submitting}
+      />
+
+      <FormField
+        label={selected && currency ? `${FIELD_LABELS.unit_cost} (${currency} por ${selected.unit})` : FIELD_LABELS.unit_cost}
+        value={values.unit_cost}
+        onChange={(value) => setField("unit_cost", value)}
+        required
+        size="lg"
+        error={errors.unit_cost}
+        hint={
+          selected && currency
+            ? `Precio de este proveedor por cada ${selected.unit}, en ${currency}. Admite decimales: 6.8`
+            : "Elige primero el ingrediente para ver la moneda y la unidad."
+        }
+        disabled={submitting}
+        inputProps={{ name: "unit_cost", inputMode: "decimal", autoComplete: "off" }}
       />
 
       <p className="text-xs text-gray-600">Los campos con * son obligatorios.</p>

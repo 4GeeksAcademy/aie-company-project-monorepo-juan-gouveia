@@ -12,7 +12,7 @@ export default function IngredientsPage() {
       <h1 className="mb-2 text-xl font-semibold text-red-700 md:text-2xl lg:text-3xl">Ingredientes</h1>
       <p className="mb-6 text-sm text-black md:text-base">
         Stock actual de cada ingrediente, calculado a partir de sus entradas y salidas. Desde cada fila se puede
-        registrar una entrada o una salida.
+        registrar una entrada o una salida, que es la única forma de cambiar el stock.
       </p>
       <IngredientsPanel />
     </>

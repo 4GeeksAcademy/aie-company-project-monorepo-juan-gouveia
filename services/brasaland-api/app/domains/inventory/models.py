@@ -11,6 +11,11 @@ Las dos órdenes tienen una clave foránea real a `ingredients.id`, aplicada por
 `user_uuid` guarda el `id` del usuario de TinyDB que registró la orden, sin FK: ninguna tabla de
 usuarios se replica en Supabase. `location_id` (1–14) tampoco es FK en este hito.
 
+Captura de telemetría (brechas B5 y B6 del plan): `IngredientEntry.unit_cost` (coste unitario, en la
+moneda del país) e `IngredientExit.waste_reason` (motivo de la merma). Las dos columnas admiten NULL
+para las filas anteriores; los schemas exigen los valores en las órdenes nuevas. En una base que ya
+existía, `create_all` no añade columnas: se añaden con `migrations/001_inventory_unit_cost_waste_reason.sql`.
+
 Estas clases nunca salen de la API: los endpoints responden con los schemas de `schemas.py`.
 Los `Relationship` documentan la relación, pero el código no los recorre en bucles (problema N+1):
 las consultas cargan el ingrediente con un `join` (ver `service.py`).
@@ -61,6 +66,8 @@ class IngredientEntry(SQLModel, table=True):
     ingredient_id: int = Field(foreign_key="ingredients.id", index=True)
     quantity: float
     supplier_name: str = Field(max_length=SUPPLIER_NAME_MAX_LENGTH)
+    # Coste por unidad del ingrediente, en COP o USD según el país. NULL en las entradas anteriores a B5.
+    unit_cost: float | None = Field(default=None)
     location_id: int
     created_at: datetime = Field(default_factory=utc_now)
     user_uuid: str = Field(max_length=USER_UUID_LENGTH, index=True)
@@ -78,6 +85,9 @@ class IngredientExit(SQLModel, table=True):
     quantity: float
     # "consumption" o "waste"; los valores válidos los impone el schema de entrada.
     reason: str = Field(max_length=20)
+    # Solo en las mermas: "expired", "kitchen_error" o "theft_suspected". NULL en los consumos y en las
+    # mermas anteriores a B6.
+    waste_reason: str | None = Field(default=None, max_length=20)
     location_id: int
     created_at: datetime = Field(default_factory=utc_now)
     user_uuid: str = Field(max_length=USER_UUID_LENGTH, index=True)

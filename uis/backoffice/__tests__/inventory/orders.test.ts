@@ -6,11 +6,11 @@ const INGREDIENT = { ingredient_id: 1, ingredient_name: "Falda de ternera", ingr
 const USER = "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2";
 
 function entry(id: number, created_at: string): IngredientEntry {
-  return { id, ...INGREDIENT, quantity: 10, location_id: 1, created_at, user_uuid: USER, supplier_name: "Carnes del Valle S.A.S." };
+  return { id, ...INGREDIENT, quantity: 10, location_id: 1, created_at, user_uuid: USER, supplier_name: "Carnes del Valle S.A.S.", unit_cost: 38500 };
 }
 
 function exit(id: number, created_at: string): IngredientExit {
-  return { id, ...INGREDIENT, quantity: 2, location_id: 1, created_at, user_uuid: USER, reason: "waste" };
+  return { id, ...INGREDIENT, quantity: 2, location_id: 1, created_at, user_uuid: USER, reason: "waste", waste_reason: "expired" };
 }
 
 describe("mergeOrders", () => {

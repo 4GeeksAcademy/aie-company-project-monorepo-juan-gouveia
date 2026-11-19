@@ -49,6 +49,16 @@ export function createExit(input: IngredientExitInput): Promise<IngredientExit> 
   });
 }
 
+// Intento de cambiar el stock directamente, desde la acción "Ajustar stock" (brecha B4 del plan de
+// telemetría, decisión C3). El stock solo cambia con órdenes, así que la API lo rechaza siempre (405):
+// la petición es real para que el rechazo lo decida el sistema y quede medido. Lanza el ApiError.
+export function attemptDirectStockEdit(ingredientId: number, currentStock: number): Promise<never> {
+  return apiJson<never>(`${INVENTORY_PATH}/products/${ingredientId}`, {
+    fallback: "no se pudo ajustar el stock",
+    ...jsonBody("PATCH", { current_stock: currentStock }),
+  });
+}
+
 // GET /inventory/orders: entradas y salidas con los datos de su ingrediente y su user_uuid.
 export function listOrders(): Promise<OrdersResponse> {
   return apiJson(`${INVENTORY_PATH}/orders`, { fallback: "no se pudieron cargar las órdenes" });

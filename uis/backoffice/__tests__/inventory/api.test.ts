@@ -2,7 +2,7 @@
 // intermediario con su método, su cuerpo y `Authorization: Bearer <token>`, y los errores de la
 // API llegan como ApiError con el mensaje en español. `fetch` está simulado: no hay red.
 import { ApiError } from "@/lib/api-client";
-import { createEntry, createExit, getIngredient, listIngredients, listOrders } from "@/lib/inventory";
+import { attemptDirectStockEdit, createEntry, createExit, getIngredient, listIngredients, listOrders } from "@/lib/inventory";
 
 jest.mock("@/lib/auth/token", () => ({
   getToken: () => "jwt-de-la-sesion",
@@ -75,7 +75,7 @@ describe("lecturas", () => {
 
 describe("escrituras", () => {
   it("createEntry envía POST /api/inventory/orders/inbound en JSON, sin user_uuid", async () => {
-    const input = { ingredient_id: 1, quantity: 50, supplier_name: "Carnes del Valle S.A.", location_id: 1 };
+    const input = { ingredient_id: 1, quantity: 50, supplier_name: "Carnes del Valle S.A.", unit_cost: 38500, location_id: 1 };
     fetchMock.mockResolvedValue(jsonResponse({ id: 5, ...input }, 201));
 
     await createEntry(input);
@@ -87,11 +87,25 @@ describe("escrituras", () => {
   });
 
   it("createExit envía POST /api/inventory/orders/outbound con el motivo", async () => {
-    const input = { ingredient_id: 1, quantity: 3, reason: "waste" as const, location_id: 2 };
+    const input = { ingredient_id: 1, quantity: 3, reason: "waste" as const, waste_reason: "expired" as const, location_id: 2 };
     fetchMock.mockResolvedValue(jsonResponse({ id: 9, ...input }, 201));
 
     await createExit(input);
     expect(lastRequest()).toMatchObject({ method: "POST", url: "/api/inventory/orders/outbound", body: input });
+  });
+});
+
+describe("ajuste directo del stock (Ajustar stock)", () => {
+  it("attemptDirectStockEdit envía el PATCH real con current_stock y devuelve el rechazo de la API", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: "http_405", message: "El método PATCH no está permitido en esta ruta." } }, 405)
+    );
+
+    const error = await attemptDirectStockEdit(1, 60).catch((err: unknown) => err);
+
+    expect(lastRequest()).toMatchObject({ method: "PATCH", url: "/api/inventory/products/1", body: { current_stock: 60 } });
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 405, code: "http_405" });
   });
 });
 
@@ -114,7 +128,7 @@ describe("errores de la API", () => {
     );
 
     await expect(
-      createEntry({ ingredient_id: 1, quantity: 1, supplier_name: "X", location_id: 15 })
+      createEntry({ ingredient_id: 1, quantity: 1, supplier_name: "X", unit_cost: 1, location_id: 15 })
     ).rejects.toMatchObject({ status: 422, details });
   });
 

@@ -35,8 +35,19 @@ def test_ingredient_has_briefing_columns_and_no_stock_column(inventory_engine):
 
 def test_order_tables_have_briefing_columns(inventory_engine):
     common = {"id", "ingredient_id", "quantity", "location_id", "created_at", "user_uuid"}
-    assert columns(inventory_engine, "ingredient_entries") == common | {"supplier_name"}
-    assert columns(inventory_engine, "ingredient_exits") == common | {"reason"}
+    # unit_cost y waste_reason: brechas B5 y B6 del plan de telemetría.
+    assert columns(inventory_engine, "ingredient_entries") == common | {"supplier_name", "unit_cost"}
+    assert columns(inventory_engine, "ingredient_exits") == common | {"reason", "waste_reason"}
+
+
+def test_new_telemetry_columns_accept_null_for_existing_rows(inventory_engine):
+    nullable = {
+        (table, column["name"]): column["nullable"]
+        for table in ("ingredient_entries", "ingredient_exits")
+        for column in inspect(inventory_engine).get_columns(table)
+    }
+    assert nullable[("ingredient_entries", "unit_cost")] is True
+    assert nullable[("ingredient_exits", "waste_reason")] is True
 
 
 @pytest.mark.parametrize("table", ["ingredient_entries", "ingredient_exits"])

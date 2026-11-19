@@ -281,12 +281,13 @@ Entity and field names are exactly the briefing's. The ORM models (`models.py`) 
 | Entity (table) | Fields | Rules |
 |---|---|---|
 | `Ingredient` (`ingredients`) | `id`, `name`, `sku`, `unit`, `category`, `country` | Unique `sku`; `unit`: `kg`, `litro` or `unidad`; `category`: `meat`, `produce`, `sauce`, `beverage`, `packaging` or `cleaning`; `country`: `CO` or `US`. **No stock column**: `current_stock` only exists in the response |
-| `IngredientEntry` (`ingredient_entries`) | `id`, `ingredient_id` (FK), `quantity`, `supplier_name`, `location_id`, `created_at`, `user_uuid` | `quantity` > 0; `location_id` from 1 to 14 (not an FK) |
-| `IngredientExit` (`ingredient_exits`) | `id`, `ingredient_id` (FK), `quantity`, `reason`, `location_id`, `created_at`, `user_uuid` | `reason`: `consumption` or `waste` |
+| `IngredientEntry` (`ingredient_entries`) | `id`, `ingredient_id` (FK), `quantity`, `supplier_name`, `unit_cost`, `location_id`, `created_at`, `user_uuid` | `quantity` > 0; `unit_cost` > 0, required, in the currency of the ingredient's country (COP or USD); `location_id` from 1 to 14 (not an FK) |
+| `IngredientExit` (`ingredient_exits`) | `id`, `ingredient_id` (FK), `quantity`, `reason`, `waste_reason`, `location_id`, `created_at`, `user_uuid` | `reason`: `consumption` or `waste`; `waste_reason` (`expired`, `kitchen_error` or `theft_suspected`) is required for waste and rejected for consumption (422 on the field) |
 
 - **`current_stock`** = sum of the ingredient's entries − sum of its exits, calculated by the database on every read. The scope is global per ingredient: `location_id` is stored but does not partition stock.
 - **`user_uuid`** is the TinyDB `id` of the authenticated user; the API sets it from the token. Sending it in the body returns 422. It is not an FK: users are not replicated in Supabase.
 - **`created_at`** is set by the API, in UTC.
+- **`unit_cost` and `waste_reason`** (telemetry capture, gaps B5 and B6 of the [plan](../../docs/telemetry/telemetry-plan.md)): responses return them as `null` for older orders. On an existing database, `create_all` does not add these columns: run [`migrations/001_inventory_unit_cost_waste_reason.sql`](./migrations/001_inventory_unit_cost_waste_reason.sql) once in the Supabase SQL Editor **before** starting the API with this code.
 
 ### Endpoints
 
@@ -307,7 +308,7 @@ An exit that would leave stock negative is rejected **before anything is written
 {"error": {"code": "insufficient_stock", "message": "Stock insuficiente para el ingrediente 'Falda de ternera'. Disponible: 52, solicitado: 60."}}
 ```
 
-The exit locks the ingredient row (`SELECT ... FOR UPDATE`) while it calculates stock, so two simultaneous exits cannot spend the same stock. There are no routes to edit or delete ingredients or orders.
+The exit locks the ingredient row (`SELECT ... FOR UPDATE`) while it calculates stock, so two simultaneous exits cannot spend the same stock. There are no routes to edit or delete ingredients or orders: a `PUT`, `PATCH` or `DELETE` on them answers 405, which is the rejection measured by the `direct_stock_edit_rejected` metric (the backoffice triggers it with the "Ajustar stock" action).
 
 ### Queries without N+1
 

@@ -1,6 +1,13 @@
 import OrderTypeBadge, { ORDER_SIGN } from "@/components/inventario/OrderTypeBadge";
 import { formatDateTime } from "@/lib/format";
-import { FIELD_LABELS, REASON_DESCRIPTIONS, formatQuantity, locationLabel } from "@/lib/inventory-labels";
+import {
+  FIELD_LABELS,
+  REASON_DESCRIPTIONS,
+  WASTE_REASON_DESCRIPTIONS,
+  formatAmount,
+  formatQuantity,
+  locationLabel,
+} from "@/lib/inventory-labels";
 import type { OrderRow } from "@/lib/inventory-orders";
 
 interface OrderHistoryProps {
@@ -18,10 +25,24 @@ function CardLabel({ children }: { children: React.ReactNode }) {
   return <span className="font-semibold text-red-700 lg:hidden">{children}: </span>;
 }
 
-// Proveedor de la entrada, o motivo de la salida con su código exacto y su descripción.
-function detail(row: OrderRow): { label: string; text: string } {
-  if (row.kind === "entry") return { label: FIELD_LABELS.supplier_name, text: row.order.supplier_name };
-  return { label: FIELD_LABELS.reason, text: `${row.order.reason} (${REASON_DESCRIPTIONS[row.order.reason]})` };
+// Proveedor de la entrada, o motivo de la salida con su código exacto y su descripción. Debajo, el
+// coste unitario de la entrada o el motivo de la merma (brechas B5 y B6), si la orden los tiene: las
+// órdenes anteriores no los guardaron.
+function detail(row: OrderRow): { label: string; text: string; extra: string | null } {
+  if (row.kind === "entry") {
+    const { unit_cost, ingredient_unit } = row.order;
+    return {
+      label: FIELD_LABELS.supplier_name,
+      text: row.order.supplier_name,
+      extra: unit_cost === null ? null : `${FIELD_LABELS.unit_cost}: ${formatAmount(unit_cost)} por ${ingredient_unit}`,
+    };
+  }
+  const { reason, waste_reason } = row.order;
+  return {
+    label: FIELD_LABELS.reason,
+    text: `${reason} (${REASON_DESCRIPTIONS[reason]})`,
+    extra: waste_reason === null ? null : `${waste_reason} (${WASTE_REASON_DESCRIPTIONS[waste_reason]})`,
+  };
 }
 
 export default function OrderHistory({ orders, currentUserId }: OrderHistoryProps) {
@@ -43,7 +64,7 @@ export default function OrderHistory({ orders, currentUserId }: OrderHistoryProp
       <ul className="divide-y divide-red-100">
         {orders.map((row) => {
           const { order } = row;
-          const { label, text } = detail(row);
+          const { label, text, extra } = detail(row);
           const mine = currentUserId !== null && order.user_uuid === currentUserId;
           return (
             <li key={row.key} className={`flex flex-col gap-2 px-4 py-4 ${COLUMNS}`}>
@@ -67,6 +88,7 @@ export default function OrderHistory({ orders, currentUserId }: OrderHistoryProp
               <p className="min-w-0 break-words text-sm text-black">
                 <CardLabel>{label}</CardLabel>
                 {text}
+                {extra && <span className="block text-xs text-gray-600">{extra}</span>}
               </p>
 
               <p className="text-sm text-black">
