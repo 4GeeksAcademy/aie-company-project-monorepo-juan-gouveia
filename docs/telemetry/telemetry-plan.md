@@ -4,8 +4,9 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 
 - **Entregables:** este documento y [`event-schemas.json`](event-schemas.json) (los esquemas de cada evento).
 - **Fuentes:** el briefing de Brasaland (métricas obligatorias, entidades y restricciones), el enunciado del RFI y el código actual del monorepo.
-- **Estado:** aprobado, con la revisión de la fase de captura (catálogo 1.1.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice y una ficha por cada uno de los 44 eventos.
+- **Estado:** aprobado, con las revisiones de las fases de captura y de almacenamiento (catálogo 1.2.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice, la fase de almacenamiento y una ficha por cada uno de los 44 eventos.
 - **Fase de captura:** implementada y verificada (2026-11-19). 34 de los 44 eventos se emiten desde el backoffice con una única función `track()`, al recibir la respuesta de la API que confirma o rechaza cada hecho; la sección 13.6 dice dónde se captura cada uno. Los 10 restantes esperan al emisor de la API (sección 13).
+- **Fase de almacenamiento:** el receptor guarda los eventos válidos en la tabla `telemetry_events` de Supabase y rechaza los demás uno a uno (sección 14).
 
 ## Índice
 
@@ -22,7 +23,8 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 11. [Riesgos y exclusiones](#11-riesgos-y-exclusiones)
 12. [Brechas de instrumentación](#12-brechas-de-instrumentación)
 13. [Fase de captura en el backoffice](#13-fase-de-captura-en-el-backoffice)
-14. [Fichas de los eventos](#14-fichas-de-los-eventos)
+14. [Fase de almacenamiento](#14-fase-de-almacenamiento)
+15. [Fichas de los eventos](#15-fichas-de-los-eventos)
 
 ## 1. Propósito y alcance
 
@@ -316,7 +318,7 @@ Todo evento, sea cual sea su emisor, es un objeto JSON con los campos siguientes
 | `eventId` | string (UUID v4) | Identificador único del evento, generado por el emisor. El almacenamiento descarta los duplicados por este campo. |
 | `timestamp` | string (ISO 8601) | Momento del hecho, en UTC y con milisegundos: `2026-11-18T17:36:46.123Z`. Lo pone el emisor cuando ocurre el hecho, no cuando se envía. |
 | `sessionId` | string (UUID v4) o `null` | Sesión del navegador: un UUID que el backoffice crea **al iniciar sesión** y guarda en `sessionStorage` (uno por pestaña; una pestaña nueva con la sesión ya iniciada crea el suyo al validarla). Se borra al cerrar la sesión o cuando caduca. Viaja en la cabecera `X-Session-Id`. Es `null` antes del login (vistas públicas), en los procesos y en las peticiones que no vienen del backoffice. |
-| `userId` | string (UUID) o `null` | La cuenta que actúa: el `sub` del token (`User.id` en TinyDB). Es un identificador seudónimo, nunca el email ni el nombre. Es `null` si no hay usuario autenticado. Cada ficha (sección 14) indica qué valor lleva. |
+| `userId` | string (UUID) o `null` | La cuenta que actúa: el `sub` del token (`User.id` en TinyDB). Es un identificador seudónimo, nunca el email ni el nombre. Es `null` si no hay usuario autenticado. Cada ficha (sección 15) indica qué valor lleva. |
 | `event_type` | string | El tipo del evento, con la taxonomía de la sección 2.3. Cada esquema de `event-schemas.json` lo fija con `const`. |
 | `schemaVersion` | string (SemVer) | Versión del esquema **de ese evento**. Todos empiezan en `1.0.0`. Sube la versión menor al añadir una propiedad opcional, y la mayor al quitar o renombrar una propiedad, cambiar su tipo o hacer obligatoria una que no lo era. |
 | `requestId` | string (UUID v4) o `null` | Correlación entre el frontend, el backend y los logs. Lo crea el navegador por cada llamada a la API, en la cabecera `X-Request-Id`; el BFF lo reenvía; la API lo crea si falta, lo devuelve en la respuesta y lo pone en sus eventos y en su línea de `api.timing`. Es `null` si el evento no nace de una petición, como una vista o un proceso. |
@@ -371,7 +373,7 @@ Es un JSON Schema **draft-07** válido. Un evento es válido si cumple exactamen
 | `definitions/envelope` | Los campos de la tabla anterior, con `additionalProperties: false` |
 | `definitions/properties` | Las propiedades que comparten varios eventos (`location_id`, `country`, `product_category`, `route`, `account_fingerprint`…), con su tipo y su dominio |
 | `definitions/events/<event_type>` | Un esquema por evento: el envelope (`allOf`), `event_type`, `schemaVersion` y `source` fijos con `const`, y `properties` con sus obligatorias y su allowlist (`additionalProperties: false`). Incluye un ejemplo válido en `examples`. |
-| Claves `x-*` de cada evento | Anotaciones documentales que los validadores ignoran: `x-classification` (`obligatorio` u `oportunidad`), `x-category`, `x-emitter`, `x-trigger`, `x-pii` y `x-delivery` (modo, cadencia, justificación y, si aplica, throttle; secciones 9 y 10) |
+| Claves `x-*` de cada evento | Anotaciones documentales que los validadores ignoran: `x-classification` (`obligatorio` u `oportunidad`), `x-category`, `x-emitter`, `x-trigger`, `x-pii`, `x-delivery` (modo, cadencia, justificación y, si aplica, throttle; secciones 9 y 10) y, para la tabla de almacenamiento, `x-level`, `x-value` y `x-message` (sección 14.2) |
 
 ## 8. Datos sensibles y PII
 
@@ -525,9 +527,9 @@ Cada uno se descartó porque no supera la regla de oro (no hay decisión concret
 | # | Riesgo | Mitigación |
 |---|---|---|
 | R1 | **Varios eventos obligatorios no pueden emitirse con el modelo actual** (sin precio en las entradas, sin motivo de merma, sin mínimos por local, sin entidad de locales). | No se emiten con valores inventados: la sección 12 dice qué cambio necesita cada uno. Cerrar esas brechas es la primera tarea de la fase de captura. |
-| R2 | `userId` es seudónimo, pero sigue siendo un dato personal. | Acceso restringido a los datos crudos. Al eliminar una cuenta (`DELETE /users/{id}`), sus eventos guardados pasan a `userId: null`. La retención de los datos crudos se fija en la fase de almacenamiento. |
+| R2 | `userId` es seudónimo, pero sigue siendo un dato personal. | Acceso restringido a los datos crudos: la tabla tiene RLS sin políticas (§14.1). Los eventos no se reescriben: al eliminar una cuenta (`DELETE /users/{id}`), su UUID deja de corresponder a nadie y sus eventos quedan desvinculados sin tocarlos. Si una solicitud de supresión exige borrarlos, se hace con la purga manual de §14.1. La retención se fijará cuando haya un pipeline de agregados. |
 | R3 | Los eventos del navegador se pierden (bloqueadores, pestañas cerradas, sin conexión). | Las métricas de navegador se tratan como aproximaciones. **Los hechos de negocio debe emitirlos la API**, que es la fuente de verdad. **Riesgo asumido en la fase de captura:** los emite el backoffice al recibir la respuesta de la API, con cola, reintentos y `sendBeacon` (sección 13). Una pestaña cerrada antes del envío o una orden registrada fuera del backoffice no dejan evento hasta que exista el emisor de la API. |
-| R4 | El reloj del navegador puede estar mal. | El almacenamiento añadirá la hora de recepción. Los análisis de negocio usan los `timestamp` de la API. |
+| R4 | El reloj del navegador puede estar mal. | `timestamp` guarda el momento de la captura; la tabla de ocho columnas no guarda la hora de recepción, que sí queda en el log `api.telemetry`. Los análisis de negocio usarán los `timestamp` de la API cuando exista su emisor. |
 | R5 | La telemetría podría romper la operación (latencia o errores al emitir). | Emisión asíncrona, después del `commit` y sin bloquear la respuesta. Un fallo al emitir se registra en el log y nunca hace fallar la petición. |
 | R6 | Doble conteo: reintentos o dos emisores del mismo hecho. | Un único emisor por evento (§2.4). Los reintentos conservan el `eventId`, y el almacenamiento descarta duplicados por ese campo. |
 | R7 | Datos de prueba mezclados con los reales (semillas `VOL-`, entornos locales). | El campo `environment` del envelope y el evento `data_seed_executed`. Los indicadores de negocio solo usan `production`. |
@@ -575,7 +577,7 @@ Las brechas B1 (nombres de las entidades) y B2 (categorías) ya quedan resueltas
 
 ## 13. Fase de captura en el backoffice
 
-La primera implementación del plan captura los eventos **en el backoffice** y los envía en lotes a un receptor provisional de la API. El receptor valida el formato y responde 200, sin guardar nada: el almacenamiento es la fase siguiente. Cuando llegue, la URL del receptor cambiará en la configuración y el backoffice no cambiará.
+La primera implementación del plan captura los eventos **en el backoffice** y los envía en lotes a un receptor provisional de la API. El receptor valida el formato y responde 200, sin guardar nada: el almacenamiento es la fase siguiente (sección 14), que mantiene la misma URL, así que el backoffice no cambia.
 
 ### 13.1 Cómo se captura
 
@@ -608,6 +610,8 @@ La primera implementación del plan captura los eventos **en el backoffice** y l
 El receptor está en otro origen (la API, en el puerto 8000) y `sendBeacon` no puede enviar `application/json` a otro origen sin una comprobación previa de CORS. Por eso los lotes de `sendBeacon` van como `text/plain`, y el receptor interpreta el cuerpo como JSON en los dos casos.
 
 ### 13.3 Receptor provisional
+
+> Sustituido por el receptor de la fase de almacenamiento (§14.3). Se conserva como registro de la fase de captura.
 
 `POST /telemetry/events` en `services/brasaland-api`, en su propio router:
 
@@ -691,7 +695,76 @@ Ningún componente llama a `track()` por su cuenta: los eventos salen de la capa
 
 **Verificación (2026-11-19):** en Chrome, con la API y `next dev` en local, la pestaña Network muestra los lotes `POST http://localhost:8000/telemetry/events` con el envelope completo y respuesta 200, también los enviados con `sendBeacon` al redirigir al login tras un 401. El receptor registra la cantidad y los `event_type` de cada lote.
 
-## 14. Fichas de los eventos
+## 14. Fase de almacenamiento
+
+El receptor deja de ser provisional: valida cada evento por separado, guarda los válidos en la tabla `telemetry_events` de Supabase con una sola sentencia por lote y responde qué guardó y qué rechazó. La URL (`POST /telemetry/events`) y el formato del lote no cambian, así que el backoffice tampoco cambia.
+
+### 14.1 La tabla `telemetry_events`
+
+Solo admite inserciones: los eventos son hechos inmutables. Las columnas fijas sostienen las consultas analíticas; todo lo propio de cada evento va en `tags`, sin cambiar el esquema de la tabla cuando el catálogo crece.
+
+| Columna | Tipo | Restricciones | Contenido |
+|---|---|---|---|
+| `id` | `uuid` | PK, default `gen_random_uuid()` | El `eventId` del envelope |
+| `timestamp` | `timestamptz` | NOT NULL | Momento del hecho (del envelope), no el de la recepción |
+| `service` | `text` | NOT NULL | Origen: `backoffice`, `api`, `bff` o `process` |
+| `event_type` | `text` | NOT NULL | Tipo de evento (`entidad_acción`) |
+| `level` | `text` | default `'info'` | `info`, `warn` o `error` |
+| `value` | `numeric` | NULL | Métrica principal del evento, si tiene |
+| `message` | `text` | NULL | Resumen legible, de 200 caracteres como máximo |
+| `tags` | `jsonb` | default `'{}'` | `properties` del evento y cinco campos del envelope |
+
+**Índices:** `idx_telemetry_events_timestamp` (`timestamp`), `idx_telemetry_events_event_type` (`event_type`) e `idx_telemetry_events_tags` (GIN sobre `tags`, para filtrar por dentro del JSON, por ejemplo `tags @> '{"country": "CO"}'`).
+
+**Creación:** solo con `services/brasaland-api/migrations/002_telemetry_events.sql`, que se ejecuta una vez en Supabase y es idempotente. La API no crea esta tabla al arrancar: así no puede quedar una tabla sin índices ni protecciones. Si falta, el receptor responde 503 y el log indica qué migración ejecutar.
+
+**Inmutabilidad:**
+
+- El código de la API solo inserta en esta tabla: ningún `UPDATE` ni `DELETE`.
+- En la base, un trigger rechaza cualquier `UPDATE`, `DELETE` o `TRUNCATE`, venga de donde venga (la consola de Supabase, un script).
+- RLS está activado y sin políticas: la API REST que Supabase publica para el esquema `public` no puede leer ni escribir la tabla con la clave `anon`. La API se conecta como `postgres`, que no está sujeto a RLS.
+- **Purgas excepcionales** (retención, derecho de supresión): se hacen a mano desactivando el trigger en una transacción y volviendo a activarlo. Es una operación consciente y documentada, nunca una ruta de la aplicación.
+
+### 14.2 De un evento a una fila
+
+| Columna | Origen |
+|---|---|
+| `id` | `eventId` |
+| `timestamp` | `timestamp` |
+| `service` | `source`: `browser` → `backoffice`; `api`, `bff` y `process` se guardan igual |
+| `event_type` | `event_type` |
+| `level` | `x-level` del esquema del evento (fijo por tipo) |
+| `value` | La propiedad que indica `x-value` del esquema; NULL si el evento no tiene o si llega `null` |
+| `message` | La plantilla `x-message` del esquema, con sus huecos `{propiedad}` rellenos |
+| `tags` | `properties` tal cual, más `session_id`, `user_id`, `request_id`, `schema_version` y `environment` del envelope |
+
+- **`level`.** `error` cuando algo falló: `frontend_error_captured`, `api_connection_failed`, `server_error_occurred` y `email_delivery_failed`. `warn` en los rechazos y alertas que alguien debería mirar: `direct_stock_edit_rejected`, `stock_threshold_triggered`, `ingredient_price_variance_detected`, `outbound_order_rejected`, `order_validation_failed`, `login_failed`, `auth_token_rejected`, `password_reset_link_rejected`, `api_error_returned`, `incident_transition_rejected` y `form_validation_failed`. `info` en el resto, incluido `session_expired`, que es el final normal de una sesión.
+- **`value`.** Cada evento declara como mucho una propiedad numérica principal (la cantidad en el inventario, la duración en el rendimiento, el porcentaje en las variaciones de precio y tarifa…). El número se copia y sigue también en `tags`. **No tiene unidad propia:** la unidad la da el `event_type` (kg o unidades, ms, %, minutos), así que las consultas siempre filtran por tipo y nunca suman `value` de tipos distintos.
+- **`message`.** Plantilla en español por evento, por ejemplo `Merma de {quantity} {unit} de {product_id} en {location_id} ({reason})`. Solo usa claves del allowlist del evento, que ya está libre de datos personales (§8). Un hueco sin valor se escribe `—`, los booleanos como `sí` o `no` y las listas separadas por comas.
+- **`tags`.** Guarda las dimensiones de Brasaland tal como las emite cada evento (`location_id`, `country`, `product_id`, `product_category`, `supplier_id`, `currency`, `reason`, `branch`…), para agregar por local, por país y por semana. Los cinco campos del envelope van en snake_case y siempre están, con `null` si no hay valor. `eventId` y `source` no se repiten: ya son `id` y `service`. Ninguna propiedad del catálogo usa esos cinco nombres.
+
+Las fichas (sección 15) muestran el `level`, el `value` y la plantilla de cada evento.
+
+### 14.3 El receptor
+
+`POST /telemetry/events` lee el lote de forma laxa y valida **cada evento por separado**, para que un evento malo no tumbe a los demás:
+
+1. **El lote.** El cuerpo debe ser un objeto JSON con una lista `events` (las demás claves se ignoran). Si no lo es, responde 422; si pasa de 256 KB, 413 `batch_too_large`; si trae más de 100 eventos, 422 `too_many_events`. `events: []` responde con ceros sin tocar la base.
+2. **El envelope.** Cada elemento se valida con `TelemetryEvent.model_validate`, el mismo modelo de la fase de captura, sin cambios.
+3. **Las propiedades.** Después, contra el catálogo de la API, que un script genera desde `event-schemas.json` (como el del backoffice): el `event_type` debe existir, las propiedades obligatorias deben estar y no puede haber claves fuera del allowlist. Así `tags` nunca guarda lo que el plan no permite, aunque el lote no venga del backoffice.
+4. **El guardado.** Los eventos válidos se insertan con **una sola sentencia** (`INSERT … VALUES (…), (…) ON CONFLICT (id) DO NOTHING`), en una transacción. Un evento repetido, por un reintento o un `sendBeacon` que llegó dos veces, no crea otra fila.
+5. **La respuesta.** `200 {"received": N, "stored": M, "rejected": R}`, con `N = M + R`. Los repetidos cuentan en `stored`, porque ya están guardados. El backoffice solo mira el código de estado.
+
+**Si la base no responde**, el receptor no guarda nada y responde 503 `telemetry_storage_unavailable`. El backoffice reintenta los 5xx con su backoff (§13.2), y el `ON CONFLICT` hace seguros los reintentos.
+
+**Log.** Una línea por lote en `api.telemetry` con los recibidos, guardados, repetidos y rechazados. De cada rechazo se anota la posición, el `event_type` (si lo trae) y el primer campo que falló, **nunca su valor**, para que un lote malicioso no meta datos personales en los logs.
+
+### 14.4 Cambios de esquema de esta fase
+
+- **Catálogo 1.2.0** (`urn:brasaland:telemetry:event-schemas:1.2.0`): cada evento lleva `x-level`, `x-value` y `x-message`. Son anotaciones: no cambian qué eventos son válidos, así que ninguna versión de evento cambia y el backoffice no se toca.
+- **R2 y R4** (§11.3) se ajustan a la tabla inmutable de ocho columnas.
+
+## 15. Fichas de los eventos
 
 Una ficha por evento, en el mismo orden y con las mismas propiedades que `event-schemas.json`. **El allowlist de cada evento son exactamente las propiedades de su tabla:** cualquier otra clave hace que el evento no se emita. "Obligatoria: sí" significa que la clave debe estar siempre; las opcionales se omiten cuando no hay valor.
 
@@ -713,6 +786,7 @@ Un local registra la llegada de mercancía de un proveedor.
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Consolidar compras y negociar precios son decisiones semanales o mensuales de Lucía; nadie actúa sobre una entrega concreta en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `quantity`; `message`: `Entrada de {quantity} {unit} de {product_id} en {location_id} (proveedor {supplier_id}, {unit_cost} {currency})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -743,6 +817,7 @@ Un local registra consumo de ingredientes en la preparación de un plato.
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). La sugerencia automática de pedidos se recalcula con el consumo acumulado del día; un consumo concreto no cambia la decisión en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `quantity`; `message`: `Consumo de {quantity} {unit} de {product_id} en {location_id}; quedan {stock_after} {unit}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -772,6 +847,7 @@ Un local registra merma (producto vencido, error de cocina, o pérdida/robo).
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Priorizar auditorías de merma es una decisión semanal por local; la merma de hoy ya ocurrió y no se corrige en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `quantity`; `message`: `Merma de {quantity} {unit} de {product_id} en {location_id} ({reason})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -802,6 +878,7 @@ El stock de un producto cae por debajo del mínimo configurado para ese local.
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **stream** (segundos). Un local que se queda corto de un ingrediente clave necesita reponer **ese mismo día**: el supervisor debe enterarse en minutos, no al día siguiente. Además alimenta en batch el ajuste del mínimo. |
 | **Throttle / debounce** | Natural: solo se emite al **cruzar** el mínimo (§3.2), así que un producto bajo no repite la alerta en cada consumo. |
+| **Almacenamiento** | `level`: `warn`; `value`: `quantity`; `message`: `Stock bajo de {product_id}: {quantity} {unit}, por debajo del mínimo de {threshold_quantity} {unit}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -831,6 +908,7 @@ Un usuario intenta modificar el stock directamente (fuera de una orden) y el sis
 | **Datos sensibles** | Ninguno. No se guarda el cuerpo de la petición ni el valor de stock que se intentó escribir. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Reforzar capacitación o permisos es una decisión semanal de Jake; el sistema ya rechazó el intento, no hay daño que contener en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `warn`; `value`: `quantity`; `message`: `Edición directa del stock rechazada: {method} {route} → {status_code} (rol {user_role})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -863,6 +941,7 @@ El costo unitario de una orden de entrada varía más de un umbral (ej. 10%) res
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **stream** (segundos). Es una alerta para Lucía y Mariana: renegociar o cambiar de proveedor **antes** de aceptar más entregas al precio nuevo. Un día de retraso son más compras al precio anómalo. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `warn`; `value`: `variance_pct`; `message`: `Coste de {product_id} del proveedor {supplier_id}: {unit_cost} {currency}, {variance_pct} % frente a la media de {historical_avg_unit_cost}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -898,6 +977,7 @@ La API rechaza una orden de entrada o de salida por datos inválidos.
 | **Datos sensibles** | Ninguno. Solo nombres de campo, nunca los valores enviados. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Corregir datos de catálogo y capacitar se decide con el acumulado de la semana. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `warn`; `value`: NULL; `message`: `Orden de {order_type} rechazada: {error_code} ({status_code})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -924,6 +1004,7 @@ La API rechaza una salida porque supera el stock disponible.
 | **Datos sensibles** | Ninguno. Describe productos y locales, no personas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). El conteo físico se programa con el acumulado del día por producto y local; el rechazo ya protegió el stock. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `warn`; `value`: `quantity`; `message`: `Salida de {quantity} {unit} de {product_id} rechazada: solo hay {available_quantity} {unit}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -953,6 +1034,7 @@ Se da de alta un producto en el catálogo de inventario.
 | **Datos sensibles** | Ninguno. El nombre de un ingrediente no es un dato personal. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Revisar duplicados del catálogo es una tarea periódica de Compras. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Ingrediente {product_id} creado ({product_category}, {unit}, {country})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -980,6 +1062,7 @@ Un usuario inicia sesión.
 | **Datos sensibles** | `userId` es un identificador seudónimo (UUID). No se guarda el email. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Planificar capacitación y ventanas de mantenimiento usa patrones de semanas. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Inicio de sesión ({user_role})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1001,6 +1084,7 @@ Un intento de inicio de sesión falla.
 | **Datos sensibles** | Ninguno. El email y la contraseña escritos nunca se emiten, ni nada derivado de ellos. `userId` es `null` aunque la cuenta exista. La huella de la cuenta (`account_fingerprint`) y la red (`client_network`) salen en la 2.0.0: el navegador no puede calcularlas sin enviar el email; vuelven con el emisor de la API. |
 | **Entrega** | **stream** (segundos). Un ataque de fuerza bruta se detiene en minutos o no se detiene: la decisión (bloqueo temporal) solo sirve si llega a tiempo. |
 | **Throttle / debounce** | Sin muestreo ni límite: cada intento cuenta para detectar la ráfaga. En el navegador, su frecuencia es la de los envíos del formulario de login. |
+| **Almacenamiento** | `level`: `warn`; `value`: NULL; `message`: `Inicio de sesión fallido ({failure_reason})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1022,6 +1106,7 @@ Una petición llega con una sesión caducada.
 | **Datos sensibles** | `userId` es el de la sesión del navegador. No se emite el token. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Ajustar la duración del token es una decisión de configuración que se toma con semanas de datos. |
 | **Throttle / debounce** | Uno por token: varias peticiones en paralelo con el mismo token caducado (resumen y listado) emiten un solo evento por (`userId`, `iat`) en 60 s. |
+| **Almacenamiento** | `level`: `info`; `value`: `token_age_minutes`; `message`: `Sesión caducada en {route} tras {token_age_minutes} min` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1044,6 +1129,7 @@ Una petición llega con un token inválido o revocado.
 | **Datos sensibles** | `userId` es el de la sesión del navegador, si la había. No se emite el token. |
 | **Entrega** | **stream** (segundos). Tokens manipulados o sesiones revocadas que insisten son un posible incidente de seguridad: investigar y rotar `SECRET_KEY` no puede esperar al día siguiente. |
 | **Throttle / debounce** | Uno por token y motivo cada 60 s (las peticiones en paralelo comparten token). |
+| **Almacenamiento** | `level`: `warn`; `value`: NULL; `message`: `Token rechazado en {route} ({rejection_reason})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1066,6 +1152,7 @@ El usuario cierra sesión.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). El cierre automático por inactividad se decide con el patrón de semanas. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `session_duration_seconds`; `message`: `Cierre de sesión tras {session_duration_seconds} s` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1088,6 +1175,7 @@ Se crea una cuenta por autorregistro.
 | **Datos sensibles** | `userId` es `null` (la petición no está autenticada); la cuenta nueva va como `new_user_id` (seudónimo). No se guarda el email. |
 | **Entrega** | **stream** (segundos). Con el registro abierto, una cuenta creada por alguien ajeno ya puede leer el inventario: hay que poder revisarla y desactivarla en minutos. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Usuario registrado ({user_role})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1110,6 +1198,7 @@ Cambia el acceso de una cuenta.
 | **Datos sensibles** | `target_user_id` es seudónimo (UUID). No se guardan emails. |
 | **Entrega** | **stream** (segundos). Una concesión de administrador fuera de proceso es una escalada de privilegios: se revisa en el momento. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Acceso de un usuario cambiado: {change} ({previous_role} → {new_role})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1136,6 +1225,7 @@ Se solicita un enlace de recuperación de contraseña.
 | **Datos sensibles** | **Sí (sanitizado).** El email va como `account_fingerprint`; la IP, truncada. `account_found` solo se usa internamente y nunca llega al usuario. |
 | **Entrega** | **stream** (segundos). Una ráfaga contra cuentas inexistentes (enumeración) solo se frena si se detecta mientras ocurre. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Restablecimiento de contraseña solicitado (cuenta encontrada: {account_found})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1159,6 +1249,7 @@ Una contraseña se restablece con un enlace de recuperación.
 | **Datos sensibles** | `userId` es `null`: la vista es pública y el `sub` del enlace no se lee. No se emiten el enlace ni el token. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Simplificar el flujo de recuperación se decide con la tasa semanal. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `link_age_minutes`; `message`: `Contraseña restablecida con un enlace de {link_age_minutes} min` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1180,6 +1271,7 @@ Un enlace de recuperación se rechaza.
 | **Datos sensibles** | Ninguno. No se guarda el token ni el email. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Ajustar la caducidad del enlace o el texto del correo es una decisión de configuración. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `warn`; `value`: NULL; `message`: `Enlace de restablecimiento rechazado en {stage} ({rejection_reason})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1202,6 +1294,7 @@ Un usuario cambia su propia contraseña.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Exigir o no la renovación periódica es una política, no una reacción. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `days_since_last_change`; `message`: `Contraseña cambiada ({channel})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1226,6 +1319,7 @@ El backoffice muestra una vista.
 | **Datos sensibles** | Ninguno. La ruta va como plantilla (`/talento/candidates/[id]`), sin ids reales ni query string. `userId` es `null` en las vistas públicas. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Reordenar el menú o retirar secciones se decide con semanas de uso. |
 | **Throttle / debounce** | Se ignora una segunda vista de la misma ruta en menos de 1 s (doble montaje de React en desarrollo, recargas dobles). |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Vista de {route}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1250,6 +1344,7 @@ Un formulario bloquea el envío por errores de validación.
 | **Datos sensibles** | Ninguno. Solo nombres de campo, nunca los valores escritos. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Rediseñar campos se decide con el acumulado. |
 | **Throttle / debounce** | Uno por formulario cada 2 s (doble clic en enviar). |
+| **Almacenamiento** | `level`: `warn`; `value`: `error_count`; `message`: `Formulario {form_id} bloqueado por {error_count} campos inválidos` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1273,6 +1368,7 @@ Un formulario empezado se abandona sin enviar.
 | **Datos sensibles** | Ninguno. Solo nombres de campo. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Simplificar formularios se decide con el acumulado. |
 | **Throttle / debounce** | Uno por formulario abierto: se emite una sola vez, al salir. |
+| **Almacenamiento** | `level`: `info`; `value`: `time_in_form_seconds`; `message`: `Formulario {form_id} abandonado tras {time_in_form_seconds} s ({exit})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1298,6 +1394,7 @@ Se cambia un filtro de una lista.
 | **Datos sensibles** | Ninguno. El texto de búsqueda no se emite: solo su longitud. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Mover filtros a la API se decide con el uso de semanas. |
 | **Throttle / debounce** | Debounce de 500 ms en los filtros de texto: solo se emite cuando se deja de escribir. |
+| **Almacenamiento** | `level`: `info`; `value`: `result_count`; `message`: `Filtro {filter_name} en {list_id}: {result_count} resultados` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1323,6 +1420,7 @@ Se piden más filas de una lista larga.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Fijar las filas iniciales o añadir paginación se decide con el acumulado. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `visible_rows`; `message`: `Lista {list_id}: {visible_rows} de {total_rows} filas visibles` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1349,6 +1447,7 @@ Duración de una petición a la API.
 | **Datos sensibles** | Ninguno. La ruta va como plantilla. `userId` es `null` en las rutas públicas. |
 | **Entrega** | **batch** (cada hora). Decidir dónde cachear o fijar objetivos de latencia usa percentiles por hora y por día. Las caídas, que sí son urgentes, las detectan `server_error_occurred` y `api_connection_failed` en stream. |
 | **Throttle / debounce** | **Muestreo:** se emite siempre si `duration_ms` ≥ 300 o `status_code` ≥ 400; el resto, 1 de cada 10 peticiones, elegidas por el `requestId` (determinista). `sample_rate` indica la tasa aplicada (1 o 0,1) para reconstruir los recuentos. |
+| **Almacenamiento** | `level`: `info`; `value`: `duration_ms`; `message`: `{method} {route} → {status_code} en {duration_ms} ms` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1375,6 +1474,7 @@ Métricas de carga de una vista.
 | **Datos sensibles** | Ninguno. No se emite el user agent completo: solo la clase de dispositivo. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Priorizar optimizaciones y fijar presupuestos de rendimiento usa la distribución de días. |
 | **Throttle / debounce** | Uno por vista mostrada. |
+| **Almacenamiento** | `level`: `info`; `value`: `lcp_ms`; `message`: `Carga de {route}: LCP {lcp_ms} ms, CLS {cls}, INP {inp_ms} ms` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1402,6 +1502,7 @@ Resumen de aciertos y fallos de una caché.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (cada hora). Ajustar TTL es una decisión de configuración con tendencias de horas. |
 | **Throttle / debounce** | Ya es un agregado: uno por caché cada 5 minutos. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Caché {cache_name}: {hits} aciertos y {misses} fallos` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1429,6 +1530,7 @@ La API responde con un error 4xx.
 | **Datos sensibles** | Ninguno. No se guarda el `message` ni el cuerpo; solo el código. `userId` es `null` si la petición no estaba autenticada. |
 | **Entrega** | **batch** (cada hora). Corregir flujos que provocan errores evitables se decide con el acumulado; los errores graves (500) van por su propio evento en stream. |
 | **Throttle / debounce** | Un mismo (`route`, `error_code`, `userId`) se emite como máximo una vez cada 10 s: un script que repite la misma petición fallida no multiplica el volumen. |
+| **Almacenamiento** | `level`: `warn`; `value`: NULL; `message`: `{method} {route} → {status_code} {error_code}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1453,6 +1555,7 @@ Una excepción no controlada produce un 500.
 | **Datos sensibles** | Ninguno. No se emite el mensaje de la excepción (puede contener datos): solo su tipo y una huella. |
 | **Entrega** | **stream** (segundos). Un 500 es un fallo de la API que hay que atender ya: puede estar impidiendo registrar órdenes en todos los locales. |
 | **Throttle / debounce** | Una vez por `error_fingerprint` cada 60 s, con el recuento en el log del emisor. |
+| **Almacenamiento** | `level`: `error`; `value`: NULL; `message`: `{method} {route} → 500 ({exception_type})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1477,6 +1580,7 @@ Un error de JavaScript no controlado en el backoffice.
 | **Datos sensibles** | **Posible (sanitizado).** El mensaje se recorta a 200 caracteres y se le sustituyen emails, números de 4 o más cifras y UUID por `[redacted]` antes de emitirlo. |
 | **Entrega** | **batch** (cada hora). La decisión es priorizar correcciones por número de sesiones afectadas, con datos de horas. Un despliegue roto se ve también en `api_error_returned` y en las consultas de soporte. |
 | **Throttle / debounce** | Una vez por `error_fingerprint` y sesión cada 60 s, y como máximo 20 por sesión (un error en bucle no inunda la telemetría). |
+| **Almacenamiento** | `level`: `error`; `value`: NULL; `message`: `{error_name} en {route}: {message_sanitized}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1502,6 +1606,7 @@ El backoffice no llega a la API.
 | **Datos sensibles** | Ninguno. `userId` es el de la sesión del navegador. |
 | **Entrega** | **stream** (segundos). Sin API, ningún local puede registrar órdenes: es un incidente de disponibilidad que se abre en minutos. |
 | **Throttle / debounce** | Una vez por sesión cada 30 s mientras la API no responde. |
+| **Almacenamiento** | `level`: `error`; `value`: `duration_ms`; `message`: `{method} {route} sin respuesta de la API ({failure}, {status_code})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1527,6 +1632,7 @@ Un correo no sale.
 | **Datos sensibles** | Ninguno. Nunca se emiten el destinatario, el asunto ni el enlace. |
 | **Entrega** | **stream** (segundos). Hay un usuario esperando su enlace de recuperación ahora mismo; una configuración rota afecta a todos los siguientes. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `error`; `value`: NULL; `message`: `Correo {email_kind} no enviado ({failure})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1552,6 +1658,7 @@ Se da de alta un proveedor.
 | **Datos sensibles** | Ninguno. No se emiten los datos de contacto del proveedor. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Consolidar categorías de proveedores es una decisión trimestral. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Proveedor {supplier_id} dado de alta en {country} ({status})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1577,6 +1684,7 @@ Cambia la tarifa de un proveedor.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Renegociar se planifica con el histórico de cambios; la tarifa ya está registrada. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `change_pct`; `message`: `Tarifa del proveedor {supplier_id}: {previous_rate} → {new_rate} {currency} ({change_pct} %)` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1603,6 +1711,7 @@ Un proveedor se suspende o se reactiva.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Buscar proveedores alternativos se decide con la cobertura por categoría, revisada a diario. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Proveedor {supplier_id}: {previous_status} → {new_status}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1628,6 +1737,7 @@ Se borra un proveedor.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Revisar si el borrado debió ser suspensión es una tarea periódica. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Proveedor {supplier_id} eliminado ({status_at_deletion})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1652,6 +1762,7 @@ Se registra una incidencia.
 | **Datos sensibles** | Ninguno. No se emiten el título ni la descripción (texto libre). |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Planificar visitas y mantenimiento usa el acumulado por sede. La atención de cada incidencia ya ocurre en el gestor, no en la telemetría. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Incidencia {incident_id} ({category}) registrada en {branch}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1677,6 +1788,7 @@ Cambia el estado de una incidencia.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Los tiempos objetivo de respuesta se fijan y revisan con datos de semanas. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `minutes_in_previous_status`; `message`: `Incidencia {incident_id}: {previous_status} → {new_status} tras {minutes_in_previous_status} min` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1704,6 +1816,7 @@ Se rechaza un cambio de estado no permitido.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Revisar el ciclo de vida o la interfaz se decide con el acumulado. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `warn`; `value`: NULL; `message`: `Incidencia {incident_id}: transición {current_status} → {requested_status} rechazada` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1727,6 +1840,7 @@ Se analiza un CSV de incidentes.
 | **Datos sensibles** | Ninguno. No se emite el contenido del archivo ni su nombre. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). La capacitación por calidad de los reportes es periódica. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `invalid_rows`; `message`: `Informe de incidencias analizado: {valid_rows} filas válidas y {invalid_rows} inválidas de {total_rows}` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1752,6 +1866,7 @@ Se descarga el resumen del último análisis.
 | **Datos sensibles** | Ninguno. |
 | **Entrega** | **batch** (diario (cierre 02:00 hora local)). Mantener o sustituir la exportación se decide con meses de uso. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `Informe de incidencias exportado {analysis_age_minutes} min después del análisis` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1775,6 +1890,7 @@ La API termina de arrancar.
 | **Datos sensibles** | Ninguno. No se emite ningún valor de configuración, solo si cada función está activa. |
 | **Entrega** | **stream** (segundos). Un reinicio inesperado o un arranque con el correo desactivado en producción hay que verlo en el momento, antes de que lo noten los usuarios. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: NULL; `message`: `API iniciada (versión {app_version})` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
@@ -1798,6 +1914,7 @@ Un script carga o retira datos fuera de la API.
 | **Datos sensibles** | Ninguno. No se emiten las filas cargadas. |
 | **Entrega** | **stream** (segundos). Un script de carga ejecutado contra producción mete datos sin trazabilidad en los indicadores de negocio: hay que detectarlo y retirarlos antes del batch diario. |
 | **Throttle / debounce** | No necesita: su frecuencia es la de una acción humana o de negocio. |
+| **Almacenamiento** | `level`: `info`; `value`: `affected_rows`; `message`: `Semilla {script} en {target} ({mode}): {affected_rows} filas` |
 
 | Propiedad | Tipo | Obligatoria | Descripción |
 |---|---|---|---|
