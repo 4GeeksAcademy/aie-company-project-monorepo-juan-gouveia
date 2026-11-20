@@ -1,7 +1,7 @@
 // Validación en el cliente de los formularios de entrada y salida (lib/inventory-validation.ts) y
 // las utilidades de etiquetas del inventario (lib/inventory-labels.ts).
 import { ApiError } from "@/lib/api-client";
-import { formatAmount, formatQuantity, LOCATION_OPTIONS, locationLabel } from "@/lib/inventory-labels";
+import { formatAmount, formatQuantity } from "@/lib/inventory-labels";
 import {
   EMPTY_ENTRY_FORM,
   EMPTY_EXIT_FORM,
@@ -153,11 +153,6 @@ describe("exceedsStock", () => {
 });
 
 describe("etiquetas", () => {
-  it("hay 14 locales, del 1 al 14, en una sola lista", () => {
-    expect(Object.keys(LOCATION_OPTIONS)).toEqual(Array.from({ length: 14 }, (_, i) => String(i + 1)));
-    expect(locationLabel(10)).toBe("Local 10");
-  });
-
   it("las cantidades usan punto decimal y sin ceros sobrantes", () => {
     expect(formatAmount(52)).toBe("52");
     expect(formatAmount(40.5)).toBe("40.5");

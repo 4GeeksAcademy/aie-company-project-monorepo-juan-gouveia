@@ -10,12 +10,15 @@ import ShowMoreButton from "@/components/ShowMoreButton";
 import { useOrders } from "@/hooks/useOrders";
 import { useSession } from "@/hooks/useSession";
 import { useListFilterTelemetry } from "@/hooks/useListFilterTelemetry";
+import { useLocations } from "@/hooks/useLocations";
 import { SHOW_MORE_STEP, useShowMore } from "@/hooks/useShowMore";
 import { filterOrders, NO_ORDER_FILTERS, type OrderFilters as Filters } from "@/lib/inventory-orders";
 
 // Historial de órdenes, solo de lectura, con filtros por tipo e ingrediente.
 export default function OrdersPanel() {
   const { orders, fetchState, reload } = useOrders();
+  // Solo para los nombres de los locales: si el catálogo no carga, el historial muestra el número.
+  const { locations } = useLocations();
   const { user } = useSession();
   const [filters, setFilters] = useState<Filters>(NO_ORDER_FILTERS);
   // Mientras se escribe, el campo responde al momento y el filtro se aplica con el texto "diferido":
@@ -78,7 +81,7 @@ export default function OrdersPanel() {
               <EmptyMessage>Ninguna orden coincide con los filtros.</EmptyMessage>
             ) : (
               <>
-                <OrderHistory orders={filtered.rows.slice(0, visible)} currentUserId={user?.id ?? null} />
+                <OrderHistory orders={filtered.rows.slice(0, visible)} currentUserId={user?.id ?? null} locations={locations} />
                 <ShowMoreButton
                   visible={visible}
                   total={filtered.rows.length}

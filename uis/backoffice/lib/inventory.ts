@@ -17,6 +17,7 @@ import type {
   IngredientExitInput,
   OrdersResponse,
 } from "@/types/inventory";
+import type { Location } from "@/types/locations";
 
 // Capa de integración con la API de inventario (decisión F1): el único sitio del backoffice que
 // llama a /inventory. Ningún componente usa fetch: todo pasa por apiJson (lib/api-client.ts), que
@@ -27,18 +28,21 @@ import type {
 //
 // Telemetría (métricas obligatorias del briefing): las órdenes emiten sus eventos aquí, al recibir el
 // 201 de la API (la orden ya está guardada), con el `requestId` de esa llamada. Quien registra la orden
-// pasa el contexto que la respuesta no trae (el ingrediente y el id del proveedor). Los cálculos están
+// pasa el contexto que la respuesta no trae (el ingrediente, el local y el id del proveedor). Los cálculos están
 // en lib/telemetry/inventory-events.ts. La telemetría nunca hace fallar el registro.
 const INVENTORY_PATH = "/inventory";
 
 export interface EntryTelemetryContext {
   ingredient: Ingredient;
+  // Local de la orden, del catálogo: da `country` y `currency` a los eventos.
+  location: Location;
   // Id del proveedor en el directorio (la entrada solo guarda su nombre; brecha B8).
   supplierId: number | undefined;
 }
 
 export interface ExitTelemetryContext {
   ingredient: Ingredient;
+  location: Location;
 }
 
 function quietly(fn: () => void | Promise<void>): void {
@@ -73,11 +77,13 @@ export async function createEntry(input: IngredientEntryInput, telemetry?: Entry
     ...jsonBody("POST", input),
   });
   if (telemetry) {
-    const { ingredient, supplierId } = telemetry;
-    quietly(() => withRequestId(requestId, () => track("inbound_order_created", inboundOrderProperties(entry, ingredient, supplierId))));
+    const { ingredient, location, supplierId } = telemetry;
+    quietly(() =>
+      withRequestId(requestId, () => track("inbound_order_created", inboundOrderProperties(entry, ingredient, location, supplierId)))
+    );
     quietly(async () => {
       const { inbound } = await listOrders();
-      const variance = priceVarianceProperties(entry, ingredient, supplierId, inbound);
+      const variance = priceVarianceProperties(entry, ingredient, location, supplierId, inbound);
       if (variance) withRequestId(requestId, () => track("ingredient_price_variance_detected", variance));
     });
   }
@@ -98,17 +104,19 @@ export async function createExit(input: IngredientExitInput, telemetry?: ExitTel
     });
   } catch (err) {
     if (telemetry && err instanceof ApiError && err.code === "insufficient_stock") {
-      const { ingredient } = telemetry;
+      const { ingredient, location } = telemetry;
       quietly(async () => {
         const available = (await getIngredient(ingredient.id)).current_stock;
-        withRequestId(err.requestId, () => track("outbound_order_rejected", outboundRejectedProperties(input, ingredient, available)));
+        withRequestId(err.requestId, () =>
+          track("outbound_order_rejected", outboundRejectedProperties(input, ingredient, location, available))
+        );
       });
     }
     throw err;
   }
   const { data: exit, requestId } = result;
   if (telemetry) {
-    const { ingredient } = telemetry;
+    const { ingredient, location } = telemetry;
     quietly(async () => {
       let stockAfter: number | undefined;
       try {
@@ -117,9 +125,9 @@ export async function createExit(input: IngredientExitInput, telemetry?: ExitTel
         // Sin el stock resultante se emite la salida igualmente, sin `stock_after` ni umbral.
       }
       withRequestId(requestId, () => {
-        const { eventType, properties } = outboundOrderEvent(exit, ingredient, stockAfter);
+        const { eventType, properties } = outboundOrderEvent(exit, ingredient, location, stockAfter);
         track(eventType, properties);
-        const threshold = stockAfter === undefined ? null : thresholdProperties(exit, ingredient, stockAfter);
+        const threshold = stockAfter === undefined ? null : thresholdProperties(exit, ingredient, location, stockAfter);
         if (threshold) track("stock_threshold_triggered", threshold);
       });
     });

@@ -11,9 +11,9 @@ type StockState =
 
 export type IngredientStock = { status: "idle" } | StockState;
 
-// Stock actual del ingrediente elegido en el formulario de salida. Se pide a la API (GET
+// Stock actual del ingrediente elegido en los formularios de entrada y salida. Se pide a la API (GET
 // /inventory/products/{id}) cada vez que cambia el ingrediente y cuando se llama a `refresh`
-// (tras registrar una salida o recibir un 400 de stock insuficiente). Si el usuario cambia de
+// (tras registrar una orden o recibir un 400 de stock insuficiente). Si el usuario cambia de
 // ingrediente antes de que llegue la respuesta, la anterior se descarta.
 export function useIngredientStock(ingredientId: string) {
   const [state, setState] = useState<StockState | null>(null);

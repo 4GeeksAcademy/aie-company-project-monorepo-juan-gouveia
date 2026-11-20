@@ -5,6 +5,7 @@ import { ApiError, REQUEST_ID_HEADER } from "@/lib/api-client";
 import { attemptDirectStockEdit, createEntry, createExit } from "@/lib/inventory";
 import { currentRequestId } from "@/lib/telemetry/request-context";
 import type { Ingredient } from "@/types/inventory";
+import type { Location } from "@/types/locations";
 
 const tracked: Array<{ eventType: string; properties: Record<string, unknown>; requestId: string | null }> = [];
 
@@ -21,6 +22,7 @@ jest.mock("@/lib/auth/token", () => ({ getToken: () => "jwt", clearToken: jest.f
 jest.mock("@/lib/telemetry/session", () => ({ currentUserRole: () => "manager" }));
 
 const BEEF: Ingredient = { id: 1, name: "Falda de ternera", sku: "BRS-BEEF-001", unit: "kg", category: "meat", country: "CO", current_stock: 42 };
+const ENVIGADO: Location = { id: 3, code: "medellin_envigado", name: "Medellín Envigado", city: "Medellín", country: "CO", currency: "COP" };
 const PROJECTION = { ingredient_id: 1, ingredient_name: "Falda de ternera", ingredient_sku: "BRS-BEEF-001", ingredient_unit: "kg" };
 const fetchMock = jest.fn();
 
@@ -48,7 +50,7 @@ it("una entrada emite inbound_order_created con el requestId de su POST", async 
   const entry = { id: 7, ...PROJECTION, quantity: 20, location_id: 3, created_at: "2026-11-19T10:00:00Z", user_uuid: "u", supplier_name: "Carnes del Valle S.A.", unit_cost: 38500 };
   fetchMock.mockResolvedValueOnce(json(entry, 201)).mockResolvedValueOnce(json({ inbound: [entry], outbound: [] }));
 
-  await createEntry({ ingredient_id: 1, quantity: 20, supplier_name: entry.supplier_name, unit_cost: 38500, location_id: 3 }, { ingredient: BEEF, supplierId: 2 });
+  await createEntry({ ingredient_id: 1, quantity: 20, supplier_name: entry.supplier_name, unit_cost: 38500, location_id: 3 }, { ingredient: BEEF, location: ENVIGADO, supplierId: 2 });
   await settle();
 
   expect(tracked).toEqual([
@@ -67,7 +69,7 @@ it("una entrada con un coste anómalo emite también ingredient_price_variance_d
   const history = [1, 2, 3].map((id) => ({ id, ...base, created_at: `2026-11-0${id}T10:00:00Z`, unit_cost: 38000 }));
   fetchMock.mockResolvedValueOnce(json(entry, 201)).mockResolvedValueOnce(json({ inbound: [entry, ...history], outbound: [] }));
 
-  await createEntry({ ingredient_id: 1, quantity: 20, supplier_name: base.supplier_name, unit_cost: 50000, location_id: 3 }, { ingredient: BEEF, supplierId: 2 });
+  await createEntry({ ingredient_id: 1, quantity: 20, supplier_name: base.supplier_name, unit_cost: 50000, location_id: 3 }, { ingredient: BEEF, location: ENVIGADO, supplierId: 2 });
   await settle();
 
   expect(tracked.map((event) => event.eventType)).toEqual(["inbound_order_created", "ingredient_price_variance_detected"]);
@@ -78,7 +80,7 @@ it("una merma que cruza el mínimo emite stock_waste_registered y stock_threshol
   const exit = { id: 30, ...PROJECTION, quantity: 5, location_id: 3, created_at: "2026-11-19T10:00:00Z", user_uuid: "u", reason: "waste", waste_reason: "kitchen_error" };
   fetchMock.mockResolvedValueOnce(json(exit, 201)).mockResolvedValueOnce(json({ ...BEEF, current_stock: 37 }));
 
-  await createExit({ ingredient_id: 1, quantity: 5, reason: "waste", waste_reason: "kitchen_error", location_id: 3 }, { ingredient: BEEF });
+  await createExit({ ingredient_id: 1, quantity: 5, reason: "waste", waste_reason: "kitchen_error", location_id: 3 }, { ingredient: BEEF, location: ENVIGADO });
   await settle();
 
   expect(tracked.map((event) => event.eventType)).toEqual(["stock_waste_registered", "stock_threshold_triggered"]);
@@ -91,7 +93,7 @@ it("un consumo emite solo outbound_order_created; sin stock resultante, sin umbr
   const exit = { id: 31, ...PROJECTION, quantity: 2, location_id: 3, created_at: "2026-11-19T10:00:00Z", user_uuid: "u", reason: "consumption", waste_reason: null };
   fetchMock.mockResolvedValueOnce(json(exit, 201)).mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
-  await createExit({ ingredient_id: 1, quantity: 2, reason: "consumption", location_id: 3 }, { ingredient: BEEF });
+  await createExit({ ingredient_id: 1, quantity: 2, reason: "consumption", location_id: 3 }, { ingredient: BEEF, location: ENVIGADO });
   await settle();
 
   expect(tracked).toHaveLength(1);
@@ -105,7 +107,7 @@ it("una salida sin stock suficiente (400) emite outbound_order_rejected con el s
     .mockResolvedValueOnce(json({ error: { code: "insufficient_stock", message: "Stock insuficiente." } }, 400))
     .mockResolvedValueOnce(json({ ...BEEF, current_stock: 52 }));
 
-  await expect(createExit({ ingredient_id: 1, quantity: 60, reason: "waste", waste_reason: "expired", location_id: 3 }, { ingredient: BEEF })).rejects.toBeInstanceOf(ApiError);
+  await expect(createExit({ ingredient_id: 1, quantity: 60, reason: "waste", waste_reason: "expired", location_id: 3 }, { ingredient: BEEF, location: ENVIGADO })).rejects.toBeInstanceOf(ApiError);
   await settle();
 
   expect(tracked.map((event) => event.eventType)).toEqual(["outbound_order_rejected"]);

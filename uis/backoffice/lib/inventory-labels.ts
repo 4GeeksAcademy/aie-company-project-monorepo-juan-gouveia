@@ -61,23 +61,8 @@ export const COUNTRY_DESCRIPTIONS: Record<Country, string> = {
   US: "Estados Unidos",
 };
 
-// Locales de Brasaland (decisión F5). El briefing solo dice que van del 1 al 14 y que sus datos se
-// gestionan por separado, así que no se inventan nombres. Es la única lista de locales del
-// inventario: para mostrar los nombres reales basta con cambiar aquí las etiquetas (o construir la
-// lista desde el futuro dominio `locations`); los formularios y la API siempre usan el número.
-export const LOCATIONS: { id: number; label: string }[] = Array.from({ length: 14 }, (_, index) => ({
-  id: index + 1,
-  label: `Local ${index + 1}`,
-}));
-
-// Opciones para LabeledSelect: el valor es el id en texto ("1"…"14").
-export const LOCATION_OPTIONS: Record<string, string> = Object.fromEntries(
-  LOCATIONS.map((location) => [String(location.id), location.label])
-);
-
-export function locationLabel(id: number): string {
-  return LOCATIONS.find((location) => location.id === id)?.label ?? `Local ${id}`;
-}
+// Los locales (nombres y país) salen del catálogo de la API: lib/locations.ts. Los formularios y la
+// API siguen usando el número (1–14).
 
 // Número sin ceros sobrantes y con punto decimal, como el mensaje de stock insuficiente de la API
 // ("Disponible: 40.5") y las métricas del backoffice: 52 → "52", 12.5 → "12.5", 0.1 + 0.2 → "0.3".

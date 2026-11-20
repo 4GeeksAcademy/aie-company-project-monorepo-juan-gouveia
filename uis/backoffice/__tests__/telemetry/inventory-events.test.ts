@@ -10,9 +10,12 @@ import {
 } from "@/lib/telemetry/inventory-events";
 import { apiRouteTemplate } from "@/lib/telemetry/routes";
 import type { Ingredient, IngredientEntry, IngredientExit } from "@/types/inventory";
+import type { Location } from "@/types/locations";
 
 const BEEF: Ingredient = { id: 12, name: "Falda de ternera", sku: "BRS-BEEF-001", unit: "kg", category: "meat", country: "CO", current_stock: 52 };
 const PORK_US: Ingredient = { ...BEEF, id: 13, sku: "BRS-PORK-001", country: "US" };
+const ENVIGADO: Location = { id: 3, code: "medellin_envigado", name: "Medellín Envigado", city: "Medellín", country: "CO", currency: "COP" };
+const DORAL: Location = { id: 10, code: "miami_doral", name: "Miami Doral", city: "Miami", country: "US", currency: "USD" };
 const USER = "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2";
 const PROJECTION = { ingredient_id: 12, ingredient_name: "Falda de ternera", ingredient_sku: "BRS-BEEF-001", ingredient_unit: "kg" as const };
 
@@ -45,15 +48,20 @@ describe("vocabulario del briefing", () => {
     });
   });
 
-  it("país y moneda salen del ingrediente", () => {
-    expect(productFields(BEEF, 3)).toEqual({ location_id: 3, country: "CO", product_id: 12, product_category: "proteína", unit: "kg", currency: "COP" });
-    expect(productFields(PORK_US, 10)).toMatchObject({ country: "US", currency: "USD" });
+  it("el local da location_id, país y moneda", () => {
+    expect(productFields(BEEF, ENVIGADO)).toEqual({ location_id: 3, country: "CO", product_id: 12, product_category: "proteína", unit: "kg", currency: "COP" });
+    expect(productFields(PORK_US, DORAL)).toMatchObject({ location_id: 10, country: "US", currency: "USD" });
+  });
+
+  it("país y moneda salen del local, no del ingrediente (brecha B7 cerrada)", () => {
+    // La API ya no acepta esta combinación; la prueba solo fija de dónde sale cada campo.
+    expect(productFields(BEEF, DORAL)).toMatchObject({ country: "US", currency: "USD" });
   });
 });
 
 describe("inbound_order_created", () => {
   it("lleva la orden, el producto, el proveedor y el coste unitario", () => {
-    expect(inboundOrderProperties(entry(7824, 38500), BEEF, 2)).toEqual({
+    expect(inboundOrderProperties(entry(7824, 38500), BEEF, ENVIGADO, 2)).toEqual({
       order_id: 7824,
       location_id: 3,
       country: "CO",
@@ -73,7 +81,7 @@ describe("ingredient_price_variance_detected", () => {
 
   it("se emite si el coste se desvía más del 10 % de la media de 3 o más entradas", () => {
     const current = entry(4, 44000);
-    expect(priceVarianceProperties(current, BEEF, 2, [current, ...history])).toMatchObject({
+    expect(priceVarianceProperties(current, BEEF, ENVIGADO, 2, [current, ...history])).toMatchObject({
       order_id: 4,
       unit_cost: 44000,
       historical_avg_unit_cost: 38200,
@@ -85,36 +93,36 @@ describe("ingredient_price_variance_detected", () => {
   });
 
   it("también avisa de una bajada anómala", () => {
-    expect(priceVarianceProperties(entry(4, 30000), BEEF, 2, history)?.variance_pct).toBe(-21.47);
+    expect(priceVarianceProperties(entry(4, 30000), BEEF, ENVIGADO, 2, history)?.variance_pct).toBe(-21.47);
   });
 
   it("no se emite dentro del 10 %", () => {
-    expect(priceVarianceProperties(entry(4, 42000), BEEF, 2, history)).toBeNull();
+    expect(priceVarianceProperties(entry(4, 42000), BEEF, ENVIGADO, 2, history)).toBeNull();
   });
 
   it("no se emite sin al menos 3 entradas del mismo producto y proveedor en 90 días", () => {
     const otherSupplier = entry(5, 38000, "2026-11-01T10:00:00Z", "Otro proveedor");
     const tooOld = entry(6, 38000, "2026-07-01T10:00:00Z");
     const withoutCost = entry(7, null, "2026-11-01T10:00:00Z");
-    expect(priceVarianceProperties(entry(4, 60000), BEEF, 2, [history[0], history[1], otherSupplier, tooOld, withoutCost])).toBeNull();
+    expect(priceVarianceProperties(entry(4, 60000), BEEF, ENVIGADO, 2, [history[0], history[1], otherSupplier, tooOld, withoutCost])).toBeNull();
   });
 
   it("no cuenta entradas posteriores ni la propia", () => {
     const later = entry(8, 38000, "2026-11-20T10:00:00Z");
-    expect(priceVarianceProperties(entry(4, 60000), BEEF, 2, [history[0], history[1], later, entry(4, 60000)])).toBeNull();
+    expect(priceVarianceProperties(entry(4, 60000), BEEF, ENVIGADO, 2, [history[0], history[1], later, entry(4, 60000)])).toBeNull();
   });
 });
 
 describe("salidas", () => {
   it("un consumo emite outbound_order_created, sin reason", () => {
-    expect(outboundOrderEvent(exit(13318, 4.2), BEEF, 31.6)).toEqual({
+    expect(outboundOrderEvent(exit(13318, 4.2), BEEF, ENVIGADO, 31.6)).toEqual({
       eventType: "outbound_order_created",
-      properties: { order_id: 13318, ...productFields(BEEF, 3), quantity: 4.2, stock_after: 31.6 },
+      properties: { order_id: 13318, ...productFields(BEEF, ENVIGADO), quantity: 4.2, stock_after: 31.6 },
     });
   });
 
   it("una merma emite stock_waste_registered con su motivo, y no outbound_order_created", () => {
-    const event = outboundOrderEvent(exit(13319, 1.2, "waste"), BEEF, 30.4);
+    const event = outboundOrderEvent(exit(13319, 1.2, "waste"), BEEF, ENVIGADO, 30.4);
     expect(event.eventType).toBe("stock_waste_registered");
     expect(event.properties).toMatchObject({ order_id: 13319, reason: "expired", stock_after: 30.4 });
   });
@@ -122,8 +130,8 @@ describe("salidas", () => {
 
 describe("stock_threshold_triggered", () => {
   it("se emite al cruzar el umbral de la unidad (40 kg): antes ≥ 40 y después < 40", () => {
-    expect(thresholdProperties(exit(20, 5), BEEF, 38)).toEqual({
-      ...productFields(BEEF, 3),
+    expect(thresholdProperties(exit(20, 5), BEEF, ENVIGADO, 38)).toEqual({
+      ...productFields(BEEF, ENVIGADO),
       quantity: 38,
       threshold_quantity: 40,
       trigger_order_id: 20,
@@ -131,15 +139,15 @@ describe("stock_threshold_triggered", () => {
   });
 
   it("también si la salida empieza justo en el umbral", () => {
-    expect(thresholdProperties(exit(20, 0.3), BEEF, 39.7)).not.toBeNull();
+    expect(thresholdProperties(exit(20, 0.3), BEEF, ENVIGADO, 39.7)).not.toBeNull();
   });
 
   it("no se repite si el stock ya estaba por debajo", () => {
-    expect(thresholdProperties(exit(21, 2), BEEF, 30)).toBeNull();
+    expect(thresholdProperties(exit(21, 2), BEEF, ENVIGADO, 30)).toBeNull();
   });
 
   it("no se emite si sigue por encima", () => {
-    expect(thresholdProperties(exit(22, 2), BEEF, 45)).toBeNull();
+    expect(thresholdProperties(exit(22, 2), BEEF, ENVIGADO, 45)).toBeNull();
   });
 });
 

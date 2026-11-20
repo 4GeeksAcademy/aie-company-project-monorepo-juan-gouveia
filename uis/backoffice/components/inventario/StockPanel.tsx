@@ -4,8 +4,8 @@ import type { IngredientStock } from "@/hooks/useIngredientStock";
 import { FIELD_LABELS, formatQuantity } from "@/lib/inventory-labels";
 import { stockLevel } from "@/lib/inventory-stock-level";
 
-// Stock actual del ingrediente elegido en el formulario de salida, visible antes de escribir la
-// cantidad: "Stock actual: 52 kg" con su nivel.
+// Stock actual del ingrediente elegido en los formularios de entrada y salida: "Stock actual: 52 kg"
+// con su nivel.
 export default function StockPanel({ stock, onRetry }: { stock: IngredientStock; onRetry: () => void }) {
   if (stock.status === "idle") {
     return <p className="text-sm text-gray-600">Elige un ingrediente para ver su stock actual.</p>;

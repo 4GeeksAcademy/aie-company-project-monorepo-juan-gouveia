@@ -1,13 +1,14 @@
-import { COUNTRY_CURRENCY } from "@/lib/inventory-labels";
 import { LOW_STOCK_THRESHOLDS } from "@/lib/inventory-stock-level";
 import type { Category, Ingredient, IngredientEntry, IngredientExit, IngredientExitInput } from "@/types/inventory";
+import type { Location } from "@/types/locations";
 
 // Propiedades de las métricas obligatorias del inventario (plan de telemetría, sección 3). Son
 // funciones puras: lib/inventory.ts las llama tras la respuesta de la API y emite con track().
 //
 // Los eventos usan el vocabulario del briefing, no el del modelo (plan, §12.1): `product_id` es el
-// `Ingredient.id`, `product_category` es la categoría traducida, y `country`/`currency` salen del
-// país del ingrediente mientras no exista la entidad de locales (brecha B7).
+// `Ingredient.id`, `product_category` es la categoría traducida, y `location_id`, `country` y `currency`
+// salen del local de la orden, del catálogo `locations` (brecha B7 cerrada). La API ya exige que el
+// ingrediente sea del país del local.
 
 // Briefing: proteína, vegetal, salsa, bebida, empaque y limpieza.
 export const PRODUCT_CATEGORY: Record<Category, string> = {
@@ -30,23 +31,28 @@ function round(value: number, decimals: number): number {
   return Math.round(value * factor) / factor;
 }
 
-// Campos comunes de un hecho del inventario: dónde, qué producto y en qué moneda.
-export function productFields(ingredient: Ingredient, locationId: number) {
+// Campos comunes de un hecho del inventario: dónde (el local), qué producto y en qué moneda (la del local).
+export function productFields(ingredient: Ingredient, location: Location) {
   return {
-    location_id: locationId,
-    country: ingredient.country,
+    location_id: location.id,
+    country: location.country,
     product_id: ingredient.id,
     product_category: PRODUCT_CATEGORY[ingredient.category],
     unit: ingredient.unit,
-    currency: COUNTRY_CURRENCY[ingredient.country],
+    currency: location.currency,
   };
 }
 
 // `inbound_order_created`.
-export function inboundOrderProperties(entry: IngredientEntry, ingredient: Ingredient, supplierId: number | undefined) {
+export function inboundOrderProperties(
+  entry: IngredientEntry,
+  ingredient: Ingredient,
+  location: Location,
+  supplierId: number | undefined
+) {
   return {
     order_id: entry.id,
-    ...productFields(ingredient, entry.location_id),
+    ...productFields(ingredient, location),
     quantity: entry.quantity,
     supplier_id: supplierId,
     unit_cost: entry.unit_cost ?? undefined,
@@ -59,6 +65,7 @@ export function inboundOrderProperties(entry: IngredientEntry, ingredient: Ingre
 export function priceVarianceProperties(
   entry: IngredientEntry,
   ingredient: Ingredient,
+  location: Location,
   supplierId: number | undefined,
   history: readonly IngredientEntry[]
 ) {
@@ -83,7 +90,7 @@ export function priceVarianceProperties(
   if (Math.abs(variancePct) <= PRICE_VARIANCE.thresholdPct) return null;
 
   return {
-    ...inboundOrderProperties(entry, ingredient, supplierId),
+    ...inboundOrderProperties(entry, ingredient, location, supplierId),
     historical_avg_unit_cost: round(average, 2),
     variance_pct: round(variancePct, 2),
     threshold_pct: PRICE_VARIANCE.thresholdPct,
@@ -94,10 +101,15 @@ export function priceVarianceProperties(
 
 // Una salida emite un único evento según su motivo (plan, §3.2): `outbound_order_created` si es
 // consumo y `stock_waste_registered` si es merma, con el motivo en `reason`.
-export function outboundOrderEvent(exit: IngredientExit, ingredient: Ingredient, stockAfter: number | undefined) {
+export function outboundOrderEvent(
+  exit: IngredientExit,
+  ingredient: Ingredient,
+  location: Location,
+  stockAfter: number | undefined
+) {
   const base = {
     order_id: exit.id,
-    ...productFields(ingredient, exit.location_id),
+    ...productFields(ingredient, location),
     quantity: exit.quantity,
     stock_after: stockAfter,
   };
@@ -110,12 +122,12 @@ export function outboundOrderEvent(exit: IngredientExit, ingredient: Ingredient,
 // `stock_threshold_triggered`, o null si la salida no hace cruzar el mínimo: antes ≥ mínimo y
 // después < mínimo (plan, §3.2). El mínimo es, mientras no haya mínimos por local (brecha B3), el
 // umbral de stock bajo del backoffice para la unidad del producto, sobre el stock global.
-export function thresholdProperties(exit: IngredientExit, ingredient: Ingredient, stockAfter: number) {
+export function thresholdProperties(exit: IngredientExit, ingredient: Ingredient, location: Location, stockAfter: number) {
   const threshold = LOW_STOCK_THRESHOLDS[ingredient.unit];
   const stockBefore = round(stockAfter + exit.quantity, 3);
   if (!(stockBefore >= threshold && stockAfter < threshold)) return null;
   return {
-    ...productFields(ingredient, exit.location_id),
+    ...productFields(ingredient, location),
     quantity: stockAfter,
     threshold_quantity: threshold,
     trigger_order_id: exit.id,
@@ -124,9 +136,14 @@ export function thresholdProperties(exit: IngredientExit, ingredient: Ingredient
 
 // `outbound_order_rejected` (§5.1): la API rechazó una salida por superar el stock (400
 // `insufficient_stock`); `available_quantity` es el stock de ese momento.
-export function outboundRejectedProperties(input: IngredientExitInput, ingredient: Ingredient, available: number) {
+export function outboundRejectedProperties(
+  input: IngredientExitInput,
+  ingredient: Ingredient,
+  location: Location,
+  available: number
+) {
   return {
-    ...productFields(ingredient, input.location_id),
+    ...productFields(ingredient, location),
     quantity: input.quantity,
     available_quantity: available,
     outbound_type: input.reason,
