@@ -7,8 +7,9 @@ Usan el SQLite temporal de `inventory_engine` (con las claves foráneas activada
 import pytest
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, SQLModel
+from sqlmodel import Session, SQLModel, create_engine
 
+from app.core.database import init_db
 from app.domains.inventory.models import Ingredient, IngredientEntry, IngredientExit
 from tests.inventory.helpers import USER_UUID, ingredient_data
 
@@ -17,12 +18,17 @@ def columns(engine, table: str) -> set[str]:
     return {column["name"] for column in inspect(engine).get_columns(table)}
 
 
-def test_init_db_creates_exactly_the_three_inventory_tables(inventory_engine):
-    assert set(inspect(inventory_engine).get_table_names()) == {
+def test_init_db_creates_exactly_the_three_inventory_tables(tmp_path):
+    # Sobre una base vacía: `telemetry_events` y `locations` las crean solo sus migraciones (002 y 004).
+    engine = create_engine(f"sqlite:///{tmp_path / 'init-db.db'}")
+    init_db(engine)
+
+    assert set(inspect(engine).get_table_names()) == {
         "ingredients",
         "ingredient_entries",
         "ingredient_exits",
     }
+    engine.dispose()
 
 
 def test_no_users_table_is_replicated(inventory_engine):

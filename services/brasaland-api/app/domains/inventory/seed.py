@@ -13,8 +13,8 @@ Las órdenes llevan el `user_uuid` de un usuario real de TinyDB: el primer admin
 Es idempotente: si ya hay ingredientes, no inserta nada. Si inserta, lo hace todo en una única
 transacción, así que un fallo no deja una carga a medias.
 
-`location_id` no está asignado a países en el briefing: se usa 1 para los ingredientes de Colombia
-y 10 para los de EE. UU., como valores de ejemplo dentro del rango 1–14.
+`location_id` es 1 (Medellín Centro) para los ingredientes de Colombia y 10 (Miami Doral) para los
+de EE. UU., según el catálogo de locales (`migrations/004_locations.sql`).
 """
 
 import sys

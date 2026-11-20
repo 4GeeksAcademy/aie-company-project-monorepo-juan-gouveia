@@ -152,6 +152,11 @@ app/
     │   ├── router.py       # Endpoints de /inventory
     │   ├── cache.py        # Caché de GET /products (60 s) y GET /orders (5 min); las escrituras la limpian
     │   └── seed.py         # Datos semilla del briefing (`uv run seed-inventory`)
+    ├── locations/
+    │   ├── models.py       # Tabla locations (SQLModel con registro propio, fuera de init_db)
+    │   ├── schemas.py      # LocationRead
+    │   ├── service.py      # Lectura del catálogo, cache de 10 min y 503 si falta la tabla
+    │   └── router.py       # GET /locations
     ├── telemetry/
     │   ├── models.py       # Tabla telemetry_events (SQLModel con registro propio, fuera de init_db)
     │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch (laxo) y TelemetryReceipt
@@ -349,8 +354,22 @@ Stock resultante: Falda de ternera 52, Costilla de cerdo 32, Chimichurri 20 y el
 - Las órdenes llevan el UUID del administrador activo más antiguo de TinyDB: antes hay que ejecutar `uv run create-admin`.
 - Crea las tablas si no existen, valida los datos con los schemas de la API y lo inserta todo en una única transacción.
 - Es idempotente: si ya hay ingredientes, no inserta nada.
-- `location_id` es 1 para los ingredientes de Colombia y 10 para los de EE. UU. (valores de ejemplo: el briefing no asigna locales a países).
+- `location_id` es 1 (Medellín Centro) para los ingredientes de Colombia y 10 (Miami Doral) para los de EE. UU., según el catálogo de locales.
 - La API no siembra el inventario al arrancar.
+
+## Catálogo de locales (`GET /api/v1/locations`)
+
+Los 14 locales de Brasaland, en la tabla `locations`. El `id` es el `location_id` (1–14) de las órdenes del inventario y de la telemetría; cada local tiene la sede del briefing del gestor de incidencias (`code` y `name`), su ciudad, su país y su moneda.
+
+| `id` | Locales | `country` | `currency` |
+|---|---|---|---|
+| 1–9 | Medellín Centro, Laureles, Envigado, Bello e Itagüí; Bogotá Chapinero y Usaquén; Cali Granada; Barranquilla Norte | `CO` | `COP` |
+| 10–14 | Miami Doral, Hialeah y Kendall; Orlando International Drive; Fort Lauderdale | `US` | `USD` |
+
+- **Migración:** solo [`migrations/004_locations.sql`](./migrations/004_locations.sql) crea y llena la tabla, con RLS como la 002 y la 003; el modelo tiene un registro propio y `init_db` no la crea. Es idempotente: volver a ejecutarla deja las 14 filas como están en el script. Hay que ejecutarla una vez en el SQL Editor de Supabase.
+- **Endpoint:** `GET /api/v1/locations` exige token y devuelve la lista ordenada por `id` (`id`, `code`, `name`, `city`, `country`, `currency`). Se guarda 10 minutos (`X-Cache`). Sin la tabla responde 503 `locations_unavailable` y el log (`api.locations`) pide la migración.
+- **Sin clave foránea:** las órdenes guardan solo el entero (regla 5 del inventario).
+- Los códigos son exactamente los `branch` del gestor de incidencias sin `central`; una prueba lo comprueba, y las pruebas crean la tabla con las filas de la propia migración.
 
 ## Autenticación: `auth`, `users` y `profiles`
 
