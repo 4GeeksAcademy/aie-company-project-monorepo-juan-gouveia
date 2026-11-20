@@ -158,7 +158,8 @@ app/
     │   ├── catalog.py      # GENERADO desde event-schemas.json: allowlist, level, value y message por evento
     │   ├── generate_catalog.py # `uv run telemetry-catalog`: regenera catalog.py
     │   ├── service.py      # Validación por evento, de evento a fila y bulk insert con ON CONFLICT
-    │   └── router.py       # POST /telemetry/events: valida, guarda, registra en el log y responde
+    │   ├── report.py       # Reporte técnico: período, cache de 60 s y llamada a services/telemetry/analysis.py
+    │   └── router.py       # POST /telemetry/events (receptor) y GET /telemetry/report (solo admin)
     └── suppliers/
         ├── models.py       # Modelos Pydantic: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Tabla de proveedores; la ruta y la apertura vienen de core/storage.py
@@ -445,6 +446,30 @@ Los eventos se guardan en la tabla `telemetry_events` de Supabase ([plan de tele
 - **La crea solo la migración.** Hay que ejecutar una vez [`migrations/002_telemetry_events.sql`](./migrations/002_telemetry_events.sql) en el SQL Editor de Supabase. Es idempotente. La API no crea esta tabla al arrancar: su modelo (`app/domains/telemetry/models.py`) tiene un registro propio, fuera del `create_all` de `init_db`, para que no pueda quedar una tabla sin el índice GIN, el trigger ni RLS.
 - **Solo inserciones.** La API nunca actualiza ni borra eventos, y en la base un trigger rechaza cualquier `UPDATE`, `DELETE` o `TRUNCATE`. Las purgas excepcionales (retención, derecho de supresión) se hacen a mano, como explica la propia migración.
 - **Sin acceso desde la API REST de Supabase.** RLS está activado y sin políticas, y los roles `anon` y `authenticated` no tienen permisos. La API se conecta como `postgres`, que no está sujeto a RLS.
+
+## Reporte técnico de telemetría (`GET /telemetry/report`)
+
+Métricas operacionales calculadas sobre `telemetry_events` para el equipo de ingeniería ([plan de telemetría](../../docs/telemetry/telemetry-plan.md), sección 16). El endpoint no calcula nada: resuelve el período y llama a las funciones del pipeline [`services/telemetry/analysis.py`](../telemetry/README.es.md), que cargan solo esa ventana en SQL y agregan con Pandas (`app/domains/telemetry/report.py`).
+
+- **Acceso:** fuera de `/api/v1`, como el receptor, pero **solo para administradores**: 401 sin token y 403 con otro rol. El backoffice lo pide por una ruta propia de su intermediario; el CORS de `/telemetry` sigue limitado a `POST`.
+- **Período:** `start_date` y `end_date` opcionales, en ISO 8601 (`2026-11-14` = 00:00 UTC; `2026-11-14T08:00:00Z`; sin zona = UTC). Sin parámetros, los últimos 7 días hasta ahora; solo `end_date`, los 7 días anteriores; solo `start_date`, hasta ahora. Inicio inclusivo y fin exclusivo. Errores 422: `invalid_date`, `invalid_period` (el inicio no es anterior al fin) y `period_too_long` (más de 90 días).
+- **Respuesta (`TelemetryReport`):**
+
+  ```json
+  {
+    "period": {"from": "2026-11-13T14:19:36Z", "to": "2026-11-20T14:19:36Z"},
+    "metrics": {
+      "events_per_day": [{"date": "2026-11-19", "total": 41, "info": 37, "warn": 4, "error": 0}],
+      "error_rate_by_type": [{"date": "2026-11-19", "event_type": "api_error_returned", "level": "warn", "count": 2, "rate": 0.0488}],
+      "api_latency_by_route": [{"date": "2026-11-19", "method": "GET", "route": "/api/v1/inventory/orders", "samples": 3, "avg_ms": 2381.9, "max_ms": 3410.3}],
+      "auth_failure_rate": [{"date": "2026-11-19", "attempts": 2, "failed": 1, "failure_rate": 0.5}]
+    }
+  }
+  ```
+
+  `events_per_day` incluye todos los días del período, con ceros si no hubo eventos. Las tasas son fracciones de 0 a 1.
+- **Cache:** en memoria, 60 s, por combinación de parámetros (`2026-11-14` y `2026-11-14T00:00:00Z` son la misma). Sin parámetros, el período se resuelve una vez y se guarda con el resultado, así que dos peticiones dentro del TTL reciben el mismo JSON. Cabecera `X-Cache: HIT` o `MISS`. El reporte puede ir hasta 60 s por detrás de la tabla.
+- **Fallos de la base:** `503 telemetry_report_unavailable`, sin guardar nada en la cache, y una línea de error en `api.telemetry` (si falta la tabla, pide ejecutar la migración 002).
 
 ## Log de timing
 

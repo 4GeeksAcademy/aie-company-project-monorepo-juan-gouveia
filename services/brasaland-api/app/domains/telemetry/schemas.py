@@ -12,6 +12,7 @@ comprueba después el receptor contra el catálogo generado desde `event-schemas
 """
 
 import re
+import datetime as dt
 from typing import Annotated, Any, Literal
 
 from pydantic import UUID4, AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -79,3 +80,73 @@ class TelemetryReceipt(BaseModel):
         ge=0, description="Eventos válidos guardados; incluye los repetidos, que ya estaban guardados por su eventId"
     )
     rejected: int = Field(ge=0, description="Eventos que no cumplen el contrato; no se guardan")
+
+
+# --- Reporte técnico (GET /telemetry/report, plan de telemetría, sección 16) -----------------------------
+
+Rate = Annotated[float, Field(ge=0, le=1, description="Fracción de 0 a 1, con 4 decimales")]
+
+
+class ReportPeriod(BaseModel):
+    """Ventana del reporte, `[from, to)` en UTC: inicio inclusivo, fin exclusivo."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: str = Field(alias="from", description="Inicio inclusivo, ISO 8601 en UTC (`2026-11-13T10:00:00Z`)")
+    to: str = Field(description="Fin exclusivo, ISO 8601 en UTC")
+
+
+class EventsPerDay(BaseModel):
+    """Volumen de un día, por nivel."""
+
+    date: dt.date = Field(description="Día UTC")
+    total: int = Field(ge=0, description="Eventos del día")
+    info: int = Field(ge=0)
+    warn: int = Field(ge=0)
+    error: int = Field(ge=0)
+
+
+class ErrorRateByType(BaseModel):
+    """Peso de un tipo de fallo (`warn` o `error`) sobre el volumen de su día."""
+
+    date: dt.date = Field(description="Día UTC")
+    event_type: str
+    level: Literal["warn", "error"]
+    count: int = Field(ge=1, description="Eventos de ese tipo en el día")
+    rate: Rate
+
+
+class ApiLatencyByRoute(BaseModel):
+    """Latencia de una ruta de la API en un día, a partir de `api_latency_recorded`."""
+
+    date: dt.date = Field(description="Día UTC")
+    method: str
+    route: str = Field(description="Plantilla de la ruta, sin ids reales")
+    samples: int = Field(ge=1, description="Eventos de latencia (muestreados)")
+    avg_ms: float = Field(ge=0, description="Media en ms, ponderada por 1/sample_rate")
+    max_ms: float = Field(ge=0, description="Máximo observado en ms")
+
+
+class AuthFailureRate(BaseModel):
+    """Intentos de login de un día y la fracción que falló."""
+
+    date: dt.date = Field(description="Día UTC")
+    attempts: int = Field(ge=1, description="login_failed + login_succeeded")
+    failed: int = Field(ge=0, description="login_failed")
+    failure_rate: Rate
+
+
+class ReportMetrics(BaseModel):
+    """Una lista de filas por métrica, todas agrupadas por día UTC."""
+
+    events_per_day: list[EventsPerDay]
+    error_rate_by_type: list[ErrorRateByType]
+    api_latency_by_route: list[ApiLatencyByRoute]
+    auth_failure_rate: list[AuthFailureRate]
+
+
+class TelemetryReport(BaseModel):
+    """Respuesta de `GET /telemetry/report`."""
+
+    period: ReportPeriod
+    metrics: ReportMetrics

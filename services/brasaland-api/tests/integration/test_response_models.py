@@ -91,9 +91,9 @@ def openapi_operations(api) -> tuple[list[tuple[str, str, dict]], dict]:
 
 def test_the_app_still_has_the_audited_operations(api):
     # Si cambia, hay que auditar la ruta nueva y añadirla a docs/serialization-audit.md.
-    # 35 de la auditoría + POST /telemetry/events (sección 11 del documento).
+    # 35 de la auditoría + POST /telemetry/events y GET /telemetry/report (sección 11 del documento).
     operations, _ = openapi_operations(api)
-    assert len(operations) == 36
+    assert len(operations) == 37
 
 
 def test_every_json_response_is_a_named_model_except_the_named_exceptions(api):
