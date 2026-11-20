@@ -1974,3 +1974,12 @@ cargar (SQL) → refinar (Pandas) → convertir tipos → agrupar → agregar �
 ### 16.4 Dashboard
 
 `/telemetria` en el backoffice ("Telemetría técnica", en la sección "Herramientas"). Llega a la API por una ruta propia del intermediario (`app/api/telemetry/report/route.ts`), porque el resto del BFF apunta a `/api/v1`. Muestra el período, dos campos de fecha opcionales, una barra por día apilada por nivel y una tabla por cada otra métrica. Solo visualiza las métricas del reporte. Quien no es admin ve un aviso en lugar de los datos. En la vista, las dos fechas se incluyen; el fin se envía como el día siguiente, porque la API lo toma como exclusivo. El reenvío del intermediario está en `lib/bff/proxy.ts`, compartido con el catch-all, y la latencia de esta llamada se registra con la ruta `/telemetry/report`, sin el prefijo `/api/v1`.
+
+### 16.5 Verificación
+
+**2026-11-20**, con la API en local contra Supabase y el backoffice con `next start`:
+
+- **Datos de dos días.** 53 eventos reales: 41 del 2026-11-19 (fase de almacenamiento) y 12 del 2026-11-20, generados desde el backoffice al revisar la vista (navegación, un login fallido y otro correcto). Ningún evento se insertó a mano.
+- **Cálculo.** Los totales por día y nivel, los fallos por tipo, sus tasas (2 de 12 = 0,1667) y los intentos de login del reporte coinciden con un `GROUP BY` independiente en SQL sobre la misma tabla.
+- **Endpoint.** Sin parámetros, los 7 días hasta ahora, con ceros en los días sin eventos; con `start_date=2026-11-19&end_date=2026-11-21`, los dos días. La segunda petición igual responde `X-Cache: HIT`; un período al revés, 422 `invalid_period`; sin token, 401.
+- **Vista.** `/telemetria` muestra el período y las cuatro métricas a través del intermediario; revisada por el desarrollador en el navegador.

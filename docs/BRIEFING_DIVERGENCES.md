@@ -28,6 +28,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 15. [Plan de Telemetría](#plan-de-telemetría) (briefing de Brasaland "Proyectos de Telemetría" y enunciado del RFI, rama `feature/telemetry-plan`)
 16. [Captura de eventos de telemetría](#captura-de-eventos-de-telemetría) (enunciado "Sistema de captura", rama `feature/telemetry-capture`)
 17. [Almacenamiento de eventos de telemetría](#almacenamiento-de-eventos-de-telemetría) (enunciado "Telemetría — Almacenamiento", rama `feature/telemetry-storage`)
+18. [Reporte técnico de telemetría](#reporte-técnico-de-telemetría) (enunciado "Telemetría de tu compañía — Reporte técnico", rama `feature/telemetry-report`)
 
 ---
 
@@ -1511,3 +1512,90 @@ Al crear `telemetry_events`, el Table Editor de Supabase mostró las tres tablas
 | Los eventos aparecen con `event_type`, `timestamp` y `tags` poblados, técnicos y de negocio | ✅ | Captura de `telemetry_events` en Supabase: `inbound_order_created`, `stock_waste_registered`, `direct_stock_edit_rejected`, `login_failed`, `page_viewed`, `api_latency_recorded`… |
 | `tags` preserva los allowlists y las dimensiones del briefing | ✅ | Validación contra el catálogo; en Supabase, `inbound_order_created` con `location_id`, `country`, `product_id`, `product_category`, `quantity`, `unit`, `currency`, `supplier_id` y `unit_cost` |
 | Un solo INSERT por lote | ✅ | `INSERT … VALUES (…), (…) ON CONFLICT (id) DO NOTHING`; `test_writes_the_whole_batch_with_a_single_insert` cuenta las sentencias |
+
+## Reporte técnico de telemetría
+
+Tercera implementación del plan de telemetría, en la rama `feature/telemetry-report`. Los eventos de `telemetry_events` se transforman en un reporte técnico (volumen, fallos, latencia de la API y fallos de login, por día UTC) que sirve `GET /telemetry/report`. Coincide con el enunciado en lo siguiente:
+
+- **Pipeline:** `services/telemetry/analysis.py`, en la ruta literal, con cuatro funciones de métrica independientes y sin efectos secundarios. Cada una sigue `cargar (SQL) → refinar → convertir tipos → agrupar → agregar`, convierte `timestamp` con `pd.to_datetime(..., utc=True)` antes de agrupar, no usa bucles y devuelve una lista de dicts.
+- **Filtros:** la ventana (inicio inclusivo, fin exclusivo, en UTC) y los `event_type` se aplican en SQL, con `IN (...)` en la métrica de login; las dimensiones de `tags` y las tasas se calculan en Pandas.
+- **Endpoint:** `start_date` y `end_date` opcionales en ISO 8601, los últimos 7 días por defecto, el período resuelto una sola vez y pasado a cada función, y la respuesta `{"period": {"from", "to"}, "metrics": {...}}` con `events_per_day` y `error_rate_by_type`.
+- **Cache:** en memoria con TTL de 60 s; la misma combinación de fechas dentro del TTL no recalcula.
+- **Actividades adicionales:** las dos. `auth_failure_rate` está en el reporte y el backoffice tiene una vista técnica que muestra el período y una visualización por métrica.
+
+Las decisiones (R1 a R6) se tomaron con el desarrollador el 20 de noviembre de 2026. El plan (`docs/telemetry/telemetry-plan.md`, sección 16) se actualizó con ellas antes de escribir código.
+
+> **Estado:** completado y verificado contra Supabase con datos reales de dos días (2026-11-19 y 2026-11-20), un commit por fase, hechos por el desarrollador.
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Eventos de login | `user_login_failed` y `user_login_succeeded` | `login_failed` y `login_succeeded` | Son los nombres del catálogo aprobado y de los eventos ya guardados |
+| Ubicación de `analysis.py` | `services/telemetry/analysis.py` | En esa ruta, como paquete local `brasaland-telemetry` instalado en la API en modo editable | La API vive en `services/brasaland-api`; así la ruta es la literal y la API lo importa sin rutas relativas |
+| Acceso al endpoint | Sin especificar | Token y rol `admin` (401 sin token, 403 con otro rol) | El reporte expone rutas, errores y latencias internas |
+| Validación del período | Sin especificar | 422 con fecha mal formada, `invalid_period` y `period_too_long` (más de 90 días) | Un período al revés o enorme no debe llegar a la base |
+| Fallo de la base | Sin especificar | 503 `telemetry_report_unavailable`, sin guardar en cache | Un reporte vacío por un fallo parecería un sistema sin actividad |
+| Latencia por ruta | Ejemplo orientativo | Agrupada por día, método y ruta, con media ponderada por `1/sample_rate` | `GET` y `POST` de una ruta no se comparan; el muestreo sesgaría la media |
+| Ruta del dashboard | "ej. `/telemetry`" | `/telemetria` | Las rutas del backoffice están en español |
+| Acceso del dashboard a la API | Sin especificar | Ruta propia del intermediario: `app/api/telemetry/report/route.ts` | El intermediario solo llegaba a `/api/v1`, y el reporte está fuera |
+| Gráficos | "Cualquier librería disponible" o una tabla | Barras con `div` y Tailwind, y tablas | El backoffice no tiene librería de gráficos y su stack es solo Tailwind, TS, React y Next |
+| Destino del PR | Oculto en la captura | `feature/telemetry-storage` | Los PR #17 a #23 siguen abiertos; decisión del desarrollador |
+
+### 1. Los eventos de login se llaman `login_failed` y `login_succeeded`
+
+La actividad adicional nombra `user_login_failed` y `user_login_succeeded`. En el catálogo aprobado (`docs/telemetry/telemetry-plan.md`, §5, y `event-schemas.json`) son `login_failed` y `login_succeeded`, y con esos nombres están guardados en Supabase. Renombrarlos ahora rompería la continuidad de la tabla, que es inmutable. La métrica sigue la consigna al pie de la letra: carga los dos tipos con `event_type IN (...)` en SQL y calcula `failed / attempts` por día en Pandas.
+
+**Coste:** ninguno; la clave del reporte es la del enunciado, `auth_failure_rate`.
+
+### 2. `services/telemetry` es un paquete local
+
+El enunciado pide `analysis.py` en `services/telemetry/`, pero la API está en `services/brasaland-api/`. Para respetar la ruta literal sin manipular `sys.path`, `services/telemetry/` es un paquete (`brasaland-telemetry`) que la API declara como dependencia local y uv instala en modo editable, igual que `packages/shared`. El endpoint vive en el dominio `telemetry` de la API, que importa las funciones del paquete. `requirements.txt` lo excluye (`--no-emit-package`), el Dockerfile lo copia e instala antes que la API, y `docker-compose.yml` lo monta para que los cambios se vean sin reconstruir la imagen.
+
+**Coste:** un `pyproject.toml` más y un paso más en el Dockerfile.
+
+### 3. El reporte es solo para administradores
+
+El enunciado no dice quién puede ver el reporte. Expone las rutas internas de la API, sus latencias y los tipos de fallo, así que exige token y rol `admin`, como el resto de las operaciones sensibles. El dashboard es visible en el menú para todos, pero quien no es administrador ve "Solo los administradores pueden ver el reporte técnico." en lugar de los datos, y su sesión no se cierra.
+
+### 4. Validación del período y fallo de la base
+
+Además del formato ISO 8601 (fecha sola = 00:00 UTC; sin zona = UTC), el endpoint responde 422 `invalid_period` si el inicio no es anterior al fin y `period_too_long` por encima de 90 días: el reporte es un radar operacional, y un período mayor cargaría en memoria muchas más filas sin responder mejor ninguna pregunta. Si la base falla o falta la tabla, responde 503 `telemetry_report_unavailable` y no guarda nada en cache. Un reporte con ceros parecería un sistema sin actividad.
+
+**Coste:** un período de más de 90 días exige varias peticiones.
+
+### 5. La latencia se agrupa también por método y se pondera por el muestreo
+
+La primera versión del plan (R2) agrupaba la latencia por día y ruta. En la Fase 1 se añadió el método, porque `GET` y `POST` de una misma ruta tienen latencias muy distintas y mezclarlos daría una media sin significado. Además, `api_latency_recorded` es un muestreo: guarda siempre las peticiones lentas y las de error, y 1 de cada 10 del resto (`sample_rate` en `tags`). La media se pondera por `1/sample_rate` con operaciones de Pandas, para que el muestreo no la sesgue hacia las lentas; `samples` es el número de eventos y `max_ms` no se pondera.
+
+### 6. El dashboard está en `/telemetria` y llega a la API por su propia ruta
+
+El enunciado sugiere `/telemetry`. Las rutas del backoffice están en español (`/inventario`, `/proveedores`, `/incidencias`), así que la vista está en `/telemetria`, con el título "Telemetría técnica" en la sección "Herramientas".
+
+El navegador nunca llama a la API directamente: pasa por el intermediario (BFF), que solo reenviaba a `/api/v1`. El reporte está fuera de ese prefijo, como el receptor de eventos, así que tiene su propia ruta, `app/api/telemetry/report/route.ts`, que toma el origen de `API_BASE_URL`. La lógica de reenvío se extrajo a `lib/bff/proxy.ts` y la comparten el catch-all y la ruta nueva, sin cambiar el comportamiento del primero. Por la misma razón, la latencia de esta llamada se registra como `/telemetry/report`, sin el prefijo `/api/v1`.
+
+En la vista, las dos fechas del filtro se incluyen; el fin se envía a la API como el día siguiente, porque la API lo toma como exclusivo.
+
+**Coste:** una ruta más en el intermediario.
+
+### 7. Sin librería de gráficos
+
+El enunciado permite cualquier librería disponible o una tabla HTML. El backoffice no tiene ninguna, y su stack es solo Tailwind, TypeScript, React y Next. `events_per_day` se muestra como una barra por día apilada por nivel, hecha con `div` y Tailwind; las otras tres métricas, como tablas. La vista solo muestra las métricas del reporte, nada de negocio.
+
+### 8. Pull Request contra la rama anterior
+
+La rama sale de `feature/telemetry-storage` y el PR apunta a ella, porque los PR #17 a #23 siguen abiertos; lo decidió el desarrollador. El título es `feat: telemetry report endpoint`.
+
+### Verificación de los criterios
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| `services/telemetry/analysis.py` existe con al menos tres funciones de métrica independientes | ✅ | Cuatro: `events_per_day`, `error_rate_by_type`, `api_latency_by_route` y `auth_failure_rate`; `tests/telemetry/test_report_analysis.py` comprueba que dos llamadas iguales dan el mismo resultado |
+| Cada función sigue `cargar → refinar → convertir tipos → agrupar → agregar` | ✅ | El SQL filtra por ventana y `event_type`; el resto en Pandas, en ese orden (`analysis.py`) |
+| Timestamps a `datetime` con `utc=True` antes de cualquier `groupby` temporal | ✅ | `pd.to_datetime(frame["timestamp"], utc=True, format="ISO8601")` en `_to_utc_day`, antes de cada agrupación; una prueba con eventos en el límite del día UTC |
+| Sin bucles para calcular métricas | ✅ | Solo `groupby`, `agg`, `size`, `unstack`, `reindex` y operaciones vectoriales; `test_the_pipeline_has_no_loops` recorre el árbol sintáctico y falla con cualquier bucle, comprensión o `apply` |
+| Cada función devuelve una lista de dicts serializable a JSON | ✅ | `to_dict(orient="records")`; una prueba comprueba tipos nativos y pasa cada resultado por `json.dumps` |
+| `GET /telemetry/report` acepta `start_date` y `end_date` opcionales, 7 días por defecto | ✅ | `app/domains/telemetry/report.py` (`resolve_period`); `tests/telemetry/test_report_period.py` |
+| JSON con `{ "period": {...}, "metrics": {...} }` | ✅ | Con curl contra Supabase el 2026-11-20 (muestra en la descripción del PR) |
+| Cache en memoria con TTL de 60 s | ✅ | `TTLCache(60)`; segunda petición igual con `X-Cache: HIT`; `tests/integration/test_telemetry_report_router.py` |
+| Cada métrica responde una pregunta técnica u operacional | ✅ | Volumen, fallos, latencia y login (tabla de §16.2 del plan); ninguna métrica de negocio |
+| Las métricas tienen una dimensión de agrupamiento | ✅ | Todas por día UTC, y además por nivel, tipo de evento o método y ruta |
+| Datos reales con dimensión temporal | ✅ | 53 eventos de dos días; los totales por día y nivel, las tasas y los intentos de login coinciden con un `GROUP BY` independiente en SQL |
