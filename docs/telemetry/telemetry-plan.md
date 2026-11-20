@@ -4,9 +4,10 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 
 - **Entregables:** este documento y [`event-schemas.json`](event-schemas.json) (los esquemas de cada evento).
 - **Fuentes:** el briefing de Brasaland (métricas obligatorias, entidades y restricciones), el enunciado del RFI y el código actual del monorepo.
-- **Estado:** aprobado, con las revisiones de las fases de captura y de almacenamiento (catálogo 1.2.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice, la fase de almacenamiento y una ficha por cada uno de los 44 eventos.
+- **Estado:** aprobado, con las revisiones de las fases de captura, almacenamiento y reporte técnico (catálogo 1.2.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice, la fase de almacenamiento, una ficha por cada uno de los 44 eventos y la fase de reporte técnico.
 - **Fase de captura:** implementada y verificada (2026-11-19). 34 de los 44 eventos se emiten desde el backoffice con una única función `track()`, al recibir la respuesta de la API que confirma o rechaza cada hecho; la sección 13.6 dice dónde se captura cada uno. Los 10 restantes esperan al emisor de la API (sección 13).
 - **Fase de almacenamiento:** el receptor guarda los eventos válidos en la tabla `telemetry_events` de Supabase y rechaza los demás uno a uno (sección 14).
+- **Fase de reporte técnico:** un pipeline en Python con Pandas calcula métricas operacionales por día sobre `telemetry_events`, y `GET /telemetry/report` las sirve con una cache de 60 s (sección 16).
 
 ## Índice
 
@@ -25,6 +26,7 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 13. [Fase de captura en el backoffice](#13-fase-de-captura-en-el-backoffice)
 14. [Fase de almacenamiento](#14-fase-de-almacenamiento)
 15. [Fichas de los eventos](#15-fichas-de-los-eventos)
+16. [Fase de reporte técnico](#16-fase-de-reporte-técnico)
 
 ## 1. Propósito y alcance
 
@@ -1930,3 +1932,45 @@ Un script carga o retira datos fuera de la API.
 | `target` | enum: `tinydb`, `supabase`, `tinydb_and_supabase` | sí | Almacenamiento afectado. |
 | `affected_rows` | integer (≥ 0) | sí | Filas insertadas o borradas. |
 | `succeeded` | boolean | sí | `false` si terminó con error. |
+
+## 16. Fase de reporte técnico
+
+Los eventos guardados en `telemetry_events` se transforman en un **reporte técnico**: un radar operacional para el equipo de ingeniería sobre el volumen de eventos, los errores, la latencia de la API y los fallos de autenticación, siempre con dimensión temporal (por día UTC). No es un reporte de negocio: nada de ventas, compras ni ingresos, que llegarán con los pipelines de datos.
+
+### 16.1 El pipeline
+
+`services/telemetry/analysis.py` es un paquete local (`brasaland-telemetry`) que la API instala en modo editable con uv, como `packages/shared`. Cada métrica es una función independiente y sin efectos secundarios que recibe la conexión y el período ya resuelto, y sigue siempre el mismo orden:
+
+```
+cargar (SQL) → refinar (Pandas) → convertir tipos → agrupar → agregar → servir
+```
+
+- **Cargar.** Solo las filas que la métrica necesita: `WHERE timestamp >= :start AND timestamp < :end` (inicio inclusivo, fin exclusivo, en UTC) y, si aplica, `event_type = …` o `event_type IN (…)`. Nunca toda la tabla.
+- **Refinar.** Extraer de `tags` las dimensiones que la métrica usa y descartar las filas en las que son nulas.
+- **Convertir tipos.** `pd.to_datetime(df["timestamp"], utc=True)` antes de cualquier agrupación temporal, y el día con `.dt.date`.
+- **Agrupar y agregar.** `groupby` por día y por la dimensión de la métrica, con `.agg()`, `.count()`, `.sum()` o `.mean()`. Sin bucles.
+- **Servir.** Una lista de dicts (`.reset_index().to_dict(orient="records")`), con las fechas en ISO y las tasas como fracción de 0 a 1 con 4 decimales.
+
+### 16.2 Métricas
+
+| Clave | Pregunta operacional | Eventos | Fila |
+|---|---|---|---|
+| `events_per_day` | ¿Cuánto volumen tiene el sistema cada día y qué parte es aviso o error? | Todos | `{date, total, info, warn, error}` |
+| `error_rate_by_type` | ¿Qué tipos de fallo dominan cada día y qué peso tienen sobre el volumen? | Todos (el total del día es el denominador) | `{date, event_type, level, count, rate}`, solo tipos `warn` o `error` |
+| `api_latency_by_route` | ¿Qué rutas de la API responden lento y cuánto? | `api_latency_recorded` | `{date, route, samples, avg_ms, max_ms}` |
+| `auth_failure_rate` | ¿Qué proporción de los intentos de login falla cada día? | `login_failed` y `login_succeeded` | `{date, attempts, failed, failure_rate}` |
+
+- **Latencia muestreada.** `api_latency_recorded` guarda siempre las peticiones lentas y las de error, y 1 de cada 10 del resto (`sample_rate`). La media se pondera por `1/sample_rate` para que el muestreo no la sesgue hacia las lentas; `samples` es el número de eventos y `max_ms` no se pondera.
+- **Nombres.** La consigna llama a los eventos de login `user_login_failed` y `user_login_succeeded`; en este catálogo son `login_failed` y `login_succeeded` (§5).
+
+### 16.3 El endpoint
+
+`GET /telemetry/report?start_date=…&end_date=…`, en el router de telemetría y fuera de `/api/v1`, como el receptor. Exige token y rol `admin` (401 sin token, 403 con otro rol).
+
+- **Período.** Ambos parámetros son opcionales, en ISO 8601 (fecha sola = 00:00 UTC; sin zona = UTC). Sin parámetros, los últimos 7 días hasta ahora; solo `end_date` → 7 días antes; solo `start_date` → hasta ahora. El endpoint resuelve el período **una vez** y lo pasa a cada función, que lo aplica en SQL. 422 si una fecha está mal formada, `invalid_period` si el inicio no es anterior al fin y `period_too_long` por encima de 90 días.
+- **Respuesta.** `{"period": {"from", "to"}, "metrics": {"events_per_day", "error_rate_by_type", "api_latency_by_route", "auth_failure_rate"}}`, con `from` y `to` en ISO UTC.
+- **Cache.** En memoria, 60 s (`TTLCache`). La clave son los parámetros recibidos, con "now" para el que falte, y el período se resuelve dentro del cálculo: dos peticiones sin parámetros dentro del TTL reciben el mismo resultado sin recalcular. `X-Cache: HIT` o `MISS`. Si la base falla, 503 `telemetry_report_unavailable`, sin guardar nada en cache.
+
+### 16.4 Dashboard
+
+`/telemetria` en el backoffice ("Telemetría técnica", en la sección "Herramientas"). Llega a la API por una ruta propia del intermediario (`app/api/telemetry/report/route.ts`), porque el resto del BFF apunta a `/api/v1`. Muestra el período, dos campos de fecha opcionales, una barra por día apilada por nivel y una tabla por cada otra métrica. Solo visualiza las métricas del reporte. Quien no es admin ve un aviso en lugar de los datos.
