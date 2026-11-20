@@ -158,7 +158,8 @@ app/
     │   ├── catalog.py      # GENERATED from event-schemas.json: allowlist, level, value and message per event
     │   ├── generate_catalog.py # `uv run telemetry-catalog`: regenerates catalog.py
     │   ├── service.py      # Per-event validation, event to row and bulk insert with ON CONFLICT
-    │   └── router.py       # POST /telemetry/events: validates, stores, logs and answers
+    │   ├── report.py       # Technical report: period, 60 s cache and call to services/telemetry/analysis.py
+    │   └── router.py       # POST /telemetry/events (receiver) and GET /telemetry/report (admins only)
     └── suppliers/
         ├── models.py       # Pydantic models: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Suppliers table; path and opening come from core/storage.py
@@ -172,6 +173,8 @@ tests/                      # Mirrors the app/ structure, plus auth/ (auth unit 
 ```
 
 The incidents CSV rules live in the shared package [`packages/shared`](../../packages/shared/README.md) (`brasaland_shared.incidents`), which `scripts/incident-report/analyze.py` and `scripts/seed_incidents.py` also use. The API installs it as a local dependency (`[tool.uv.sources]` in `pyproject.toml`), so `uv sync` is enough; `incidents/service.py` only re-exports what the analyzer uses.
+
+The metrics of the telemetry technical report live in the [`services/telemetry`](../telemetry/README.md) package (`brasaland_telemetry.analysis`, with Pandas), which the API installs the same way. Its tests are in `tests/telemetry/test_report_analysis.py`.
 
 ## `incidents` domain
 
@@ -443,6 +446,30 @@ Events are stored in the Supabase `telemetry_events` table ([telemetry plan](../
 - **Only the migration creates it.** Run [`migrations/002_telemetry_events.sql`](./migrations/002_telemetry_events.sql) once in the Supabase SQL Editor. It is idempotent. The API does not create this table at startup: its model (`app/domains/telemetry/models.py`) has its own registry, outside the `init_db` `create_all`, so the table can never exist without the GIN index, the trigger or RLS.
 - **Insert only.** The API never updates or deletes events, and in the database a trigger rejects any `UPDATE`, `DELETE` or `TRUNCATE`. Exceptional purges (retention, right to erasure) are done by hand, as the migration itself explains.
 - **No access from the Supabase REST API.** RLS is enabled with no policies, and the `anon` and `authenticated` roles have no privileges. The API connects as `postgres`, which is not subject to RLS.
+
+## Telemetry technical report (`GET /telemetry/report`)
+
+Operational metrics computed over `telemetry_events` for the engineering team ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 16). The endpoint computes nothing itself: it resolves the period and calls the functions of the [`services/telemetry/analysis.py`](../telemetry/README.md) pipeline, which load only that window in SQL and aggregate with Pandas (`app/domains/telemetry/report.py`).
+
+- **Access:** outside `/api/v1`, like the receiver, but **admins only**: 401 without a token and 403 with another role. The backoffice requests it through a dedicated route of its proxy; CORS on `/telemetry` is still limited to `POST`.
+- **Period:** optional `start_date` and `end_date`, in ISO 8601 (`2026-11-14` = 00:00 UTC; `2026-11-14T08:00:00Z`; no offset = UTC). Without parameters, the last 7 days until now; only `end_date`, the 7 days before it; only `start_date`, until now. Start inclusive, end exclusive. 422 errors: `invalid_date`, `invalid_period` (start not before end) and `period_too_long` (more than 90 days).
+- **Response (`TelemetryReport`):**
+
+  ```json
+  {
+    "period": {"from": "2026-11-13T14:19:36Z", "to": "2026-11-20T14:19:36Z"},
+    "metrics": {
+      "events_per_day": [{"date": "2026-11-19", "total": 41, "info": 37, "warn": 4, "error": 0}],
+      "error_rate_by_type": [{"date": "2026-11-19", "event_type": "api_error_returned", "level": "warn", "count": 2, "rate": 0.0488}],
+      "api_latency_by_route": [{"date": "2026-11-19", "method": "GET", "route": "/api/v1/inventory/orders", "samples": 3, "avg_ms": 2381.9, "max_ms": 3410.3}],
+      "auth_failure_rate": [{"date": "2026-11-19", "attempts": 2, "failed": 1, "failure_rate": 0.5}]
+    }
+  }
+  ```
+
+  `events_per_day` includes every day of the period, with zeros when there were no events. Rates are fractions from 0 to 1.
+- **Cache:** in memory, 60 s, per combination of parameters (`2026-11-14` and `2026-11-14T00:00:00Z` are the same). Without parameters, the period is resolved once and stored with the result, so two requests within the TTL get the same JSON. `X-Cache: HIT` or `MISS` header. The report may lag the table by up to 60 s.
+- **Database failures:** `503 telemetry_report_unavailable`, nothing cached, and an error line in `api.telemetry` (if the table is missing, it asks to run migration 002).
 
 ## Timing log
 

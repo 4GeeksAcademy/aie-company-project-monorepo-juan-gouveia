@@ -15,6 +15,7 @@ from app.domains.incidents.dependencies import get_incident_repository, get_repo
 from app.domains.incidents.incident_repository import IncidentRepository
 from app.domains.incidents.repository import LastAnalysisRepository
 from app.domains.inventory.cache import invalidate_inventory
+from app.domains.telemetry.report import report_cache
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.repository import SupplierRepository
 from app.domains.users.database import AuthStore
@@ -108,13 +109,15 @@ def inventory_engine(tmp_path):
         cursor.close()
 
     init_db(engine)
-    # Cada prueba tiene su propia base: la caché del inventario (en memoria, del proceso) no puede
-    # arrastrar respuestas de la prueba anterior.
+    # Cada prueba tiene su propia base: las cachés en memoria del proceso (inventario y reporte de
+    # telemetría) no pueden arrastrar respuestas de la prueba anterior.
     invalidate_inventory()
+    report_cache.invalidate()
     app.dependency_overrides[get_engine] = lambda: engine
     yield engine
     app.dependency_overrides.pop(get_engine, None)
     invalidate_inventory()
+    report_cache.invalidate()
     engine.dispose()
 
 

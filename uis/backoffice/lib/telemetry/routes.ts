@@ -10,6 +10,9 @@ const PARAM_BY_RESOURCE: Record<string, string> = {
   profiles: "{user_id}",
 };
 
+// Recursos que la API publica en la raíz, no bajo /api/v1.
+const API_ROOT_RESOURCES = new Set(["telemetry"]);
+
 const ID_SEGMENT = /^(\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 // Ruta del intermediario (/inventory/products/12?x=1) → ruta de la API como plantilla
@@ -20,7 +23,9 @@ export function apiRouteTemplate(path: string): string {
   const templated = segments.map((segment, index) =>
     ID_SEGMENT.test(segment) ? (PARAM_BY_RESOURCE[segments[index - 1]] ?? "{id}") : segment
   );
-  return `/api/v1/${templated.join("/")}`;
+  // La API sirve /telemetry fuera de /api/v1 (el reporte llega por su propia ruta del intermediario).
+  const prefix = API_ROOT_RESOURCES.has(segments[0]) ? "" : "/api/v1";
+  return `${prefix}/${templated.join("/")}`;
 }
 
 // Rutas dinámicas del backoffice (app/): el segmento variable se sustituye por el nombre de su carpeta.

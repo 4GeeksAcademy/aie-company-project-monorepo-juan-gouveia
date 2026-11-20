@@ -23,11 +23,14 @@ dependencies = [
     "sqlmodel>=0.0.50",
     # Driver de PostgreSQL que usa SQLModel para conectarse a Supabase.
     "psycopg2-binary>=2.9.13",
+    # Pipeline del reporte técnico de telemetría (services/telemetry/analysis.py, con Pandas).
+    "brasaland-telemetry",
 ]
 
 [tool.uv.sources]
 # Paquete local del monorepo, instalado en modo editable: los cambios se ven sin reinstalar.
 brasaland-shared = { path = "../../packages/shared", editable = true }
+brasaland-telemetry = { path = "../telemetry", editable = true }
 
 [project.scripts]
 # `uv run seed` carga los proveedores iniciales del briefing en TinyDB.

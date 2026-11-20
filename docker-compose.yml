@@ -23,6 +23,7 @@ services:
     volumes:
       - ./services/brasaland-api:/repo/services/brasaland-api
       - ./packages/shared:/repo/packages/shared
+      - ./services/telemetry:/repo/services/telemetry
       # Oculta el .venv del host (Windows): la imagen usa su propio Python y el sondeo de la
       # recarga no tiene que recorrerlo.
       - /repo/services/brasaland-api/.venv

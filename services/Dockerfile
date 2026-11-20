@@ -27,7 +27,12 @@ COPY --from=shared pyproject.toml /repo/packages/shared/pyproject.toml
 COPY --from=shared brasaland_shared /repo/packages/shared/brasaland_shared
 RUN uv pip install --system --no-cache --no-deps -e /repo/packages/shared
 
-# 3. Código de la API. En desarrollo, el bind mount de docker-compose.yml lo sustituye por el del host.
+# 3. Paquete local brasaland-telemetry (services/telemetry, el pipeline del reporte técnico), editable.
+#    Está dentro del contexto ./services; sus dependencias (pandas) ya llegaron con requirements.txt.
+COPY telemetry/ /repo/services/telemetry/
+RUN uv pip install --system --no-cache --no-deps -e /repo/services/telemetry
+
+# 4. Código de la API. En desarrollo, el bind mount de docker-compose.yml lo sustituye por el del host.
 COPY brasaland-api/ ./
 
 # Usuario sin privilegios; storage/ guarda las bases TinyDB y debe poder escribirse.

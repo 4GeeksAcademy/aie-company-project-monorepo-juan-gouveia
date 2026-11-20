@@ -12,6 +12,7 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 | Service | What it does |
 |---|---|
 | [`brasaland-api/`](./brasaland-api/README.md) | Brasaland's central API (FastAPI), organized by domain. It implements the `incidents` domain (incident CSV analysis and results export), the `suppliers` domain (supplier directory in TinyDB) and the `inventory` domain (ingredient inventory in Supabase with SQLModel), plus JWT authentication (`auth`, `users` and `profiles`, in TinyDB). |
+| [`telemetry/`](./telemetry/README.md) | Analysis pipeline for the telemetry technical report (`analysis.py`, with Pandas): daily operational metrics over `telemetry_events`. It is a Python package (`brasaland-telemetry`) that the API installs in editable mode; it is not a service that runs on its own. |
 
 ## Docker
 

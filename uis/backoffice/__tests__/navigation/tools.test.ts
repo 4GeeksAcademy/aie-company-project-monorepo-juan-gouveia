@@ -10,10 +10,10 @@ describe("toolSections", () => {
     ]);
   });
 
-  it("agrupa las tres herramientas de incidencias y las dos internas", () => {
+  it("agrupa las tres herramientas de incidencias y las tres internas", () => {
     const byName = Object.fromEntries(toolSections.map((section) => [section.name, section.tools.map((tool) => tool.href)]));
     expect(byName.Incidencias).toEqual(["/incidencias", "/gestor-incidencias", "/gestor-incidencias/nueva"]);
-    expect(byName.Herramientas).toEqual(["/talento", "/funciones"]);
+    expect(byName.Herramientas).toEqual(["/talento", "/funciones", "/telemetria"]);
   });
 
   it("no tiene secciones vacías", () => {
@@ -22,8 +22,8 @@ describe("toolSections", () => {
 });
 
 describe("tools", () => {
-  it("reúne las 7 herramientas, sin rutas repetidas", () => {
-    expect(tools).toHaveLength(7);
-    expect(new Set(tools.map((tool) => tool.href)).size).toBe(7);
+  it("reúne las 8 herramientas, sin rutas repetidas", () => {
+    expect(tools).toHaveLength(8);
+    expect(new Set(tools.map((tool) => tool.href)).size).toBe(8);
   });
 });
