@@ -1,0 +1,21 @@
+[project]
+name = "brasaland-telemetry"
+version = "0.1.0"
+description = "Pipeline de análisis de la telemetría de Brasaland: métricas técnicas sobre telemetry_events con Pandas."
+requires-python = ">=3.11"
+dependencies = [
+    # Transformación de los eventos: refinar, convertir tipos, agrupar y agregar.
+    "pandas>=2.2",
+    # Carga en SQL con parámetros tipados (PostgreSQL en Supabase y SQLite en las pruebas de la API).
+    "sqlalchemy>=2.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Esta carpeta es el paquete: services/telemetry/analysis.py se importa como brasaland_telemetry.analysis.
+# Así el archivo queda en la ruta que pide la consigna y la API lo instala en modo editable con uv.
+[tool.setuptools]
+package-dir = { "brasaland_telemetry" = "." }
+packages = ["brasaland_telemetry"]

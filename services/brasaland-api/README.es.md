@@ -173,6 +173,8 @@ tests/                      # Replica la estructura de app/, más auth/ (unitari
 
 Las reglas del CSV de incidentes están en el paquete compartido [`packages/shared`](../../packages/shared/README.es.md) (`brasaland_shared.incidents`), que también usan `scripts/incident-report/analyze.py` y `scripts/seed_incidents.py`. La API lo instala como dependencia local (`[tool.uv.sources]` en `pyproject.toml`), así que `uv sync` basta; `incidents/service.py` solo reexporta lo que usa el analizador.
 
+Las métricas del reporte técnico de telemetría están en el paquete [`services/telemetry`](../telemetry/README.es.md) (`brasaland_telemetry.analysis`, con Pandas), que la API instala del mismo modo. Sus pruebas están en `tests/telemetry/test_report_analysis.py`.
+
 ## Dominio `incidents`
 
 ### `POST /api/v1/incidents/analyze`

@@ -12,6 +12,7 @@ Cada subcarpeta dentro de `services/` debe corresponder a **un servicio concreto
 | Servicio | Qué hace |
 |---|---|
 | [`brasaland-api/`](./brasaland-api/README.es.md) | API central de Brasaland (FastAPI), organizada por dominios. Implementa los dominios `incidents` (análisis del CSV de incidentes y exportación de resultados) , `suppliers` (directorio de proveedores en TinyDB) e `inventory` (inventario de ingredientes en Supabase con SQLModel), además de la autenticación con JWT (`auth`, `users` y `profiles`, en TinyDB). |
+| [`telemetry/`](./telemetry/README.es.md) | Pipeline de análisis del reporte técnico de telemetría (`analysis.py`, con Pandas): métricas operacionales por día sobre `telemetry_events`. Es un paquete Python (`brasaland-telemetry`) que la API instala en modo editable; no es un servicio que se ejecute por sí solo. |
 
 ## Docker
 

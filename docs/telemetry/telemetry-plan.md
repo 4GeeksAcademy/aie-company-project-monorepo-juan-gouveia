@@ -1957,10 +1957,10 @@ cargar (SQL) → refinar (Pandas) → convertir tipos → agrupar → agregar �
 |---|---|---|---|
 | `events_per_day` | ¿Cuánto volumen tiene el sistema cada día y qué parte es aviso o error? | Todos | `{date, total, info, warn, error}` |
 | `error_rate_by_type` | ¿Qué tipos de fallo dominan cada día y qué peso tienen sobre el volumen? | Todos (el total del día es el denominador) | `{date, event_type, level, count, rate}`, solo tipos `warn` o `error` |
-| `api_latency_by_route` | ¿Qué rutas de la API responden lento y cuánto? | `api_latency_recorded` | `{date, route, samples, avg_ms, max_ms}` |
+| `api_latency_by_route` | ¿Qué rutas de la API responden lento y cuánto? | `api_latency_recorded` | `{date, method, route, samples, avg_ms, max_ms}` |
 | `auth_failure_rate` | ¿Qué proporción de los intentos de login falla cada día? | `login_failed` y `login_succeeded` | `{date, attempts, failed, failure_rate}` |
 
-- **Latencia muestreada.** `api_latency_recorded` guarda siempre las peticiones lentas y las de error, y 1 de cada 10 del resto (`sample_rate`). La media se pondera por `1/sample_rate` para que el muestreo no la sesgue hacia las lentas; `samples` es el número de eventos y `max_ms` no se pondera.
+- **Latencia muestreada.** `api_latency_recorded` guarda siempre las peticiones lentas y las de error, y 1 de cada 10 del resto (`sample_rate`). La media se pondera por `1/sample_rate` para que el muestreo no la sesgue hacia las lentas; `samples` es el número de eventos y `max_ms` no se pondera. Se agrupa también por método: `GET` y `POST` de una misma ruta tienen latencias muy distintas.
 - **Nombres.** La consigna llama a los eventos de login `user_login_failed` y `user_login_succeeded`; en este catálogo son `login_failed` y `login_succeeded` (§5).
 
 ### 16.3 El endpoint
