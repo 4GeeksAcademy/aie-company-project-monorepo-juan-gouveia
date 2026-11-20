@@ -311,9 +311,15 @@ Todos exigen token. El router tiene el prefijo `/inventory` y se monta bajo `/ap
 | `GET /api/v1/inventory/products` | Ingredientes con `current_stock`; `?country=CO` o `US` filtra por mercado | 200, 422 |
 | `POST /api/v1/inventory/products` | Crea un ingrediente; nace con stock 0 | 201, 409 `duplicate_sku`, 422 |
 | `GET /api/v1/inventory/products/{id}` | Un ingrediente con su stock actual | 200, 404 `ingredient_not_found` |
-| `POST /api/v1/inventory/orders/inbound` | Registra una entrega de proveedor (`IngredientEntry`) | 201, 404, 422 |
-| `POST /api/v1/inventory/orders/outbound` | Registra un consumo o una merma (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
+| `POST /api/v1/inventory/orders/inbound` | Registra una entrega de proveedor (`IngredientEntry`) | 201, 404, 422, 503 |
+| `POST /api/v1/inventory/orders/outbound` | Registra un consumo o una merma (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422, 503 |
 | `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` de la más reciente a la más antigua. Cada orden lleva una proyección plana de su ingrediente (`ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`) y el `user_uuid`, sin objeto anidado; los dos `POST` devuelven la misma forma | 200 |
+
+**Local y país.** Cada orden busca su `location_id` en el [catálogo de locales](#catálogo-de-locales-get-apiv1locations): un local solo registra ingredientes de su país (1–9 Colombia, 10–14 Florida). Si no, 422 `location_country_mismatch` (o `unknown_location` si el local falta en el catálogo) con el error en el campo `location_id`, y no se escribe nada; sin la tabla `locations`, 503 `locations_unavailable`. En una salida, el local se comprueba antes que el stock. Las órdenes anteriores a esta regla no se reescriben.
+
+```json
+{"error": {"code": "location_country_mismatch", "message": "Miami Hialeah es un local de US y «Falda de ternera» es un ingrediente de CO. Elige un ingrediente de US u otro local.", "details": [{"field": "location_id", "message": "Miami Hialeah solo registra ingredientes de US."}]}}
+```
 
 Una salida que dejaría el stock en negativo se rechaza **antes de escribir nada**:
 
@@ -504,7 +510,7 @@ Sirve para elegir con datos qué endpoints merecen caché. Los errores no contro
 
 ## Errores
 
-Todos los errores responden con el formato `{"error": {"code": "...", "message": "..."}}`. El `code` es estable para que lo lea un programa, y el `message` está en español para mostrarlo al usuario. Los errores de validación añaden `details`, una lista de `{"field", "message"}` que indica qué campo falló y por qué.
+Todos los errores responden con el formato `{"error": {"code": "...", "message": "..."}}`. El `code` es estable para que lo lea un programa, y el `message` está en español para mostrarlo al usuario. Los errores de validación, y las reglas de negocio que dependen de un campo (como `location_country_mismatch` en el inventario), añaden `details`, una lista de `{"field", "message"}` que indica qué campo falló y por qué.
 
 | Caso | HTTP | `code` |
 |---|---|---|

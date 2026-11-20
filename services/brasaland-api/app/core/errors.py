@@ -1,7 +1,8 @@
 """Formato único de errores de la API: {"error": {"code": ..., "message": ...}}.
 
 El código es estable y legible por máquina; el mensaje está pensado para mostrarse al usuario.
-Los errores de validación (422) añaden `details`: una lista de {field, message} en español.
+Los errores de validación (422) añaden `details`: una lista de {field, message} en español. Un `ApiError`
+de negocio ligado a un campo puede añadirlos también (`details=`), con la misma forma.
 Las rutas del gestor de incidencias responden a esos mismos errores con 400 (`BadRequestValidationRoute`),
 como pide su consigna. Cualquier excepción no controlada se convierte en un 500 con un mensaje genérico:
 el detalle solo queda en el log del servidor, nunca en la respuesta.
@@ -30,13 +31,23 @@ FRAMEWORK_ERROR_FALLBACK = "La petición no se pudo procesar (HTTP {status})."
 class ApiError(Exception):
     """Error de negocio o de entrada que la API devuelve con su código HTTP."""
 
-    def __init__(self, status_code: int, code: str, message: str, headers: dict[str, str] | None = None):
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: list[dict] | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.message = message
         # Cabeceras extra de la respuesta; por ejemplo, WWW-Authenticate: Bearer en los 401.
         self.headers = headers
+        # Errores por campo ({field, message}), como los de validación: una regla de negocio que depende
+        # de un campo concreto lo señala para que el cliente lo muestre junto a él.
+        self.details = details
 
 
 def error_response(
@@ -139,7 +150,7 @@ def describe_validation_errors(errors: list[dict]) -> list[dict]:
 
 
 async def handle_api_error(_request: Request, error: ApiError) -> JSONResponse:
-    return error_response(error.status_code, error.code, error.message, headers=error.headers)
+    return error_response(error.status_code, error.code, error.message, error.details, headers=error.headers)
 
 
 async def handle_http_exception(request: Request, error: StarletteHTTPException) -> JSONResponse:

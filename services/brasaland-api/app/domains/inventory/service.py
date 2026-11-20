@@ -6,6 +6,8 @@
   (decisión D7): `location_id` se guarda, pero no parte el stock.
 - **Sin stock negativo:** una salida que supere el stock disponible se rechaza con 400
   `insufficient_stock` antes de escribir nada.
+- **Local y país:** cada orden comprueba su `location_id` en el catálogo `locations`: un local solo
+  registra ingredientes de su país (422 `location_country_mismatch` en el campo `location_id`).
 - **Trazabilidad:** cada orden guarda el `user_uuid` del usuario autenticado, que llega del token.
 - **Sin N+1:** cada listado es un número fijo de consultas, sin importar cuántas filas haya. El
   stock se suma en SQL con subconsultas agrupadas, y las órdenes se cargan con su ingrediente
@@ -31,6 +33,8 @@ from app.domains.inventory.schemas import (
     IngredientRead,
     OrdersRead,
 )
+from app.domains.locations.models import Location
+from app.domains.locations.service import LocationsUnavailable, get_location, unavailable_response
 
 # Decimales con los que se compara y se muestra el stock: evita que la suma de floats
 # (p. ej. 0.1 + 0.2) rechace una salida que deja el stock exactamente a 0.
@@ -51,6 +55,22 @@ def duplicate_sku(sku: str) -> ApiError:
 def format_quantity(value: float) -> str:
     """52.0 → "52"; 12.5 → "12.5". Sin notación científica ni ceros sobrantes."""
     return f"{value:.{STOCK_DECIMALS}f}".rstrip("0").rstrip(".")
+
+
+def unknown_location(location_id: int) -> ApiError:
+    message = f"El local {location_id} no está en el catálogo de locales."
+    return ApiError(422, "unknown_location", message, details=[{"field": "location_id", "message": message}])
+
+
+def location_country_mismatch(location: Location, ingredient: Ingredient) -> ApiError:
+    message = (
+        f"{location.name} es un local de {location.country} y «{ingredient.name}» es un ingrediente de "
+        f"{ingredient.country}. Elige un ingrediente de {location.country} u otro local."
+    )
+    field_message = f"{location.name} solo registra ingredientes de {location.country}."
+    return ApiError(
+        422, "location_country_mismatch", message, details=[{"field": "location_id", "message": field_message}]
+    )
 
 
 def insufficient_stock(name: str, available: float, requested: float) -> ApiError:
@@ -201,9 +221,26 @@ def _existing_ingredient(session: Session, ingredient_id: int, *, lock: bool = F
     return ingredient
 
 
+def _check_location(session: Session, ingredient: Ingredient, location_id: int) -> None:
+    """El local existe en el catálogo y es del país del ingrediente; si no, 422 (503 si falta el catálogo).
+
+    Un local solo trabaja con los ingredientes de su país, que son los que se compran y se pagan en su
+    moneda: una orden de Miami no puede registrar un ingrediente de Colombia.
+    """
+    try:
+        location = get_location(session, location_id)
+    except LocationsUnavailable as error:
+        raise unavailable_response(error) from error
+    if location is None:
+        raise unknown_location(location_id)
+    if location.country != ingredient.country:
+        raise location_country_mismatch(location, ingredient)
+
+
 def create_entry(session: Session, data: IngredientEntryCreate, user_uuid: str) -> IngredientEntryRead:
     """Registra una entrega de proveedor: suma stock. `user_uuid` es el del usuario autenticado."""
     ingredient = _existing_ingredient(session, data.ingredient_id)
+    _check_location(session, ingredient, data.location_id)
     entry = IngredientEntry(**data.model_dump(), user_uuid=user_uuid)
     session.add(entry)
     session.commit()
@@ -218,6 +255,11 @@ def create_exit(session: Session, data: IngredientExitCreate, user_uuid: str) ->
     Comprueba el stock antes de escribir: si no alcanza, lanza 400 y la base no cambia.
     """
     ingredient = _existing_ingredient(session, data.ingredient_id, lock=True)
+    try:
+        _check_location(session, ingredient, data.location_id)
+    except ApiError:
+        session.rollback()  # Libera el bloqueo de la fila.
+        raise
     available = current_stock_of(session, ingredient.id)
     if round(data.quantity, STOCK_DECIMALS) > available:
         session.rollback()  # Libera el bloqueo de la fila.

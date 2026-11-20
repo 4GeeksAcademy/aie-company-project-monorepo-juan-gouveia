@@ -311,9 +311,15 @@ All of them require a token. The router has the `/inventory` prefix and is mount
 | `GET /api/v1/inventory/products` | Ingredients with `current_stock`; `?country=CO` or `US` filters by market | 200, 422 |
 | `POST /api/v1/inventory/products` | Creates an ingredient; it starts with zero stock | 201, 409 `duplicate_sku`, 422 |
 | `GET /api/v1/inventory/products/{id}` | One ingredient with its current stock | 200, 404 `ingredient_not_found` |
-| `POST /api/v1/inventory/orders/inbound` | Records a supplier delivery (`IngredientEntry`) | 201, 404, 422 |
-| `POST /api/v1/inventory/orders/outbound` | Records consumption or waste (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
+| `POST /api/v1/inventory/orders/inbound` | Records a supplier delivery (`IngredientEntry`) | 201, 404, 422, 503 |
+| `POST /api/v1/inventory/orders/outbound` | Records consumption or waste (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422, 503 |
 | `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` newest first. Each order carries a flat projection of its ingredient (`ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`) and `user_uuid`, with no nested object; the two `POST` routes return the same shape | 200 |
+
+**Location and country.** Each order looks up its `location_id` in the [location catalogue](#location-catalogue-get-apiv1locations): a location only records ingredients from its own country (1–9 Colombia, 10–14 Florida). Otherwise, 422 `location_country_mismatch` (or `unknown_location` if the location is missing from the catalogue) with the error on the `location_id` field, and nothing is written; without the `locations` table, 503 `locations_unavailable`. On an exit, the location is checked before the stock. Orders recorded before this rule are not rewritten.
+
+```json
+{"error": {"code": "location_country_mismatch", "message": "Miami Hialeah es un local de US y «Falda de ternera» es un ingrediente de CO. Elige un ingrediente de US u otro local.", "details": [{"field": "location_id", "message": "Miami Hialeah solo registra ingredientes de US."}]}}
+```
 
 An exit that would leave stock negative is rejected **before anything is written**. The message is in Spanish, like the rest of the API:
 
@@ -504,7 +510,7 @@ It is used to choose, with data, which endpoints deserve a cache. Unhandled erro
 
 ## Errors
 
-Every error responds with the format `{"error": {"code": "...", "message": "..."}}`. The `code` is stable so that a program can read it, and the `message` is in Spanish so it can be shown to the user. Validation errors add `details`, a list of `{"field", "message"}` that says which field failed and why.
+Every error responds with the format `{"error": {"code": "...", "message": "..."}}`. The `code` is stable so that a program can read it, and the `message` is in Spanish so it can be shown to the user. Validation errors, and business rules that depend on one field (such as `location_country_mismatch` in the inventory), add `details`, a list of `{"field", "message"}` that says which field failed and why.
 
 | Case | HTTP | `code` |
 |---|---|---|

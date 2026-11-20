@@ -9,14 +9,10 @@ from fastapi import APIRouter, Depends, Response
 from sqlmodel import Session
 
 from app.core.database import get_db
-from app.core.errors import ApiError
-from app.core.logs import console_logger
 from app.domains.locations.schemas import LocationRead
-from app.domains.locations.service import LocationsUnavailable, list_locations_json
+from app.domains.locations.service import LocationsUnavailable, list_locations_json, unavailable_response
 
 router = APIRouter(prefix="/locations", tags=["locations"])
-
-logger = console_logger("api.locations")
 
 
 @router.get(
@@ -36,14 +32,5 @@ def get_locations(session: Session = Depends(get_db)) -> Response:
     try:
         body, hit = list_locations_json(session)
     except LocationsUnavailable as error:
-        if error.missing_table:
-            logger.error(
-                "No se pudo leer el catálogo de locales: falta la tabla locations. "
-                "Ejecuta services/brasaland-api/migrations/004_locations.sql en Supabase."
-            )
-        else:
-            logger.error(f"No se pudo leer el catálogo de locales: {error.reason}")
-        raise ApiError(
-            503, "locations_unavailable", "No se pudieron cargar los locales. Vuelve a intentarlo."
-        ) from error
+        raise unavailable_response(error) from error
     return Response(content=body, media_type="application/json", headers={"X-Cache": "HIT" if hit else "MISS"})

@@ -41,6 +41,13 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 INVALID = {422: {"description": "Entrada inválida (`invalid_request`, con `details` por campo)"}}
 NOT_FOUND = {404: {"description": "No existe ningún ingrediente con ese ID (`ingredient_not_found`)"}}
+LOCATION = {
+    422: {
+        "description": "Entrada inválida (`invalid_request`), o el local no es del país del ingrediente "
+        "(`location_country_mismatch`) o no está en el catálogo (`unknown_location`), con `details` en `location_id`"
+    },
+    503: {"description": "No se pudo leer el catálogo de locales (`locations_unavailable`); no se escribe nada"},
+}
 CACHED = {"X-Cache": {"description": "`HIT` si la respuesta salió de la caché; `MISS` si se consultó la base"}}
 
 INGREDIENT_LIST = TypeAdapter(list[IngredientRead])
@@ -90,7 +97,7 @@ def get_product(ingredient_id: int, session: Session = Depends(get_db)) -> Ingre
     "/orders/inbound",
     response_model=IngredientEntryRead,
     status_code=status.HTTP_201_CREATED,
-    responses={**NOT_FOUND, **INVALID},
+    responses={**NOT_FOUND, **LOCATION},
 )
 def create_inbound_order(
     data: IngredientEntryCreate,
@@ -108,7 +115,7 @@ def create_inbound_order(
     responses={
         400: {"description": "La salida dejaría el stock en negativo (`insufficient_stock`); no se escribe nada"},
         **NOT_FOUND,
-        **INVALID,
+        **LOCATION,
     },
 )
 def create_outbound_order(
