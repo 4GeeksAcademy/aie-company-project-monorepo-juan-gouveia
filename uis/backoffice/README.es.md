@@ -78,6 +78,7 @@ Cómo funciona:
 | `/inventario/ordenes/salida` | Registrar salida: ingrediente, cantidad, motivo (`consumption` o `waste`) y local. Muestra el stock actual al elegir el ingrediente, avisa sin bloquear si la cantidad lo supera y muestra el 400 de stock insuficiente junto a la cantidad | Ídem |
 | `/inventario/ordenes` | Historial de órdenes, solo lectura: entradas y salidas juntas, de la más reciente a la más antigua, con tipo, ingrediente, cantidad, proveedor o motivo, local, fecha y usuario (`user_uuid`, con "Tú" en las propias). Filtros por tipo e ingrediente (nombre o SKU, sin distinguir tildes), aplicados en el navegador y memoizados. Pinta 50 órdenes y 50 más con "Mostrar más" | Ídem |
 | `/funciones` | Pruebas manuales de filtros, búsquedas, reportes y validaciones | Datos de ejemplo de `@repo/brasa-core` |
+| `/telemetria` | Telemetría técnica (reporte técnico, solo administradores): el período del reporte y un bloque por métrica. `events_per_day`, con una barra por día apilada por nivel; `error_rate_by_type`, `api_latency_by_route` (con una barra de la media) y `auth_failure_rate`, en tablas. Dos fechas opcionales en UTC, las dos incluidas (el fin se envía como el día siguiente, porque la API lo toma como exclusivo) y "Últimos 7 días". Quien no es admin ve "Solo los administradores pueden ver el reporte técnico." Barras con Tailwind, sin librería de gráficos | `GET /telemetry/report` de la API, a través de `app/api/telemetry/report/route.ts` |
 
 ## Añadir una herramienta
 
@@ -118,16 +119,16 @@ track("page_viewed", { route: "/inventario/ordenes", navigation_type: "client" }
 - `app/`: layout raíz (sin cabecera) y dos grupos de rutas:
   - `(protegido)/`: portada y una carpeta por herramienta, con el guard de sesión;
   - `(publico)/`: `login/` y `register/`, con una cabecera sin navegación.
-- `app/api/[...path]/route.ts`: intermediario (BFF) hacia la API de Brasaland.
+- `app/api/[...path]/route.ts`: intermediario (BFF) hacia la API de Brasaland. El reenvío está en `lib/bff/proxy.ts`, que comparte con `app/api/telemetry/report/route.ts`: el reporte técnico de telemetría, que la API sirve fuera de `/api/v1`, se reenvía al origen de `API_BASE_URL` (`http://localhost:8000/telemetry/report`). Next.js elige esa ruta antes que el catch-all.
   - Reenvía `GET`, `POST`, `PUT`, `PATCH` y `DELETE` de `/api/<ruta>` a `API_BASE_URL/<ruta>`, con las cabeceras `Content-Type`, `Accept`, `Authorization` y `X-Request-Id`, sin aplicar lógica. De la respuesta copia `Content-Type`, `Content-Disposition`, `X-Request-Id` y `X-Cache`.
   - La URL de la API se queda en el servidor y no hace falta CORS.
   - Si falta la variable responde 500 (`api_not_configured`); si la API no responde, 502 (`api_unavailable`); si tarda más de 15 segundos, corta la petición y responde 504 (`api_timeout`). En los tres casos el usuario recibe un mensaje genérico, y el log del servidor registra una línea `[BFF]` con el método, la ruta (sin query) y la causa; nunca cabeceras ni cuerpo.
 - `components/`:
   - componentes base reutilizables, entre ellos `PasswordField`, con botón para mostrar la contraseña, `FileDropzone`, para cualquier herramienta que reciba archivos, y `TextAreaField`. `FormField`, `TextAreaField` y `LabeledSelect` admiten `size="lg"` para formularios táctiles;
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` y los formularios de login, registro y recuperación de contraseña) y `account/` (perfil y cambio de contraseña);
-  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/` e `inventario/`.
+  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/`, `inventario/` y `telemetria/` (la vista del reporte técnico; `telemetry/` es la captura de eventos).
 - `hooks/`: hooks personalizados, entre ellos `useSession` y `useShowMore` (listas largas por partes).
-- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, `telemetry/` (servicio de telemetría; ver [Telemetría](#telemetría)) y una carpeta por herramienta. El inventario usa archivos `lib/inventory*.ts`: `inventory.ts` es su módulo de integración, el único que llama a `/api/inventory/...`.
+- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, `telemetry/` (servicio de telemetría; ver [Telemetría](#telemetría)), `bff/proxy.ts` (reenvío del intermediario), `telemetry-report.ts` (cliente y formato del reporte técnico) y una carpeta por herramienta. El inventario usa archivos `lib/inventory*.ts`: `inventory.ts` es su módulo de integración, el único que llama a `/api/inventory/...`.
 - `scripts/generate-telemetry-catalog.mjs`: genera `lib/telemetry/catalog.ts` desde `docs/telemetry/event-schemas.json`.
 - `types/`: tipos de la API (`api.ts` para los errores y `auth.ts` para usuarios y perfiles).
 

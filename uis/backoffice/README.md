@@ -78,6 +78,7 @@ How it works:
 | `/inventario/ordenes/salida` | Record an outbound order: ingredient, quantity, reason (`consumption` or `waste`) and location. Shows the current stock when the ingredient is chosen, warns without blocking if the quantity exceeds it, and shows the insufficient-stock 400 next to the quantity | Same |
 | `/inventario/ordenes` | Read-only order history: inbound and outbound orders together, newest first, with type, ingredient, quantity, supplier or reason, location, date and user (`user_uuid`, with "Tú" on your own). Filters by type and ingredient (name or SKU, accent-insensitive), applied in the browser and memoized. It renders 50 orders and 50 more with "Mostrar más" | Same |
 | `/funciones` | Manual tests for filters, search, reports, and validations | `@repo/brasa-core` sample data |
+| `/telemetria` | Technical telemetry (technical report, admins only): the report period and one block per metric. `events_per_day`, with one bar per day stacked by level; `error_rate_by_type`, `api_latency_by_route` (with a bar for the mean) and `auth_failure_rate`, as tables. Two optional dates in UTC, both included (the end is sent as the next day, because the API treats it as exclusive) and "Últimos 7 días". Non-admins see "Solo los administradores pueden ver el reporte técnico." Bars built with Tailwind, no chart library | The API's `GET /telemetry/report`, through `app/api/telemetry/report/route.ts` |
 
 ## Adding a tool
 
@@ -118,16 +119,16 @@ track("page_viewed", { route: "/inventario/ordenes", navigation_type: "client" }
 - `app/`: root layout (no header) and two route groups:
   - `(protegido)/`: home page and one folder per tool, with the session guard;
   - `(publico)/`: `login/` and `register/`, with a header without navigation.
-- `app/api/[...path]/route.ts`: intermediary (BFF) to the Brasaland API.
+- `app/api/[...path]/route.ts`: intermediary (BFF) to the Brasaland API. The forwarding lives in `lib/bff/proxy.ts`, shared with `app/api/telemetry/report/route.ts`: the telemetry technical report, which the API serves outside `/api/v1`, is forwarded to the origin of `API_BASE_URL` (`http://localhost:8000/telemetry/report`). Next.js picks that route before the catch-all.
   - It forwards `GET`, `POST`, `PUT`, `PATCH` and `DELETE` on `/api/<path>` to `API_BASE_URL/<path>`, with the `Content-Type`, `Accept`, `Authorization` and `X-Request-Id` headers, applying no logic. From the response it copies `Content-Type`, `Content-Disposition`, `X-Request-Id` and `X-Cache`.
   - The API URL stays on the server and CORS is not needed.
   - If the variable is missing it returns 500 (`api_not_configured`); if the API does not respond, 502 (`api_unavailable`); if it takes longer than 15 seconds, it cuts the request and returns 504 (`api_timeout`). In all three cases the user gets a generic message, and the server log records a `[BFF]` line with the method, the path (without query) and the cause; never headers or body.
 - `components/`:
   - reusable base components, including `PasswordField`, with a button to show the password, `FileDropzone`, for any tool that receives files, and `TextAreaField`. `FormField`, `TextAreaField` and `LabeledSelect` accept `size="lg"` for touch forms;
   - `auth/` (`SessionProvider`, `ProtectedShell`, `AccountMenu` and the login, registration and password recovery forms) and `account/` (profile and password change);
-  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/` and `inventario/`.
+  - `talento/`, `funciones/`, `incidencias/`, `gestor-incidencias/`, `proveedores/`, `inventario/` and `telemetria/` (the technical report view; `telemetry/` is event capture).
 - `hooks/`: custom hooks, including `useSession` and `useShowMore` (long lists rendered in parts).
-- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, `telemetry/` (telemetry service; see [Telemetry](#telemetry)), and one folder per tool. The inventory uses `lib/inventory*.ts` files: `inventory.ts` is its integration module, the only one that calls `/api/inventory/...`.
+- `lib/`: `tools.ts`, `format.ts`, `api-client.ts`, `auth/`, `telemetry/` (telemetry service; see [Telemetry](#telemetry)), `bff/proxy.ts` (proxy forwarding), `telemetry-report.ts` (technical report client and formatting), and one folder per tool. The inventory uses `lib/inventory*.ts` files: `inventory.ts` is its integration module, the only one that calls `/api/inventory/...`.
 - `scripts/generate-telemetry-catalog.mjs`: generates `lib/telemetry/catalog.ts` from `docs/telemetry/event-schemas.json`.
 - `types/`: API types (`api.ts` for errors and `auth.ts` for users and profiles).
 

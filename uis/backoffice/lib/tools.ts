@@ -68,6 +68,11 @@ export const toolSections: ToolSection[] = [
         name: "Pruebas de funciones",
         description: "Pruebas manuales de filtros, búsquedas, reportes y validaciones de negocio.",
       },
+      {
+        href: "/telemetria",
+        name: "Telemetría técnica",
+        description: "Volumen de eventos, fallos, latencia de la API y fallos de login por día. Solo administradores.",
+      },
     ],
   },
 ];
