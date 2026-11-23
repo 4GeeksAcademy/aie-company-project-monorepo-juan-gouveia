@@ -1,8 +1,9 @@
 import { toolSections, tools } from "@/lib/tools";
 
 describe("toolSections", () => {
-  it("sigue el orden del menú: Inventario, Proveedores, Incidencias y Herramientas", () => {
+  it("sigue el orden del menú: Reportes, Inventario, Proveedores, Incidencias y Herramientas", () => {
     expect(toolSections.map((section) => section.name)).toEqual([
+      "Reportes",
       "Inventario",
       "Proveedores",
       "Incidencias",
@@ -14,6 +15,7 @@ describe("toolSections", () => {
     const byName = Object.fromEntries(toolSections.map((section) => [section.name, section.tools.map((tool) => tool.href)]));
     expect(byName.Incidencias).toEqual(["/incidencias", "/gestor-incidencias", "/gestor-incidencias/nueva"]);
     expect(byName.Herramientas).toEqual(["/talento", "/funciones", "/telemetria"]);
+    expect(byName.Reportes).toEqual(["/reporte-semanal"]);
   });
 
   it("no tiene secciones vacías", () => {
@@ -22,8 +24,8 @@ describe("toolSections", () => {
 });
 
 describe("tools", () => {
-  it("reúne las 8 herramientas, sin rutas repetidas", () => {
-    expect(tools).toHaveLength(8);
-    expect(new Set(tools.map((tool) => tool.href)).size).toBe(8);
+  it("reúne las 9 herramientas, sin rutas repetidas", () => {
+    expect(tools).toHaveLength(9);
+    expect(new Set(tools.map((tool) => tool.href)).size).toBe(9);
   });
 });

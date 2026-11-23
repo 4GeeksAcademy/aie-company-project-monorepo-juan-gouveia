@@ -196,6 +196,8 @@ describe("apiRouteTemplate", () => {
     ["/incidents/10098/status", "/api/v1/incidents/{incident_id}/status"],
     ["/profiles/d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2", "/api/v1/profiles/{user_id}"],
     ["/telemetry/report?start_date=2026-11-14", "/telemetry/report"],
+    ["/reporting/weekly-location-performance?week_start=2026-11-16", "/reporting/weekly-location-performance"],
+    ["/reporting/pipeline-runs/latest", "/reporting/pipeline-runs/latest"],
   ])("%s → %s", (path, template) => {
     expect(apiRouteTemplate(path)).toBe(template);
   });
