@@ -37,9 +37,9 @@ TELEMETRY_CATALOG: dict[str, CatalogEntry] = {
         message="Consumo de {quantity} {unit} de {product_id} en {location_id}; quedan {stock_after} {unit}",
     ),
     "stock_waste_registered": CatalogEntry(
-        version="1.0.0",
+        version="1.1.0",
         required=("order_id", "location_id", "country", "product_id", "product_category", "quantity", "unit", "currency", "reason"),
-        allowed=("order_id", "location_id", "country", "product_id", "product_category", "quantity", "unit", "currency", "reason", "stock_after"),
+        allowed=("order_id", "location_id", "country", "product_id", "product_category", "quantity", "unit", "currency", "reason", "unit_cost", "stock_after"),
         level="info",
         value="quantity",
         message="Merma de {quantity} {unit} de {product_id} en {location_id} ({reason})",

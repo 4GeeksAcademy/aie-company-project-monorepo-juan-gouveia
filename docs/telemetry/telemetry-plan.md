@@ -4,10 +4,11 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 
 - **Entregables:** este documento y [`event-schemas.json`](event-schemas.json) (los esquemas de cada evento).
 - **Fuentes:** el briefing de Brasaland (métricas obligatorias, entidades y restricciones), el enunciado del RFI y el código actual del monorepo.
-- **Estado:** aprobado, con las revisiones de las fases de captura, almacenamiento y reporte técnico (catálogo 1.2.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice, la fase de almacenamiento, una ficha por cada uno de los 44 eventos y la fase de reporte técnico.
+- **Estado:** aprobado, con las revisiones de las fases de captura, almacenamiento y reporte técnico, y los cambios para el pipeline de desempeño de negocio (catálogo 1.3.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice, la fase de almacenamiento, una ficha por cada uno de los 44 eventos y la fase de reporte técnico.
 - **Fase de captura:** implementada y verificada (2026-11-19). 34 de los 44 eventos se emiten desde el backoffice con una única función `track()`, al recibir la respuesta de la API que confirma o rechaza cada hecho; la sección 13.6 dice dónde se captura cada uno. Los 10 restantes esperan al emisor de la API (sección 13).
 - **Fase de almacenamiento:** el receptor guarda los eventos válidos en la tabla `telemetry_events` de Supabase y rechaza los demás uno a uno (sección 14).
 - **Fase de reporte técnico:** un pipeline en Python con Pandas calcula métricas operacionales por día sobre `telemetry_events`, y `GET /telemetry/report` las sirve con una cache de 60 s (sección 16).
+- **Pipeline de desempeño de negocio:** `stock_waste_registered` 1.1.0 lleva el coste unitario de la merma, que el pipeline semanal por local necesita para valorarla (sección 17).
 
 ## Índice
 
@@ -27,6 +28,7 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 14. [Fase de almacenamiento](#14-fase-de-almacenamiento)
 15. [Fichas de los eventos](#15-fichas-de-los-eventos)
 16. [Fase de reporte técnico](#16-fase-de-reporte-técnico)
+17. [Cambios para el pipeline de desempeño de negocio](#17-cambios-para-el-pipeline-de-desempeño-de-negocio)
 
 ## 1. Propósito y alcance
 
@@ -788,7 +790,7 @@ Un local registra la llegada de mercancía de un proveedor.
 | **Clasificación** | Obligatorio |
 | **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
-| **Se emite** | En el backoffice, al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada). `supplier_id` sale del directorio por el nombre elegido; `country` y `currency`, del ingrediente. |
+| **Se emite** | En el backoffice, al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada). `supplier_id` sale del directorio por el nombre elegido; `location_id`, `country` y `currency`, del local de la orden (catálogo `locations`). |
 | **`userId`** | Usuario autenticado (`sub` del token). |
 | **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
@@ -847,9 +849,9 @@ Un local registra merma (producto vencido, error de cocina, o pérdida/robo).
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Versión** | `1.0.0` |
+| **Versión** | `1.1.0` |
 | **Emisor** | Navegador (`source: browser`) |
-| **Se emite** | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de merma; `reason` es el `waste_reason` de la salida. |
+| **Se emite** | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de merma; `reason` es el `waste_reason` de la salida. `unit_cost` es el coste medio ponderado por cantidad de las entradas con coste de ese producto registradas hasta la merma, calculado con el historial de `GET /api/v1/inventory/orders`; se omite si no hay ninguna o el historial no responde. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
 | **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
@@ -869,6 +871,7 @@ Un local registra merma (producto vencido, error de cocina, o pérdida/robo).
 | `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
 | `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
 | `reason` | enum: `expired`, `kitchen_error`, `theft_suspected` | sí | Motivo de la merma, con los valores del briefing. |
+| `unit_cost` | number (> 0) | no | Coste por unidad del producto perdido, en `currency`: media ponderada por cantidad de sus entradas con coste (desde la versión 1.1.0). Sin él, la merma no tiene valor monetario. |
 | `stock_after` | number (≥ 0) | no | Stock del producto tras la merma, en `unit`. |
 
 #### `stock_threshold_triggered`
@@ -1983,3 +1986,12 @@ cargar (SQL) → refinar (Pandas) → convertir tipos → agrupar → agregar �
 - **Cálculo.** Los totales por día y nivel, los fallos por tipo, sus tasas (2 de 12 = 0,1667) y los intentos de login del reporte coinciden con un `GROUP BY` independiente en SQL sobre la misma tabla.
 - **Endpoint.** Sin parámetros, los 7 días hasta ahora, con ceros en los días sin eventos; con `start_date=2026-11-19&end_date=2026-11-21`, los dos días. La segunda petición igual responde `X-Cache: HIT`; un período al revés, 422 `invalid_period`; sin token, 401.
 - **Vista.** `/telemetria` muestra el período y las cuatro métricas a través del intermediario; revisada por el desarrollador en el navegador.
+
+## 17. Cambios para el pipeline de desempeño de negocio
+
+El pipeline semanal por local (diseño en `data/pipelines/PIPELINE_DESIGN.md`) valora la merma en dinero, y los eventos de merma solo traían la cantidad. Para no depender de leer el inventario desde el pipeline, el coste viaja en el propio evento.
+
+- **`stock_waste_registered` 1.1.0.** Admite `unit_cost` (opcional), con la misma definición que en `inbound_order_created`: coste por unidad en `currency`. El backoffice lo calcula al registrar la merma como la media de los `unit_cost` de las entradas de ese producto registradas hasta ese momento, ponderada por su cantidad, con el historial de `GET /api/v1/inventory/orders` que ya usa la alerta de precio. Cada producto es de un solo país, así que todas sus entradas están en la misma moneda. Si no hay entradas con coste o el historial no responde, el evento se emite sin `unit_cost`.
+- **Mermas anteriores.** Las 1.0.0 siguen siendo válidas en `telemetry_events`; el pipeline las cuenta con coste 0 y lo registra en el log de la corrida.
+- **`inbound_order_created`.** Su disparo ya no dice que `country` y `currency` salen del ingrediente: salen del local de la orden desde que se cerró la brecha B7 (§12.2). Es una corrección del texto, no del esquema.
+- **Catálogo:** `urn:brasaland:telemetry:event-schemas:1.3.0`. Los catálogos generados de la API (`uv run telemetry-catalog`) y del backoffice (`npm run telemetry:catalog`) se regeneran con él.

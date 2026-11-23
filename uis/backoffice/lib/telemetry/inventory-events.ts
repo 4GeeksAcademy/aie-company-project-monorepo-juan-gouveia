@@ -99,13 +99,31 @@ export function priceVarianceProperties(
   };
 }
 
+// `unit_cost` de una merma (plan, §17): media de los costes de las entradas del mismo producto
+// registradas hasta la merma, ponderada por su cantidad, o undefined si ninguna tiene coste. `history`
+// son las entradas de GET /inventory/orders. Un producto es de un solo país, así que todas sus
+// entradas están en la moneda de la merma.
+export function wasteUnitCost(exit: IngredientExit, history: readonly IngredientEntry[]): number | undefined {
+  const exitAt = Date.parse(exit.created_at);
+  let quantity = 0;
+  let cost = 0;
+  for (const entry of history) {
+    if (entry.ingredient_id !== exit.ingredient_id || entry.unit_cost === null) continue;
+    if (Date.parse(entry.created_at) > exitAt) continue;
+    quantity += entry.quantity;
+    cost += entry.unit_cost * entry.quantity;
+  }
+  return quantity > 0 ? round(cost / quantity, 2) : undefined;
+}
+
 // Una salida emite un único evento según su motivo (plan, §3.2): `outbound_order_created` si es
-// consumo y `stock_waste_registered` si es merma, con el motivo en `reason`.
+// consumo y `stock_waste_registered` si es merma, con el motivo en `reason` y su coste unitario.
 export function outboundOrderEvent(
   exit: IngredientExit,
   ingredient: Ingredient,
   location: Location,
-  stockAfter: number | undefined
+  stockAfter: number | undefined,
+  wasteCost?: number
 ) {
   const base = {
     order_id: exit.id,
@@ -114,7 +132,10 @@ export function outboundOrderEvent(
     stock_after: stockAfter,
   };
   if (exit.reason === "waste") {
-    return { eventType: "stock_waste_registered", properties: { ...base, reason: exit.waste_reason ?? undefined } };
+    return {
+      eventType: "stock_waste_registered",
+      properties: { ...base, reason: exit.waste_reason ?? undefined, unit_cost: wasteCost },
+    };
   }
   return { eventType: "outbound_order_created", properties: base };
 }

@@ -76,17 +76,39 @@ it("una entrada con un coste anómalo emite también ingredient_price_variance_d
   expect(tracked[1]).toMatchObject({ properties: { variance_pct: 31.58, history_sample_size: 3 }, requestId: requestIdOf(0) });
 });
 
-it("una merma que cruza el mínimo emite stock_waste_registered y stock_threshold_triggered", async () => {
+it("una merma que cruza el mínimo emite stock_waste_registered con su coste y stock_threshold_triggered", async () => {
   const exit = { id: 30, ...PROJECTION, quantity: 5, location_id: 3, created_at: "2026-11-19T10:00:00Z", user_uuid: "u", reason: "waste", waste_reason: "kitchen_error" };
-  fetchMock.mockResolvedValueOnce(json(exit, 201)).mockResolvedValueOnce(json({ ...BEEF, current_stock: 37 }));
+  const inbound = [
+    { id: 1, ...PROJECTION, quantity: 10, location_id: 3, created_at: "2026-11-10T10:00:00Z", user_uuid: "u", supplier_name: "Carnes del Valle S.A.", unit_cost: 36000 },
+    { id: 2, ...PROJECTION, quantity: 30, location_id: 3, created_at: "2026-11-15T10:00:00Z", user_uuid: "u", supplier_name: "Carnes del Valle S.A.", unit_cost: 39000 },
+  ];
+  fetchMock
+    .mockResolvedValueOnce(json(exit, 201))
+    .mockResolvedValueOnce(json({ ...BEEF, current_stock: 37 }))
+    .mockResolvedValueOnce(json({ inbound, outbound: [exit] }));
 
   await createExit({ ingredient_id: 1, quantity: 5, reason: "waste", waste_reason: "kitchen_error", location_id: 3 }, { ingredient: BEEF, location: ENVIGADO });
   await settle();
 
   expect(tracked.map((event) => event.eventType)).toEqual(["stock_waste_registered", "stock_threshold_triggered"]);
-  expect(tracked[0].properties).toMatchObject({ order_id: 30, reason: "kitchen_error", stock_after: 37 });
+  expect(tracked[0].properties).toMatchObject({ order_id: 30, reason: "kitchen_error", stock_after: 37, unit_cost: 38250 });
   expect(tracked[1].properties).toMatchObject({ quantity: 37, threshold_quantity: 40, trigger_order_id: 30 });
   expect(tracked.every((event) => event.requestId === requestIdOf(0))).toBe(true);
+});
+
+it("una merma sin historial de órdenes se emite igualmente, sin unit_cost", async () => {
+  const exit = { id: 32, ...PROJECTION, quantity: 1, location_id: 3, created_at: "2026-11-19T10:00:00Z", user_uuid: "u", reason: "waste", waste_reason: "expired" };
+  fetchMock
+    .mockResolvedValueOnce(json(exit, 201))
+    .mockResolvedValueOnce(json({ ...BEEF, current_stock: 20 }))
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+  await createExit({ ingredient_id: 1, quantity: 1, reason: "waste", waste_reason: "expired", location_id: 3 }, { ingredient: BEEF, location: ENVIGADO });
+  await settle();
+
+  expect(tracked).toHaveLength(1);
+  expect(tracked[0]).toMatchObject({ eventType: "stock_waste_registered", properties: { order_id: 32, stock_after: 20 } });
+  expect(tracked[0].properties.unit_cost).toBeUndefined();
 });
 
 it("un consumo emite solo outbound_order_created; sin stock resultante, sin umbral", async () => {

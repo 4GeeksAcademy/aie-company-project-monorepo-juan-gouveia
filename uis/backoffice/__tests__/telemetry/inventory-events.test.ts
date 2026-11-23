@@ -7,6 +7,7 @@ import {
   priceVarianceProperties,
   productFields,
   thresholdProperties,
+  wasteUnitCost,
 } from "@/lib/telemetry/inventory-events";
 import { apiRouteTemplate } from "@/lib/telemetry/routes";
 import type { Ingredient, IngredientEntry, IngredientExit } from "@/types/inventory";
@@ -125,6 +126,41 @@ describe("salidas", () => {
     const event = outboundOrderEvent(exit(13319, 1.2, "waste"), BEEF, ENVIGADO, 30.4);
     expect(event.eventType).toBe("stock_waste_registered");
     expect(event.properties).toMatchObject({ order_id: 13319, reason: "expired", stock_after: 30.4 });
+  });
+
+  it("la merma lleva su unit_cost; el consumo nunca", () => {
+    expect(outboundOrderEvent(exit(13319, 1.2, "waste"), BEEF, ENVIGADO, 30.4, 38350).properties).toMatchObject({ unit_cost: 38350 });
+    expect(outboundOrderEvent(exit(13318, 4.2), BEEF, ENVIGADO, 31.6, 38350).properties).not.toHaveProperty("unit_cost");
+  });
+});
+
+describe("unit_cost de una merma", () => {
+  const waste = exit(13319, 1.2, "waste");
+
+  it("es la media de las entradas del producto ponderada por su cantidad", () => {
+    // (10 × 36 000 + 30 × 39 000) / 40 = 38 250
+    const history = [{ ...entry(1, 36000), quantity: 10 }, { ...entry(2, 39000), quantity: 30 }];
+    expect(wasteUnitCost(waste, history)).toBe(38250);
+  });
+
+  it("ignora las entradas sin coste, las de otro producto y las posteriores a la merma", () => {
+    const history = [
+      entry(1, 38000, "2026-11-18T10:00:00Z"),
+      entry(2, null, "2026-11-18T11:00:00Z"),
+      { ...entry(3, 99000, "2026-11-18T12:00:00Z"), ingredient_id: 13 },
+      entry(4, 99000, "2026-11-19T10:00:01Z"),
+    ];
+    expect(wasteUnitCost(waste, history)).toBe(38000);
+  });
+
+  it("redondea a 2 decimales", () => {
+    const history = [{ ...entry(1, 10), quantity: 1 }, { ...entry(2, 11), quantity: 2 }];
+    expect(wasteUnitCost(waste, history)).toBe(10.67);
+  });
+
+  it("es undefined si ninguna entrada del producto tiene coste", () => {
+    expect(wasteUnitCost(waste, [])).toBeUndefined();
+    expect(wasteUnitCost(waste, [entry(1, null)])).toBeUndefined();
   });
 });
 

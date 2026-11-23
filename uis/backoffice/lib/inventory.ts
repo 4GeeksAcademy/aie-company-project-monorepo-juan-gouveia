@@ -6,6 +6,7 @@ import {
   outboundRejectedProperties,
   priceVarianceProperties,
   thresholdProperties,
+  wasteUnitCost,
 } from "@/lib/telemetry/inventory-events";
 import { withRequestId } from "@/lib/telemetry/request-context";
 import type {
@@ -93,8 +94,9 @@ export async function createEntry(input: IngredientEntryInput, telemetry?: Entry
 // POST /inventory/orders/outbound: registra un consumo o una merma. 400 `insufficient_stock` si
 // dejaría el stock en negativo (la API no escribe nada).
 // Telemetría: `outbound_order_created` (consumo) o `stock_waste_registered` (merma) y, si la salida
-// hace cruzar el mínimo, `stock_threshold_triggered`. El stock resultante se pide a la API. Si la API
-// la rechaza por falta de stock, `outbound_order_rejected` con el stock disponible en ese momento.
+// hace cruzar el mínimo, `stock_threshold_triggered`. El stock resultante se pide a la API y, en una
+// merma, también el historial de órdenes para su `unit_cost`, a la vez. Si la API la rechaza por
+// falta de stock, `outbound_order_rejected` con el stock disponible en ese momento.
 export async function createExit(input: IngredientExitInput, telemetry?: ExitTelemetryContext): Promise<IngredientExit> {
   let result: { data: IngredientExit; requestId: string };
   try {
@@ -118,14 +120,16 @@ export async function createExit(input: IngredientExitInput, telemetry?: ExitTel
   if (telemetry) {
     const { ingredient, location } = telemetry;
     quietly(async () => {
-      let stockAfter: number | undefined;
-      try {
-        stockAfter = (await getIngredient(ingredient.id)).current_stock;
-      } catch {
-        // Sin el stock resultante se emite la salida igualmente, sin `stock_after` ni umbral.
-      }
+      // Sin el stock resultante se emite la salida igualmente, sin `stock_after` ni umbral; sin el
+      // historial, la merma va sin `unit_cost`.
+      const [stock, orders] = await Promise.allSettled([
+        getIngredient(ingredient.id),
+        exit.reason === "waste" ? listOrders() : Promise.resolve(null),
+      ]);
+      const stockAfter = stock.status === "fulfilled" ? stock.value.current_stock : undefined;
+      const wasteCost = orders.status === "fulfilled" && orders.value ? wasteUnitCost(exit, orders.value.inbound) : undefined;
       withRequestId(requestId, () => {
-        const { eventType, properties } = outboundOrderEvent(exit, ingredient, location, stockAfter);
+        const { eventType, properties } = outboundOrderEvent(exit, ingredient, location, stockAfter, wasteCost);
         track(eventType, properties);
         const threshold = stockAfter === undefined ? null : thresholdProperties(exit, ingredient, location, stockAfter);
         if (threshold) track("stock_threshold_triggered", threshold);

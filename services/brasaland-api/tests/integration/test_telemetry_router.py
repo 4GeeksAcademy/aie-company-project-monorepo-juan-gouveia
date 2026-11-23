@@ -87,6 +87,19 @@ def test_maps_each_event_to_its_row(api, telemetry_table):
     }
 
 
+def test_stores_the_unit_cost_of_a_waste_event_1_1_0(api, telemetry_table):
+    # stock_waste_registered 1.1.0 admite unit_cost (plan, §17); la 1.0.0 sin él sigue valiendo (arriba).
+    event = make_event("stock_waste_registered", schemaVersion="1.1.0")
+    event["properties"]["unit_cost"] = 38350
+
+    response = api.post(URL, json={"events": [event]})
+
+    assert response.json() == {"received": 1, "stored": 1, "rejected": 0}
+    [row] = stored_rows(telemetry_table)
+    assert row.tags["unit_cost"] == 38350
+    assert row.tags["schema_version"] == "1.1.0"
+
+
 def test_technical_events_get_their_level_and_message(api, telemetry_table):
     api.post(URL, json={"events": [make_event("frontend_error_captured"), make_event("login_failed")]})
 

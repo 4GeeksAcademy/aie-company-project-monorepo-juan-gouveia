@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "urn:brasaland:telemetry:event-schemas:1.2.0",
+  "$id": "urn:brasaland:telemetry:event-schemas:1.3.0",
   "title": "Brasaland — esquemas de eventos de telemetría",
   "description": "Un evento válido cumple exactamente uno de los esquemas de `definitions/events` (por su `event_type`). Cada evento comparte el envelope de `definitions/envelope`, y su `properties` solo admite las claves de su allowlist (`additionalProperties: false`). Las claves `x-*` son anotaciones documentales (clasificación, categoría, emisor, disparo, datos sensibles, entrega y, para la tabla `telemetry_events`, `x-level`, `x-value` y `x-message`): los validadores de draft-07 las ignoran. Documentación: telemetry-plan.md.",
   "definitions": {
@@ -357,7 +357,7 @@
         "x-classification": "obligatorio",
         "x-category": "inventario",
         "x-emitter": "browser",
-        "x-trigger": "En el backoffice, al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada). `supplier_id` sale del directorio por el nombre elegido; `country` y `currency`, del ingrediente.",
+        "x-trigger": "En el backoffice, al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada). `supplier_id` sale del directorio por el nombre elegido; `location_id`, `country` y `currency`, del local de la orden (catálogo `locations`).",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
         "x-delivery": {
           "mode": "batch",
@@ -565,7 +565,7 @@
         "x-classification": "obligatorio",
         "x-category": "inventario",
         "x-emitter": "browser",
-        "x-trigger": "Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de merma; `reason` es el `waste_reason` de la salida.",
+        "x-trigger": "Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de merma; `reason` es el `waste_reason` de la salida. `unit_cost` es el coste medio ponderado por cantidad de las entradas con coste de ese producto registradas hasta la merma, calculado con el historial de `GET /api/v1/inventory/orders`; se omite si no hay ninguna o el historial no responde.",
         "x-pii": "Ninguno. Describe productos y locales, no personas.",
         "x-delivery": {
           "mode": "batch",
@@ -585,7 +585,7 @@
             "const": "stock_waste_registered"
           },
           "schemaVersion": {
-            "const": "1.0.0"
+            "const": "1.1.0"
           },
           "source": {
             "const": "browser"
@@ -637,6 +637,9 @@
                 ],
                 "description": "Motivo de la merma, con los valores del briefing."
               },
+              "unit_cost": {
+                "$ref": "#/definitions/properties/unit_cost"
+              },
               "stock_after": {
                 "type": "number",
                 "minimum": 0,
@@ -653,7 +656,7 @@
             "sessionId": "0f8e7d6c-5b4a-4392-8170-6e5d4c3b2a19",
             "userId": "d445afb4-d2f2-4caa-bbf5-9e0023fcfbb2",
             "event_type": "stock_waste_registered",
-            "schemaVersion": "1.0.0",
+            "schemaVersion": "1.1.0",
             "requestId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
             "properties": {
               "order_id": 13319,
@@ -665,6 +668,7 @@
               "unit": "kg",
               "currency": "COP",
               "reason": "expired",
+              "unit_cost": 38350,
               "stock_after": 30.4
             },
             "source": "browser",
