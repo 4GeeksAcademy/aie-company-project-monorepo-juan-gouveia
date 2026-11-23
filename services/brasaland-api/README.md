@@ -504,6 +504,7 @@ Sink of the pipeline that produces the "Reporte Semanal de Costo y Merma por Loc
 - **`reporting.pipeline_runs`:** the run log, with a partial unique index that prevents two active runs of the same pipeline.
 - **`reporting_pipeline` role:** the pipeline connects with it, not with `postgres`. It reads `telemetry_events` and `locations` (through a read-only RLS policy) and can only read, insert and update in `reporting.*`. The migration creates it without login; the password is set by hand and never goes in the repository.
 - **Closed to the Supabase REST API:** RLS enabled and no privileges for `anon` or `authenticated`, like the other tables.
+- **Endpoints:** `GET /reporting/weekly-location-performance`, `GET /reporting/pipeline-runs/latest` and `POST /reporting/pipeline-runs`, outside `/api/v1`, in the [`services/reporting`](../reporting/README.md) package mounted in `app/main.py`. Triggering needs `PREFECT_API_URL` (in Docker, the `prefect-server` service); the API never imports Prefect.
 
 **How to run it:**
 

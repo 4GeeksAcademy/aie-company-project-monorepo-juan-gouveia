@@ -4,6 +4,9 @@
 # Servicios:
 #   uis -> website en http://localhost:3000 y backoffice en http://localhost:3001 (next dev)
 #   api -> API de Brasaland en http://localhost:8000 (Uvicorn con --reload; documentación en /docs)
+#   prefect-server -> servidor de Prefect en http://localhost:4200 (interfaz y API del orquestador)
+#   reporting-pipeline -> pipeline del Reporte Semanal de Costo y Merma por Local (pipeline.py --serve):
+#     la corrida de los lunes y las manuales que pide la API. Lee su conexión de data/pipelines/.env.
 # El código se monta desde el host (bind mounts): los cambios se ven sin reconstruir las imágenes.
 # Las variables se leen del .env de la raíz y se interpolan aquí con ${VARIABLE}; ningún valor real
 # vive en este archivo. Cada servicio recibe solo las variables que necesita.
@@ -18,12 +21,17 @@ services:
       # packages/shared está fuera de ./services: llega a la imagen como contexto adicional.
       additional_contexts:
         shared: ./packages/shared
+        # data/process y data/pipelines (lectura de reporting.* y disparo de corridas) para services/reporting.
+        data: ./data
     ports:
       - "8000:8000"
     volumes:
       - ./services/brasaland-api:/repo/services/brasaland-api
       - ./packages/shared:/repo/packages/shared
       - ./services/telemetry:/repo/services/telemetry
+      - ./services/reporting:/repo/services/reporting
+      - ./data/process:/repo/data/process
+      - ./data/pipelines:/repo/data/pipelines
       # Oculta el .venv del host (Windows): la imagen usa su propio Python y el sondeo de la
       # recarga no tiene que recorrerlo.
       - /repo/services/brasaland-api/.venv
@@ -38,6 +46,8 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-}
       PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-}
       TELEMETRY_ENDPOINT: ${TELEMETRY_ENDPOINT:-}
+      # POST /reporting/pipeline-runs pide las corridas manuales a este servidor de Prefect.
+      PREFECT_API_URL: http://prefect-server:4200/api
       # Recarga en caliente por sondeo (los bind mounts no propagan los eventos de archivos).
       WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
     healthcheck:
@@ -85,6 +95,53 @@ services:
     networks:
       - brasaland-net
 
+  prefect-server:
+    # Misma versión que el cliente de data/pipelines/uv.lock.
+    image: prefecthq/prefect:3.9.4-python3.12
+    command: ["prefect", "server", "start", "--host", "0.0.0.0"]
+    ports:
+      - "4200:4200"
+    environment:
+      # La interfaz se abre desde el host.
+      PREFECT_UI_API_URL: http://localhost:4200/api
+    volumes:
+      # Corridas, deployments y bloques sobreviven a un reinicio.
+      - prefect-data:/root/.prefect
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - brasaland-net
+
+  reporting-pipeline:
+    build:
+      context: ./data
+      dockerfile: pipelines/Dockerfile
+    volumes:
+      # El código del host, y las salidas de cada corrida en data/raw y data/eval (fuera de Git).
+      - ./data:/repo/data
+      # Resultados cacheados de Prefect (la transformación y el catálogo de locales, 1 hora).
+      - prefect-results:/home/brasaland/.prefect
+    env_file:
+      # REPORTING_DATABASE_URL: la cadena del rol reporting_pipeline (ver data/pipelines/.env.example).
+      - path: ./data/pipelines/.env
+        required: false
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - brasaland-net
+
 networks:
   brasaland-net:
     name: brasaland-net
+
+volumes:
+  prefect-data:
+  prefect-results:

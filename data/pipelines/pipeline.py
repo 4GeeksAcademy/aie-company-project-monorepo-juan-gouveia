@@ -34,6 +34,7 @@ from uuid import UUID
 
 import pandas as pd
 from brasaland_pipelines import config, repository
+from brasaland_pipelines.runs import DEPLOYMENT_NAME, FLOW_NAME, InvalidWeekRange, compute_weeks
 from brasaland_process.weekly_location_performance import (
     WeeklyPerformanceResult,
     build_weekly_location_performance,
@@ -46,8 +47,6 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import DBAPIError, DisconnectionError, InterfaceError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
-FLOW_NAME = "weekly-location-performance"
-DEPLOYMENT_NAME = "weekly"
 SCHEDULE = Cron("0 6 * * 1", timezone="America/Bogota")
 
 DATA_DIR = Path(__file__).resolve().parent.parent
@@ -141,32 +140,8 @@ def resolve_weeks(
     max_backfill_weeks: int,
     include_current_week: bool = False,
 ) -> list[date]:
-    """Los lunes que recalcula la corrida (diseño, §3.4).
-
-    Sin rango, las `lookback_weeks` últimas semanas ISO cerradas. Con rango, un backfill: lunes,
-    `week_from ≤ week_to`, sin la semana en curso y como mucho `max_backfill_weeks`. La semana en curso
-    solo entra con `include_current_week` (verificación; la corrida programada nunca la usa).
-    """
-    current_week = today - timedelta(days=today.weekday())
-    last_allowed = current_week if include_current_week else current_week - timedelta(days=7)
-
-    if week_from is None and week_to is None:
-        first = current_week - timedelta(days=7 * lookback_weeks)
-        week_from, week_to = first, last_allowed
-    else:
-        week_from = week_from or week_to
-        week_to = week_to or week_from
-        if week_from.weekday() != 0 or week_to.weekday() != 0:
-            raise ValueError("week_from y week_to deben ser lunes (week_start de la semana ISO).")
-        if week_from > week_to:
-            raise ValueError("week_from no puede ser posterior a week_to.")
-        if week_to > last_allowed:
-            raise ValueError("La semana en curso no está cerrada: no se calcula (usa --include-current-week solo para verificar).")
-
-    weeks = [week_from + timedelta(days=7 * i) for i in range((week_to - week_from).days // 7 + 1)]
-    if len(weeks) > max_backfill_weeks:
-        raise ValueError(f"El rango tiene {len(weeks)} semanas; el máximo es {max_backfill_weeks}.")
-    return weeks
+    """Los lunes que recalcula la corrida (ver `compute_weeks`). Sin reintentos: no toca la base."""
+    return compute_weeks(today, week_from, week_to, lookback_weeks, max_backfill_weeks, include_current_week)
 
 
 # Dos reintentos cada 10 s: abrir y cerrar el registro son escrituras cortas; si la base sigue sin
@@ -516,6 +491,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.serve:
         serve()
         return 0
+
+    # Un rango inválido, también antes de crear la corrida.
+    settings, _source = config.load_settings()
+    try:
+        compute_weeks(
+            _utcnow().date(), args.week_from, args.week_to, settings.lookback_weeks, settings.max_backfill_weeks,
+            args.include_current_week,
+        )
+    except InvalidWeekRange as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
 
     summary = weekly_location_performance_flow(
         week_from=args.week_from,

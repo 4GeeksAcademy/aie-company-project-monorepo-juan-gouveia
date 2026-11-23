@@ -275,6 +275,13 @@ def test_the_command_line_runs_the_flow(database, capsys):
     assert json.loads(capsys.readouterr().out)["rows_written"] == 28
 
 
+def test_the_command_line_rejects_an_invalid_range_without_creating_a_run(database, capsys):
+    assert pipeline.main(["--week-from", "2026-11-10"]) == 2
+
+    assert "lunes" in capsys.readouterr().err
+    assert runs(database) == []
+
+
 # --- resolve_weeks --------------------------------------------------------------------------------
 
 WEDNESDAY = date(2026, 11, 25)

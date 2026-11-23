@@ -3,16 +3,16 @@ revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version == '3.14.*' and sys_platform == 'win32'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.14.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -212,12 +212,12 @@ wheels = [
 name = "brasaland-pipelines"
 version = "0.1.0"
 source = { editable = "." }
+default-groups = ["dev", "orchestration"]
 dependencies = [
     { name = "brasaland-process" },
+    { name = "httpx" },
     { name = "pandas" },
-    { name = "prefect" },
     { name = "psycopg2-binary" },
-    { name = "python-dotenv" },
     { name = "sqlalchemy" },
 ]
 
@@ -225,19 +225,26 @@ dependencies = [
 dev = [
     { name = "pytest" },
 ]
+orchestration = [
+    { name = "prefect" },
+    { name = "python-dotenv" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "brasaland-process", editable = "../process" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "pandas", specifier = ">=2.2" },
-    { name = "prefect", specifier = ">=3" },
     { name = "psycopg2-binary", specifier = ">=2.9.13" },
-    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "sqlalchemy", specifier = ">=2.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
+orchestration = [
+    { name = "prefect", specifier = ">=3" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+]
 
 [[package]]
 name = "brasaland-process"
@@ -1290,10 +1297,10 @@ version = "2.5.5"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version == '3.14.*' and sys_platform == 'win32'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.14.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",

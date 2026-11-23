@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 
+from brasaland_pipelines import runs
 from prefect.blocks.core import Block
 from prefect.blocks.system import Secret
 
@@ -32,13 +33,13 @@ class WeeklyLocationPerformanceConfig(Block):
     _description = "Parámetros del pipeline del Reporte Semanal de Costo y Merma por Local."
 
     # Solo los eventos de este entorno entran en los KPIs (riesgo R7 del plan de telemetría).
-    environment: str = "production"
+    environment: str = runs.DEFAULT_ENVIRONMENT
     # Semanas cerradas que recalcula cada corrida, para absorber los eventos que llegan tarde.
-    lookback_weeks: int = 4
+    lookback_weeks: int = runs.DEFAULT_LOOKBACK_WEEKS
     # Semanas máximas de un backfill por rango.
-    max_backfill_weeks: int = 26
+    max_backfill_weeks: int = runs.DEFAULT_MAX_BACKFILL_WEEKS
     # Una corrida activa más allá de este tiempo se da por abandonada (el flow tiene 30 min de límite).
-    stale_run_minutes: int = 30
+    stale_run_minutes: int = runs.DEFAULT_STALE_RUN_MINUTES
 
 
 def load_settings() -> tuple[WeeklyLocationPerformanceConfig, str]:

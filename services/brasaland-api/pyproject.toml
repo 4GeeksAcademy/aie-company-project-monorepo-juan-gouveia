@@ -25,12 +25,16 @@ dependencies = [
     "psycopg2-binary>=2.9.13",
     # Pipeline del reporte técnico de telemetría (services/telemetry/analysis.py, con Pandas).
     "brasaland-telemetry",
+    # Endpoints del reporte de negocio (/reporting, services/reporting). Trae data/pipelines (lectura de
+    # reporting.* y disparo de corridas con Prefect) y data/process.
+    "brasaland-reporting",
 ]
 
 [tool.uv.sources]
 # Paquete local del monorepo, instalado en modo editable: los cambios se ven sin reinstalar.
 brasaland-shared = { path = "../../packages/shared", editable = true }
 brasaland-telemetry = { path = "../telemetry", editable = true }
+brasaland-reporting = { path = "../reporting", editable = true }
 
 [project.scripts]
 # `uv run seed` carga los proveedores iniciales del briefing en TinyDB.

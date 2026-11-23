@@ -1,9 +1,10 @@
 # Dependencias de la API (services/brasaland-api) para la imagen Docker (services/Dockerfile).
 # Generado desde uv.lock; no se edita a mano. Para regenerarlo, desde services/brasaland-api:
-#   uv export --frozen --no-dev --no-hashes --no-emit-project --no-emit-package brasaland-shared --no-emit-package brasaland-telemetry --no-header -o ../requirements.txt
-# y vuelve a poner esta cabecera. Los paquetes locales packages/shared (brasaland-shared) y
-# services/telemetry (brasaland-telemetry) no se incluyen: el Dockerfile los instala aparte en modo
-# editable. Sus dependencias de terceros, como pandas, van en esta lista.
+#   uv export --frozen --no-dev --no-hashes --no-emit-project --no-emit-package brasaland-shared --no-emit-package brasaland-telemetry --no-emit-package brasaland-reporting --no-emit-package brasaland-pipelines --no-emit-package brasaland-process --no-header -o ../requirements.txt
+# y vuelve a poner esta cabecera. Los paquetes locales packages/shared (brasaland-shared),
+# services/telemetry (brasaland-telemetry), services/reporting (brasaland-reporting), data/pipelines
+# (brasaland-pipelines) y data/process (brasaland-process) no se incluyen: el Dockerfile los instala
+# aparte en modo editable. Sus dependencias de terceros, como pandas o httpx, van en esta lista; Prefect no (solo lo usa la imagen de data/pipelines).
 
 annotated-doc==0.0.5
     # via fastapi
@@ -11,12 +12,16 @@ annotated-types==0.8.0
     # via pydantic
 anyio==4.16.0
     # via
+    #   httpx
     #   starlette
     #   watchfiles
 bcrypt==5.0.0
     # via libpass
 certifi==2026.10.23
-    # via requests
+    # via
+    #   httpcore
+    #   httpx
+    #   requests
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via cryptography
 charset-normalizer==3.5.2
@@ -32,15 +37,24 @@ ecdsa==0.19.2
 email-validator==2.3.0
     # via pydantic
 fastapi==0.162.0
-    # via brasaland-api
+    # via
+    #   brasaland-api
+    #   brasaland-reporting
 h11==0.16.0
-    # via uvicorn
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
 httptools==0.9.0
     # via uvicorn
+httpx==0.28.1
+    # via brasaland-pipelines
 idna==3.20
     # via
     #   anyio
     #   email-validator
+    #   httpx
     #   requests
 libpass==1.9.4
     # via brasaland-api
@@ -51,9 +65,14 @@ numpy==2.5.5 ; python_full_version >= '3.12'
 opentelemetry-api==1.45.2
     # via fastapi
 pandas==3.1.1
-    # via brasaland-telemetry
+    # via
+    #   brasaland-pipelines
+    #   brasaland-process
+    #   brasaland-telemetry
 psycopg2-binary==2.9.13
-    # via brasaland-api
+    # via
+    #   brasaland-api
+    #   brasaland-pipelines
 pyasn1==0.6.5
     # via
     #   python-jose
@@ -63,6 +82,7 @@ pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementati
 pydantic==2.14.2
     # via
     #   brasaland-api
+    #   brasaland-reporting
     #   fastapi
     #   sqlmodel
 pydantic-core==2.50.2
@@ -87,6 +107,7 @@ six==1.17.0
     # via ecdsa
 sqlalchemy==2.1.8
     # via
+    #   brasaland-pipelines
     #   brasaland-telemetry
     #   sqlmodel
 sqlmodel==0.0.50

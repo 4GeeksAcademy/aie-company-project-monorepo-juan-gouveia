@@ -335,7 +335,72 @@ def fail_runs_of_flow_run(conn: Connection, prefect_flow_run_id: UUID, *, now: d
     return result.rowcount
 
 
+def set_prefect_flow_run_id(conn: Connection, run_id: UUID, prefect_flow_run_id: UUID) -> None:
+    """Enlaza la corrida manual con el flow run que Prefect creó para ella."""
+    conn.execute(update(pipeline_runs).where(pipeline_runs.c.id == run_id).values(prefect_flow_run_id=prefect_flow_run_id))
+
+
+# --- Lecturas para los endpoints de services/reporting ------------------------------------------
+
+
 def read_pipeline_run(conn: Connection, run_id: UUID) -> dict[str, Any] | None:
     """Una corrida por su id."""
     row = conn.execute(select(pipeline_runs).where(pipeline_runs.c.id == run_id)).mappings().first()
     return dict(row) if row else None
+
+
+def read_latest_pipeline_run(conn: Connection, pipeline: str = PIPELINE) -> dict[str, Any] | None:
+    """La última corrida del pipeline por `created_at` (`GET /reporting/pipeline-runs/latest`)."""
+    row = (
+        conn.execute(
+            select(pipeline_runs)
+            .where(pipeline_runs.c.pipeline == pipeline)
+            .order_by(pipeline_runs.c.created_at.desc())
+            .limit(1)
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row else None
+
+
+# Solo para el nombre del local en la respuesta de KPIs (decisión P2). Es la tabla de la migración 004,
+# en el esquema público.
+_locations = Table("locations", MetaData(), Column("code", Text), Column("name", Text), Column("id", Integer))
+
+
+def read_weekly_location_performance(conn: Connection, week_start: date | None = None) -> tuple[date, list[dict[str, Any]]] | None:
+    """Los locales de una semana (`GET /reporting/weekly-location-performance`).
+
+    Sin `week_start`, la semana calculada más reciente. Devuelve `(week_start, filas)` con
+    `location_name` cruzado con `locations`, ordenadas por país y por el id del local; `None` si esa
+    semana (o ninguna) está calculada.
+    """
+    table = weekly_location_performance
+    if week_start is None:
+        week_start = conn.execute(select(func.max(table.c.week_start))).scalar_one_or_none()
+        if week_start is None:
+            return None
+    rows = (
+        conn.execute(
+            select(
+                table.c.location_id,
+                _locations.c.name.label("location_name"),
+                table.c.country,
+                table.c.total_purchase_cost,
+                table.c.total_waste_cost,
+                table.c.waste_ratio,
+                table.c.stockout_events_count,
+                table.c.price_alert_events_count,
+                table.c.currency,
+            )
+            .select_from(table.outerjoin(_locations, _locations.c.code == table.c.location_id))
+            .where(table.c.week_start == week_start)
+            .order_by(table.c.country, _locations.c.id, table.c.location_id)
+        )
+        .mappings()
+        .all()
+    )
+    if not rows:
+        return None
+    return week_start, [dict(row) for row in rows]

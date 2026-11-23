@@ -504,6 +504,7 @@ Destino del pipeline que produce el "Reporte Semanal de Costo y Merma por Local"
 - **`reporting.pipeline_runs`:** el log de corridas, con un índice único parcial que impide dos corridas activas del mismo pipeline.
 - **Rol `reporting_pipeline`:** el pipeline se conecta con él, no con `postgres`. Lee `telemetry_events` y `locations` (con una política de RLS de solo lectura) y solo puede leer, insertar y actualizar en `reporting.*`. La migración lo crea sin login; la contraseña se le da a mano y nunca va en el repositorio.
 - **Cerradas a la API REST de Supabase:** RLS activado y ningún permiso para `anon` ni `authenticated`, como las demás.
+- **Endpoints:** `GET /reporting/weekly-location-performance`, `GET /reporting/pipeline-runs/latest` y `POST /reporting/pipeline-runs`, fuera de `/api/v1`, en el paquete [`services/reporting`](../reporting/README.es.md) montado en `app/main.py`. El disparo necesita `PREFECT_API_URL` (en Docker, el servicio `prefect-server`); la API no importa Prefect.
 
 **Cómo ejecutarla:**
 

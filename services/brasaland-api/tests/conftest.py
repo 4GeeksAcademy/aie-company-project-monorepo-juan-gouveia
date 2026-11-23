@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import pytest
+from brasaland_pipelines.repository import metadata as reporting_metadata
+from brasaland_reporting.router import weekly_cache
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 from sqlmodel import create_engine
@@ -103,16 +105,21 @@ def inventory_engine(tmp_path):
     directamente, y solo en las pruebas.
     """
     engine = create_engine(f"sqlite:///{tmp_path / 'inventory-test.db'}")
+    reporting_db = tmp_path / "reporting-test.db"
 
     @event.listens_for(engine, "connect")
     def enable_foreign_keys(dbapi_connection, _record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        # El esquema `reporting` (migración 005) es otra base adjunta: SQLite no tiene esquemas.
+        cursor.execute(f"ATTACH DATABASE '{reporting_db.as_posix()}' AS reporting")
         cursor.close()
 
     init_db(engine)
     # En Supabase, `locations` la crea y la llena la migración 004 (init_db no la conoce).
     seed_locations(engine)
+    # Y las tablas de `reporting`, la 005: aquí, las mismas que define data/pipelines.
+    reporting_metadata.create_all(engine)
     # Cada prueba tiene su propia base: las cachés en memoria del proceso (inventario, locales y reporte
     # de telemetría) no pueden arrastrar respuestas de la prueba anterior.
     invalidate_caches()
@@ -127,6 +134,7 @@ def invalidate_caches() -> None:
     invalidate_inventory()
     locations_cache.invalidate()
     report_cache.invalidate()
+    weekly_cache.invalidate()
 
 
 @pytest.fixture
