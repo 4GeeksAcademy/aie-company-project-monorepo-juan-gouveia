@@ -1,0 +1,10 @@
+# Contexto de build de uis/Dockerfile (context: ./uis).
+# Mínimo del briefing: node_modules, .next, .env* y *.log.
+**/node_modules
+**/.next
+**/.env*
+**/*.log
+
+# Artefactos locales: cobertura de Jest y cachés de TypeScript.
+**/coverage
+**/*.tsbuildinfo
