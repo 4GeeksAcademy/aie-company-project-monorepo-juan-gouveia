@@ -33,7 +33,15 @@ Transformación del "Reporte Semanal de Costo y Merma por Local" ([diseño, §3.
 | Deduplicar | `deduplicate_facts` | Un mismo hecho con otro `eventId` cuenta una vez: clave `(event_type, order_id)`, o `trigger_order_id` en los quiebres (`duplicate_fact`) |
 | Alertas | `keep_price_increases` | Solo las subidas, `variance_pct > 0` (`price_decrease`) |
 | Semana | `week_start_of` | Lunes de la semana ISO, en UTC; fuera de las semanas de la corrida se descarta (`outside_window`) |
-| Agregar | `aggregate_weekly` | Compra y merma: Σ `quantity × unit_cost` (una merma sin `unit_cost` cuenta 0); quiebres y alertas: número de eventos |
-| Completar | `complete_and_finalize` | Los 14 locales en cada semana; `waste_ratio` con 4 decimales (0 sin compras); importes con 2 decimales, sin convertir monedas |
+| Costo de compra por local | `compute_total_purchase_cost` | Σ `quantity × unit_cost` de las entradas, por local y semana |
+| Costo de merma por local | `compute_total_waste_cost` | Σ `quantity × unit_cost` de las mermas; una merma sin `unit_cost` cuenta 0 |
+| Frecuencia de quiebre de stock | `count_stockout_events` | Número de `stock_threshold_triggered` |
+| Frecuencia de alertas de precio | `count_price_alert_events` | Número de alertas de subida |
+| Completar | `assemble_weekly_location_performance` | Los 14 locales en cada semana, con ceros; importes con 2 decimales, sin convertir monedas; `location_id` = `code` del local |
+| Ratio de merma | `compute_waste_ratio` | `total_waste_cost / total_purchase_cost` de cada fila, con 4 decimales; 0 sin compras; puede superar 1 |
+
+- **Una función por paso del pipeline.** `prepare_weekly_location_facts` agrupa los cinco primeros pasos (refinar a semana) y devuelve los hechos que cuentan (`WeeklyLocationFacts`) con los conteos del log. Después, una función por KPI del briefing, con el nombre de su columna: son las tasks del subflow de transformación de [`data/pipelines/pipeline.py`](../pipelines/README.es.md). `build_weekly_location_performance` las encadena en el mismo orden.
+- **Defensivas.** Un evento mal formado (un número que no lo es, un dato imprescindible nulo, `tags` vacío) se rechaza en la preparación y queda en el log; no rompe la corrida. Las funciones de los KPIs fallan con `ValueError` si reciben un hecho que la preparación debía haber rechazado (una entrada sin coste, una alerta de bajada, un coste negativo): un KPI mal contado en silencio es peor que una corrida fallida.
+- **Señales de silencio.** `detect_silent_weeks` clasifica las semanas de la corrida sin ningún evento de telemetría (`weeks_without_telemetry`, probable fallo de captura) y con telemetría pero sin eventos de negocio (`weeks_without_business_events`, semana sin actividad registrada).
 
 **Pruebas:** `cd data/process && uv run pytest`, con datos sintéticos en memoria (nunca en Supabase).

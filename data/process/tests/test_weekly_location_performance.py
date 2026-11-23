@@ -11,8 +11,17 @@ from itertools import count
 import pandas as pd
 import pytest
 from brasaland_process.weekly_location_performance import (
+    FACT_COLUMNS,
     OUTPUT_COLUMNS,
+    assemble_weekly_location_performance,
     build_weekly_location_performance,
+    compute_total_purchase_cost,
+    compute_total_waste_cost,
+    compute_waste_ratio,
+    count_price_alert_events,
+    count_stockout_events,
+    detect_silent_weeks,
+    prepare_weekly_location_facts,
     week_start_of,
 )
 
@@ -37,7 +46,7 @@ _ids = count(1)
 
 def event(event_type, location_id=3, timestamp="2026-11-18T10:00:00.000Z", **props):
     """Un evento extraído; `country` y `currency` salen del local salvo que se indiquen."""
-    country, currency = ("CO", "COP") if location_id <= 9 else ("US", "USD")
+    country, currency = ("CO", "COP") if location_id is None or location_id <= 9 else ("US", "USD")
     tags = {"location_id": location_id, "country": country, "currency": currency, "environment": "production"}
     tags.update(props)
     return {"id": f"00000000-0000-4000-8000-{next(_ids):012d}", "timestamp": timestamp, "event_type": event_type, "tags": tags}
@@ -255,3 +264,201 @@ def test_week_start_of_returns_the_monday_in_utc():
     stamps = pd.Series(["2026-11-22T23:59:59Z", "2026-11-23T00:00:00Z", "2026-11-22T19:30:00-05:00"])
 
     assert week_start_of(stamps).tolist() == [WEEK, NEXT_WEEK, NEXT_WEEK]
+
+
+# --- Cada paso por separado -----------------------------------------------------------------------
+
+
+def prepare(events, weeks=(WEEK,)):
+    frame = pd.DataFrame(events, columns=["id", "timestamp", "event_type", "tags"])
+    return prepare_weekly_location_facts(frame, LOCATIONS, list(weeks))
+
+
+def per_location(series, location_id=3, week=WEEK):
+    return series.loc[(location_id, week)]
+
+
+def test_prepare_keeps_only_the_facts_that_count_with_their_week():
+    prepared = prepare([inbound(1, 10, 36000), inbound(1, 10, 36000), price_alert(2, -5.0), stockout(1)])
+
+    assert list(prepared.facts.columns) == FACT_COLUMNS
+    assert prepared.facts["event_type"].tolist() == ["inbound_order_created", "stock_threshold_triggered"]
+    assert set(prepared.facts["week_start"]) == {WEEK}
+    assert prepared.events_read == 4
+    assert prepared.events_read == len(prepared.facts) + prepared.events_rejected + prepared.events_discarded
+
+
+def test_prepare_rejects_malformed_events_instead_of_failing():
+    malformed = [
+        inbound(1, "diez", 36000),  # cantidad que no es un número
+        inbound(2, 10, None),  # coste nulo en una entrada
+        inbound(3, 1, 1, location_id=None),  # sin local
+        {
+            "id": "00000000-0000-4000-8000-999999999999",
+            "timestamp": "2026-11-18T10:00:00Z",
+            "event_type": "stock_waste_registered",
+            "tags": None,  # sin propiedades
+        },
+    ]
+
+    prepared = prepare([*malformed, inbound(4, 10, 36000)])
+
+    assert prepared.events_rejected == 4
+    assert prepared.issues == {"invalid_payload": 2, "unknown_location": 2}
+    assert len(prepared.facts) == 1
+
+
+def test_total_purchase_cost_adds_quantity_times_unit_cost_of_the_inbound_orders():
+    facts = prepare(
+        [
+            inbound(1, 10, 36000),
+            inbound(2, 2.5, 4000),  # 360 000 + 10 000
+            waste(3, 1, 36000),  # una merma no es una compra
+            inbound(4, 3, 1000, location_id=1),
+        ]
+    ).facts
+
+    total = compute_total_purchase_cost(facts)
+
+    assert total.name == "total_purchase_cost"
+    assert per_location(total) == 370000.0
+    assert per_location(total, location_id=1) == 3000.0
+
+
+def test_total_waste_cost_counts_waste_without_unit_cost_as_zero():
+    facts = prepare([waste(1, 1.2, 38250), waste(2, 4), inbound(3, 1, 1000)]).facts
+
+    total = compute_total_waste_cost(facts)
+
+    assert total.name == "total_waste_cost"
+    assert per_location(total) == 45900.0  # 1,2 × 38 250; la merma sin coste suma 0
+
+
+def test_stockout_and_price_alert_counts_per_location_and_week():
+    facts = prepare(
+        [stockout(1), stockout(2), stockout(3, location_id=10), price_alert(4, 12.5), price_alert(5, 30.0)],
+    ).facts
+
+    stockouts = count_stockout_events(facts)
+    alerts = count_price_alert_events(facts)
+
+    assert (stockouts.name, alerts.name) == ("stockout_events_count", "price_alert_events_count")
+    assert per_location(stockouts) == 2
+    assert per_location(stockouts, location_id=10) == 1
+    assert per_location(alerts) == 2
+
+
+def test_kpis_of_a_week_without_facts_are_empty():
+    facts = prepare([]).facts
+
+    for kpi in (compute_total_purchase_cost, compute_total_waste_cost, count_stockout_events, count_price_alert_events):
+        assert kpi(facts).empty
+
+
+def test_kpis_refuse_facts_that_should_have_been_rejected():
+    facts = prepare([inbound(1, 10, 36000), waste(2, 1, 1000), price_alert(3, 12.5)]).facts
+
+    no_cost = facts.assign(unit_cost=facts["unit_cost"].where(facts["event_type"] != "inbound_order_created"))
+    with pytest.raises(ValueError, match="total_purchase_cost"):
+        compute_total_purchase_cost(no_cost)
+
+    negative_waste = facts.assign(unit_cost=-facts["unit_cost"])
+    with pytest.raises(ValueError, match="total_waste_cost"):
+        compute_total_waste_cost(negative_waste)
+
+    price_drop = facts.assign(variance_pct=-facts["variance_pct"])
+    with pytest.raises(ValueError, match="price_alert_events_count"):
+        count_price_alert_events(price_drop)
+
+    with pytest.raises(ValueError, match="faltan las columnas quantity"):
+        compute_total_purchase_cost(facts.drop(columns="quantity"))
+
+
+def test_assemble_puts_every_location_in_every_week_with_its_currency():
+    facts = prepare([inbound(1, 10, 36000.004)], weeks=(WEEK, NEXT_WEEK)).facts
+
+    rows = assemble_weekly_location_performance(
+        compute_total_purchase_cost(facts),
+        compute_total_waste_cost(facts),
+        count_stockout_events(facts),
+        count_price_alert_events(facts),
+        LOCATIONS,
+        [WEEK, NEXT_WEEK],
+    )
+
+    assert len(rows) == 28
+    assert "waste_ratio" not in rows.columns
+    envigado = rows[(rows["location_id"] == "medellin_envigado") & (rows["week_start"] == WEEK)].iloc[0]
+    assert envigado["total_purchase_cost"] == 360000.04  # 2 decimales
+    assert (envigado["country"], envigado["currency"]) == ("CO", "COP")
+    doral = rows[(rows["location_id"] == "miami_doral") & (rows["week_start"] == NEXT_WEEK)].iloc[0]
+    assert (doral["total_purchase_cost"], doral["stockout_events_count"], doral["currency"]) == (0.0, 0, "USD")
+
+
+def test_waste_ratio_matches_the_briefing_definition_for_known_totals():
+    # Briefing, "Ratio de merma": total_waste_cost / total_purchase_cost, y 0 si no hubo compras.
+    rows = pd.DataFrame(
+        {
+            "location_id": ["medellin_centro", "medellin_laureles", "miami_doral", "fort_lauderdale"],
+            "country": ["CO", "CO", "US", "US"],
+            "week_start": [WEEK] * 4,
+            "total_purchase_cost": [850.0, 1530000.0, 100.0, 0.0],
+            "total_waste_cost": [106.25, 45900.0, 250.0, 20.0],
+            "stockout_events_count": [1, 0, 0, 0],
+            "price_alert_events_count": [1, 0, 0, 0],
+            "currency": ["COP", "COP", "USD", "USD"],
+        }
+    )
+
+    result = compute_waste_ratio(rows)
+
+    assert list(result.columns) == OUTPUT_COLUMNS
+    # 106,25 / 850 = 0,125; 45 900 / 1 530 000 = 0,03; 250 / 100 = 2,5 (supera 1); sin compras, 0.
+    assert result["waste_ratio"].tolist() == [0.125, 0.03, 2.5, 0.0]
+
+
+def test_waste_ratio_refuses_negative_or_non_numeric_costs():
+    with pytest.raises(ValueError, match="waste_ratio"):
+        compute_waste_ratio(pd.DataFrame({"total_purchase_cost": [100.0], "total_waste_cost": [-1.0]}))
+
+    with pytest.raises(ValueError, match="no negativos"):
+        compute_waste_ratio(pd.DataFrame({"total_purchase_cost": ["cien"], "total_waste_cost": [1.0]}))
+
+    with pytest.raises(ValueError, match="faltan las columnas total_waste_cost"):
+        compute_waste_ratio(pd.DataFrame({"total_purchase_cost": [1.0]}))
+
+
+def test_build_chains_the_steps_with_the_counts_of_the_preparation():
+    events = [inbound(1, 10, 36000), inbound(1, 10, 36000), waste(2, 1), stockout(2), price_alert(1, 12.5)]
+
+    result = run(events)
+    prepared = prepare(events)
+
+    assert (result.events_read, result.events_rejected, result.events_discarded) == (
+        prepared.events_read,
+        prepared.events_rejected,
+        prepared.events_discarded,
+    )
+    assert result.waste_events_without_cost == prepared.waste_events_without_cost == 1
+    assert result.issues == prepared.issues == {"duplicate_fact": 1}
+
+
+def test_silent_weeks_tell_a_capture_failure_from_a_week_without_activity():
+    weeks = [date(2026, 11, 2), date(2026, 11, 9), WEEK]
+    telemetry = {date(2026, 11, 9): 40, WEEK: 120}  # la semana del 2 no tiene ningún evento
+    business = pd.DataFrame(
+        [inbound(1, 10, 36000, timestamp="2026-11-18T10:00:00Z")], columns=["id", "timestamp", "event_type", "tags"]
+    )
+
+    silent = detect_silent_weeks(weeks, telemetry, business)
+
+    assert silent.without_telemetry == [date(2026, 11, 2)]
+    assert silent.without_business_events == [date(2026, 11, 9)]
+    assert silent.issues == {"weeks_without_telemetry": 1, "weeks_without_business_events": 1}
+
+
+def test_no_silent_weeks_means_no_issues():
+    business = pd.DataFrame([inbound(1, 1, 1)], columns=["id", "timestamp", "event_type", "tags"])
+
+    assert detect_silent_weeks([WEEK], {WEEK: 3}, business).issues == {}
+    assert detect_silent_weeks([WEEK], {}, business.iloc[0:0]).without_telemetry == [WEEK]
