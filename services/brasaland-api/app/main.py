@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Literal
 
+from brasaland_reporting.router import router as reporting_router
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel, Field
 
@@ -77,6 +78,9 @@ app.include_router(profiles_router, prefix=API_PREFIX)
 # como /health. El navegador lo llama directamente (también con sendBeacon), así que es la única ruta
 # con CORS, y solo para el origen del backoffice.
 app.include_router(telemetry_router)
+# Reporte de negocio (pipeline de desempeño, services/reporting): las tres rutas del briefing, fuera de
+# /api/v1 como las de telemetría. Lecturas para admin y manager; el disparo de corridas, solo admin.
+app.include_router(reporting_router)
 app.add_middleware(
     PathScopedCORSMiddleware,
     path_prefix=telemetry_router.prefix,

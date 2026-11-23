@@ -5,5 +5,10 @@
 # Resultados exportados por scripts/incident-report/analyze.py: se regeneran en cada ejecución.
 data/process/results.csv
 
+# Salidas de cada corrida del pipeline del Reporte Semanal de Costo y Merma por Local
+# (data/pipelines/pipeline.py): la extracción, sin datos personales, y el snapshot de validación.
+data/raw/telemetry_events/
+data/eval/weekly_location_performance/
+
 # Caché de bytecode de Python.
 __pycache__/

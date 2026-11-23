@@ -14,3 +14,10 @@ Esta carpeta está pensada para almacenar **datos en bruto** (raw) relacionados 
 - **Formato:** UTF-8, separado por comas y con encabezado. Columnas: `incident_id`, `date`, `location_id`, `category`, `description`, `status`, `customer_id`, `satisfaction_score` y `reporter_id`.
 - **Privacidad:** los IDs de cliente (`CLI-XXXXXX`) y de gerente (`MGR-XX`) son códigos, sin nombres ni datos de contacto.
 - **Versionado:** se conserva tal como se recibió; no se modifica. Lo procesa [`scripts/incident-report/`](../../scripts/incident-report/README.es.md).
+
+### `telemetry_events/` (pipeline de negocio, fuera de Git)
+
+- **Origen:** la task opcional `save_raw_extract` del [pipeline de desempeño semanal](../pipelines/README.es.md) guarda aquí la extracción de cada corrida, `<run_id>.json`. La fuente es `telemetry_events`, en Supabase; esta copia sirve para auditar qué leyó una corrida.
+- **Contenido:** las semanas, el entorno y los eventos de negocio leídos (`id`, `timestamp`, `event_type` y las propiedades de negocio de `tags`).
+- **Privacidad:** sin `user_id`, `session_id` ni `request_id` (plan de telemetría, §8).
+- **Versionado:** ignorada por Git (`.gitignore` raíz). Se puede borrar: el pipeline no la lee.

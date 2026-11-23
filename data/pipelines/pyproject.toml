@@ -1,0 +1,49 @@
+[project]
+name = "brasaland-pipelines"
+version = "0.1.0"
+description = "Pipelines de datos de negocio de Brasaland, orquestados con Prefect (data/pipelines)."
+requires-python = ">=3.11"
+# Lo que necesitan repository.py, runs.py y trigger.py, los módulos que importa la API
+# (services/reporting). Prefect no está aquí: la API no lo importa (runs.py) y no debe arrastrarlo,
+# porque fija versiones de FastAPI más antiguas que las de la API.
+dependencies = [
+    # Transformaciones reutilizables (data/process), sin acceso a la base.
+    "brasaland-process",
+    "pandas>=2.2",
+    # Lectura de telemetry_events y locations, y escritura en reporting.* (PostgreSQL en Supabase,
+    # SQLite en las pruebas).
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9.13",
+    # trigger.py pide las corridas manuales a la API REST de Prefect sin importar Prefect.
+    "httpx>=0.27",
+]
+
+[dependency-groups]
+# El flow (pipeline.py y config.py): se instala por defecto en este proyecto (uv sync, uv run) y en la
+# imagen del servicio reporting-pipeline, pero no viaja a quien instala el paquete.
+orchestration = [
+    # Orquestación: flows, tasks, reintentos, caché, bloques y la programación de los lunes.
+    "prefect>=3",
+    # Carga data/pipelines/.env al ejecutar pipeline.py como script.
+    "python-dotenv>=1.0",
+]
+dev = ["pytest>=8"]
+
+[tool.uv]
+default-groups = ["orchestration", "dev"]
+
+[tool.uv.sources]
+brasaland-process = { path = "../process", editable = true }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Esta carpeta es el paquete: data/pipelines/pipeline.py se importa como brasaland_pipelines.pipeline.
+# Así el punto de entrada queda en la ruta que pide el enunciado y la API lo instala en modo editable.
+[tool.setuptools]
+package-dir = { "brasaland_pipelines" = "." }
+packages = ["brasaland_pipelines"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

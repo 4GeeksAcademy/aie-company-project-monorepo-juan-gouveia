@@ -68,6 +68,13 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def require_manager_or_admin(user: User = Depends(get_current_user)) -> User:
+    """Para las lecturas del reporte de negocio (`/reporting`): la dirección y los gerentes de operación."""
+    if user.role not in (Role.ADMIN, Role.MANAGER):
+        raise forbidden("Solo un administrador o un gerente puede consultar los reportes de negocio.")
+    return user
+
+
 def ensure_self_or_admin(current: User, user_id: str) -> None:
     """403 si el usuario intenta acceder a las credenciales de otro sin ser admin.
 

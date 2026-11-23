@@ -496,6 +496,22 @@ Operational metrics computed over `telemetry_events` for the engineering team ([
 - **Cache:** in memory, 60 s, per combination of parameters (`2026-11-14` and `2026-11-14T00:00:00Z` are the same). Without parameters, the period is resolved once and stored with the result, so two requests within the TTL get the same JSON. `X-Cache: HIT` or `MISS` header. The report may lag the table by up to 60 s.
 - **Database failures:** `503 telemetry_report_unavailable`, nothing cached, and an error line in `api.telemetry` (if the table is missing, it asks to run migration 002).
 
+## `reporting` schema (business performance pipeline)
+
+Sink of the pipeline that produces the "Reporte Semanal de Costo y Merma por Local" (weekly cost and waste report per location; [design](../../data/pipelines/PIPELINE_DESIGN.md), in Spanish). Only [`migrations/005_reporting.sql`](./migrations/005_reporting.sql) creates it, and it requires 002 and 004:
+
+- **`reporting.weekly_location_performance`:** the briefing's table, unchanged, with its `unique (location_id, week_start)` for the upsert.
+- **`reporting.pipeline_runs`:** the run log, with a partial unique index that prevents two active runs of the same pipeline.
+- **`reporting_pipeline` role:** the pipeline connects with it, not with `postgres`. It reads `telemetry_events` and `locations` (through a read-only RLS policy) and can only read, insert and update in `reporting.*`. The migration creates it without login; the password is set by hand and never goes in the repository.
+- **Closed to the Supabase REST API:** RLS enabled and no privileges for `anon` or `authenticated`, like the other tables.
+- **Endpoints:** `GET /reporting/weekly-location-performance`, `GET /reporting/pipeline-runs/latest` and `POST /reporting/pipeline-runs`, outside `/api/v1`, in the [`services/reporting`](../reporting/README.md) package mounted in `app/main.py`. Triggering needs `PREFECT_API_URL` (in Docker, the `prefect-server` service); the API never imports Prefect.
+
+**How to run it:**
+
+1. Supabase → SQL Editor → paste the migration and run it. It is idempotent. Its three final queries show RLS enabled on both tables, the role's privileges and no rows for `anon` or `authenticated`.
+2. In a separate query, not saved as a snippet: `ALTER ROLE reporting_pipeline WITH LOGIN PASSWORD '<password>';`.
+3. The pipeline's connection string is the Session pooler one with that user: `postgresql://reporting_pipeline.<ref>:<password>@<host>.pooler.supabase.com:5432/postgres`. It goes in `REPORTING_DATABASE_URL` or in the Prefect `Secret` block `brasaland-reporting-db`.
+
 ## Timing log
 
 `app/core/timing.py` writes one line per request to the `api.timing` logger, with the method, the path (without the query string), the status, the duration inside the API and the request id:

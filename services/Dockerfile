@@ -2,10 +2,11 @@
 #
 # Se construye desde docker-compose.yml (raíz) con:
 #   context: ./services
-#   additional_contexts: shared: ./packages/shared
-# El paquete local packages/shared (brasaland-shared) está fuera de ./services, así que llega por el
-# contexto adicional `shared`. La imagen reproduce la estructura del monorepo (/repo/...) para que la
-# ruta ../../packages/shared de pyproject.toml siga siendo válida dentro del contenedor.
+#   additional_contexts: shared: ./packages/shared, data: ./data
+# Los paquetes locales packages/shared (brasaland-shared), data/process y data/pipelines están fuera de
+# ./services, así que llegan por los contextos adicionales `shared` y `data`. La imagen reproduce la
+# estructura del monorepo (/repo/...) para que las rutas relativas de los pyproject.toml sigan siendo
+# válidas dentro del contenedor.
 
 FROM python:3.12-slim
 
@@ -32,7 +33,17 @@ RUN uv pip install --system --no-cache --no-deps -e /repo/packages/shared
 COPY telemetry/ /repo/services/telemetry/
 RUN uv pip install --system --no-cache --no-deps -e /repo/services/telemetry
 
-# 4. Código de la API. En desarrollo, el bind mount de docker-compose.yml lo sustituye por el del host.
+# 4. Pipeline de desempeño de negocio, editable: data/process (brasaland-process) y data/pipelines
+#    (brasaland-pipelines) llegan por el contexto adicional `data`; services/reporting (brasaland-reporting,
+#    los endpoints de /reporting) está en ./services. Sus dependencias (pandas, httpx) van en
+#    requirements.txt. Prefect no: la API no lo importa; el flow corre en su propia imagen
+#    (data/pipelines/Dockerfile, servicio reporting-pipeline).
+COPY --from=data process/pyproject.toml process/__init__.py process/weekly_location_performance.py /repo/data/process/
+COPY --from=data pipelines/pyproject.toml pipelines/*.py /repo/data/pipelines/
+COPY reporting/ /repo/services/reporting/
+RUN uv pip install --system --no-cache --no-deps -e /repo/data/process -e /repo/data/pipelines -e /repo/services/reporting
+
+# 5. Código de la API. En desarrollo, el bind mount de docker-compose.yml lo sustituye por el del host.
 COPY brasaland-api/ ./
 
 # Usuario sin privilegios; storage/ guarda las bases TinyDB y debe poder escribirse.

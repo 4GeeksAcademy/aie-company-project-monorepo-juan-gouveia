@@ -1,0 +1,27 @@
+[project]
+name = "brasaland-process"
+version = "0.1.0"
+description = "Transformaciones reutilizables de los pipelines de datos de Brasaland (Pandas, sin acceso a la base)."
+requires-python = ">=3.11"
+dependencies = [
+    # Las transformaciones son funciones puras sobre DataFrames.
+    "pandas>=2.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Esta carpeta es el paquete: data/process/weekly_location_performance.py se importa como
+# brasaland_process.weekly_location_performance. Así el archivo queda donde lo pide el enunciado
+# ("data/process/ para scripts de transformación reutilizables") y los pipelines lo instalan en modo
+# editable con uv, como services/telemetry.
+[tool.setuptools]
+package-dir = { "brasaland_process" = "." }
+packages = ["brasaland_process"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
