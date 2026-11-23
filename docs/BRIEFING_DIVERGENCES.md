@@ -30,6 +30,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 17. [Almacenamiento de eventos de telemetría](#almacenamiento-de-eventos-de-telemetría) (enunciado "Telemetría — Almacenamiento", rama `feature/telemetry-storage`)
 18. [Reporte técnico de telemetría](#reporte-técnico-de-telemetría) (enunciado "Telemetría de tu compañía — Reporte técnico", rama `feature/telemetry-report`)
 19. [Pipeline de desempeño de negocio](#pipeline-de-desempeño-de-negocio) (briefing "Pipeline de Desempeño de Negocio" y enunciado de la Parte 1, rama `feature/pipeline-design`)
+20. [Pipeline de desempeño de negocio resiliente](#pipeline-de-desempeño-de-negocio-resiliente) (enunciado de la Parte 2, rama `feature/pipeline-implementation`)
 
 ---
 
@@ -1727,3 +1728,101 @@ La rama sale de `feature/telemetry-report`, y el PR apunta a ella porque los PR 
 | Un flow y al menos tres tasks con nombres concretos | ✅ | §5: `weekly_location_performance_flow` y 7 tasks, con states, hooks, deployment y bloques |
 | Tres endpoints en `services/reporting/` con su función de `data/pipelines/` | ✅ | §6: `read_weekly_location_performance`, `read_latest_pipeline_run` y `trigger_pipeline_run` |
 | Coherente con los eventos y las métricas obligatorias del briefing | ✅ | Los nombres de eventos, propiedades, columnas y locales son los del catálogo de telemetría y del briefing |
+
+---
+
+## Pipeline de desempeño de negocio resiliente
+
+Implementación (Parte 2 de 3) del pipeline diseñado en la sección anterior, en la rama `feature/pipeline-implementation`. Los entregables son `data/pipelines/pipeline.py` (un flow de Prefect con 9 tasks) y los tres endpoints de `services/reporting/`. Coincide con el briefing y el enunciado en lo siguiente:
+
+- **Punto de entrada:** `data/pipelines/pipeline.py` define el flow `weekly_location_performance_flow` y se ejecuta con `python data/pipelines/pipeline.py`.
+- **Carpetas:** transformaciones reutilizables en `data/process/`, extracción de cada corrida en `data/raw/` y comprobaciones de la corrida en `data/eval/`.
+- **Fuente y destino:** lee `telemetry_events` y `locations` con un rol sin permisos de escritura sobre ellas, y escribe en `reporting.weekly_location_performance` (DDL literal del briefing) con un upsert sobre su `unique (location_id, week_start)`. `services/telemetry/analysis.py` y `GET /telemetry/report` no cambian.
+- **KPIs:** los cinco del briefing, con sus nombres de columna, comparados con un cálculo independiente en SQL.
+- **Resiliencia:** reintentos justificados en las tasks que hablan con la base, dos pasos opcionales con `return_state=True`, la carga con `return_state=True` y tratada en el flow, y caché con `cache_key_fn` y `cache_expiration` en la transformación.
+- **Log:** cada corrida queda en `reporting.pipeline_runs` (18 campos, entre ellos inicio, fin, eventos leídos, filas escritas, estado y error).
+- **Endpoints:** las tres rutas del briefing en `services/reporting/`, separado de `services/telemetry/`, con la autenticación y el formato de errores de la API, importando de `data/pipelines/`.
+
+Las decisiones (I0 a I5) se tomaron con el desarrollador el 23 de noviembre de 2026. Están, con los ajustes al diseño, en la sección 11 de `data/pipelines/PIPELINE_DESIGN.md`; la frecuencia y los comandos, en su sección 10.
+
+> **Estado:** completa. Un commit por fase, hechos por el desarrollador: Fase 0 (esquema `reporting`, `7839b89`), Fase 1 (transformaciones, `52894b2`), Fase 2 (flow, `39fe52f`), Fase 3 (endpoints, `38fc1b5`), Fase 4 (verificación real, `e1afffa`) y Fase 5 (documentación, con el mensaje del enunciado).
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Instalación de Prefect | `uv add "prefect>=3"` en el entorno | Grupo de dependencias `orchestration` de `data/pipelines/`; la API no lo instala | Importado en la API, Prefect cambia su logging y exige una FastAPI anterior |
+| Disparo manual | El endpoint importa flows o funciones de `data/pipelines/` | Importa `trigger.trigger_pipeline_run`, que pone la corrida en la cola de Prefect por su API REST | La API nunca ejecuta el ETL (diseño, §6.3) y no importa Prefect |
+| Ejecución programada | Sin especificar | `pipeline.py --serve` en el servicio `reporting-pipeline` de Docker, con `prefect-server` | Deployment de los lunes sin work pool ni worker aparte |
+| Corrida sin argumentos | `python data/pipelines/pipeline.py` corre el ETL completo | Lo hace, sobre los eventos de `production`; la verificación usa `--environment development` | Los datos de prueba del backoffice local son de `development` (riesgo R7 del plan de telemetría) |
+| Caché | "Si una task ya corrió en la última hora, no se repite" | Caché de 1 hora en la transformación y en el catálogo de locales; no en la extracción de eventos ni en la carga | Releer eventos y reescribir con upsert es lo que hace correcto el resultado |
+| Uso de `data/raw/` | Datos de entrada e intermedios | La extracción de cada corrida, sin identificadores de usuario, sesión ni petición, y fuera de Git | La fuente es Supabase; `data/raw/` guarda una copia auditable, no la fuente |
+| Log de la corrida | Cinco campos en la base o en un archivo | Tabla `reporting.pipeline_runs`, 18 campos | Ya estaba en el diseño (sección 19, apartado 10) |
+| Metadata de la última corrida | Estado, inicio, fin, registros procesados | Todos los campos del log salvo `requested_by` y `prefect_flow_run_id` | Quién pidió la corrida y el id interno de Prefect no son para los lectores del reporte |
+| Mensaje del commit | `feat: implement resilient business performance pipeline` | En el último commit; los anteriores, un mensaje por fase | Un commit por fase, como el resto del proyecto |
+| Destino del PR | Sin especificar | `feature/pipeline-design` | El PR #25 (diseño) sigue abierto |
+
+### 1. Prefect fuera de la API
+
+El enunciado pide instalar Prefect con `uv add "prefect>=3"`. Está instalado en `data/pipelines/`, en el grupo de dependencias `orchestration`, que `uv sync` instala por defecto. La API depende de `brasaland-pipelines` sin ese grupo por dos motivos comprobados en la Fase 3:
+
+- **Logging.** Importar Prefect configura el logging del proceso: añade un handler al registrador raíz (las líneas de `api.timing` salían duplicadas) y deja el de uvicorn en `WARNING` sin propagación, lo que habría silenciado sus mensajes `INFO`.
+- **Versiones.** El paquete de Prefect 3.9 exige `fastapi<0.151`; con él, la API habría bajado de FastAPI 0.162 a 0.150, además de `websockets` y `python-dateutil`.
+
+Una prueba de la API comprueba en un proceso aparte que `app.main` no importa Prefect.
+
+**Coste:** `data/pipelines/` tiene dos dependencias de nivel distinto (el paquete y el grupo), y el servicio `reporting-pipeline` tiene una imagen propia.
+
+### 2. El disparo pone la corrida en la cola, por la API REST de Prefect
+
+El enunciado pide que los endpoints importen flows o funciones de `data/pipelines/` sin duplicar la lógica. `POST /reporting/pipeline-runs` importa `trigger_pipeline_run` de `data/pipelines/trigger.py`, que registra la corrida en `pending` y crea el flow run del deployment `weekly-location-performance/weekly`. El diseño lo hacía con `run_deployment(..., timeout=0)`; `trigger.py` hace las mismas dos llamadas a la API REST de Prefect (`GET /deployments/name/…` y `POST /deployments/{id}/create_flow_run`) con httpx, para no importar Prefect (apartado 1). El flow lo ejecuta el proceso `--serve` del servicio `reporting-pipeline`, nunca el de la API: un reinicio de la API no corta una corrida, y una corrida larga no ocupa la API.
+
+**Coste:** el endpoint necesita `PREFECT_API_URL` y el proceso `--serve` en marcha; sin ellos responde 503 `orchestrator_unavailable`.
+
+### 3. `python data/pipelines/pipeline.py` lee `production`
+
+El enunciado pide que `python data/pipelines/pipeline.py` corra el ETL completo sin errores. Lo hace: abre la corrida, extrae, transforma, carga 56 filas (14 locales × 4 semanas cerradas) y la cierra en `completed`, con código 0. Lee los eventos de `production`, como fija el diseño (sección 19, apartado 8), y hoy todos los eventos de Supabase son de `development`, así que esas filas salen en cero. La verificación con datos reales usa `--environment development --include-current-week`; sus resultados están en la sección 11 del diseño.
+
+El comando necesita el entorno de `data/pipelines/` (`uv sync`) y `REPORTING_DATABASE_URL` en `data/pipelines/.env`. Sin `PREFECT_API_URL`, Prefect arranca un servidor temporal para la corrida; en Windows, ese servidor escribe en la consola errores internos de su SQLite (`UNIQUE constraint failed: task_run_state`), que no afectan a la corrida. Con el servidor de Docker (`PREFECT_API_URL=http://localhost:4200/api`) no aparecen.
+
+**Coste:** con los datos actuales, la corrida por defecto produce ceros.
+
+### 4. Qué se guarda en caché
+
+El enunciado pide que una task que ya corrió con éxito en la última hora no se repita. La caché, de 1 hora, está en las dos tasks cuyo resultado se puede reutilizar sin riesgo:
+
+- **`transform_weekly_location_performance`**, la etapa costosa: la clave incluye los `id` de los eventos, las semanas, el catálogo y la versión de la transformación, así que un evento nuevo o tardío invalida la caché.
+- **`extract_locations`**: el catálogo solo cambia con una migración.
+
+La extracción de eventos no se cachea, porque los eventos llegan en cualquier momento y una corrida debe verlos. Tampoco la carga: reescribir con upsert es lo que garantiza la idempotencia. Ni el control de la corrida ni los pasos opcionales, que escriben un archivo por corrida.
+
+**Coste:** cada proceso tiene su caché (el almacenamiento de resultados de Prefect); una corrida desde el host no reutiliza la del contenedor.
+
+### 5. Qué guarda `data/raw/`
+
+El enunciado reserva `data/raw/` para datos de entrada y archivos intermedios. La entrada del pipeline es `telemetry_events`, en Supabase: `data/raw/` no la sustituye. La task opcional `save_raw_extract` guarda la extracción de cada corrida en `data/raw/telemetry_events/<run_id>.json`, sin `user_id`, `session_id` ni `request_id` (plan de telemetría, §8). La carpeta queda fuera de Git y los datos fuente existentes (`incidents-brasaland.csv`) no se tocan. `data/eval/weekly_location_performance/` sigue el mismo criterio para las comprobaciones de cada corrida.
+
+### 6. La metadata de la última corrida no expone quién la pidió
+
+`GET /reporting/pipeline-runs/latest` devuelve el estado, las horas de inicio y fin, los eventos leídos, rechazados y descartados, las filas escritas y el error, como pide el enunciado. No devuelve `requested_by` (el usuario que pidió la corrida manual) ni `prefect_flow_run_id`: los dos quedan en la tabla para la auditoría y para enlazar con Prefect.
+
+### 7. Commits por fase y destino del PR
+
+El enunciado pide un commit con el mensaje `feat: implement resilient business performance pipeline`. Como en el resto del proyecto, el trabajo va en un commit por fase, con un mensaje propio cada uno, y el de la Fase 5 lleva el mensaje del enunciado. La rama sale de `feature/pipeline-design`, y el PR apunta a ella porque el PR #25 sigue abierto.
+
+### Verificación de los criterios
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| `data/pipelines/pipeline.py` define un flow con tres o más tasks | ✅ | `weekly_location_performance_flow` y 9 tasks (diseño, §5.2) |
+| Una task con `retries` mayor que cero y un comentario que lo justifica | ✅ | Control (2), extracción (3) y carga (2), cada una con su comentario; solo ante fallos transitorios. Comprobado con la base inaccesible durante 15 s |
+| Una task opcional con `return_state=True`, y el flow continúa si falla | ✅ | `save_raw_extract` y `export_eval_snapshot`. Con `data/raw/telemetry_events/` sin poder escribirse, la corrida terminó en `completed` con `save_raw_extract_failed` |
+| Una task de transformación con `cache_key_fn` y `cache_expiration` | ✅ | `transform_weekly_location_performance`, 1 hora, con la clave explicada en un comentario. La segunda corrida la reutilizó (`Cached`) |
+| Carga idempotente | ✅ | Upsert sobre `unique (location_id, week_start)` en una transacción. Dos corridas seguidas dejaron los mismos `id` y valores |
+| Cinco campos de metadata por corrida | ✅ | `reporting.pipeline_runs`: `started_at`, `finished_at`, `events_read` y `rows_written`, `status`, `failed_task` y `error_message`, entre 18 |
+| `python data/pipelines/pipeline.py` corre el ETL completo | ✅ | Corrida de `production` completada con 56 filas y código 0 (apartado 3) |
+| Comando de ejecución documentado | ✅ | `PIPELINE_DESIGN.md`, §10, y el docstring de `pipeline.py` |
+| Escribe en la tabla del briefing; `telemetry_events` y `analysis.py` intactos | ✅ | Solo escribe en `reporting.*`, con un rol sin escritura en `telemetry_events` (comprobado con `has_table_privilege`) |
+| Endpoint con la metadata de la última corrida | ✅ | `GET /reporting/pipeline-runs/latest` |
+| Endpoint que dispara una corrida importando de `data/pipelines/` | ✅ | `POST /reporting/pipeline-runs` → `trigger_pipeline_run`; 202, y la corrida la ejecutó `reporting-pipeline` |
+| Endpoint con las filas de KPIs | ✅ | `GET /reporting/weekly-location-performance`, con la forma del briefing más `location_name` |
+| KPIs según "KPIs a medir" | ✅ | Las 70 filas de una corrida coinciden con un cálculo independiente en SQL |
+| Implementación coherente con `PIPELINE_DESIGN.md` | ✅ | Etapas, tablas, nombres y estrategias del diseño; los ajustes, con su motivo, en su sección 11 |

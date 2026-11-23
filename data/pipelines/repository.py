@@ -19,7 +19,10 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pandas as pd
-from brasaland_process.weekly_location_performance import OUTPUT_COLUMNS, SOURCE_EVENT_TYPES
+from brasaland_process.weekly_location_performance import (
+    OUTPUT_COLUMNS,
+    SOURCE_EVENT_TYPES,
+)
 from sqlalchemy import (
     JSON,
     CheckConstraint,

@@ -15,4 +15,11 @@ This folder is intended for **raw data** related to the company: dumps, exports,
 - **Privacy:** customer (`CLI-XXXXXX`) and manager (`MGR-XX`) IDs are codes, with no names or contact details.
 - **Versioning:** kept exactly as received; do not modify it. It is processed by [`scripts/incident-report/`](../../scripts/incident-report/README.md).
 
+### `telemetry_events/` (business pipeline, outside Git)
+
+- **Origin:** the optional `save_raw_extract` task of the [weekly performance pipeline](../pipelines/README.md) saves each run's extract here, as `<run_id>.json`. The source is `telemetry_events`, in Supabase; this copy is for auditing what a run read.
+- **Content:** the weeks, the environment and the business events read (`id`, `timestamp`, `event_type` and the business properties in `tags`).
+- **Privacy:** no `user_id`, `session_id` or `request_id` (telemetry plan, §8).
+- **Versioning:** ignored by Git (root `.gitignore`). It can be deleted: the pipeline never reads it.
+
 > _Spanish version: [README.es.md](./README.es.md)._

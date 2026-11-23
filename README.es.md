@@ -61,6 +61,7 @@ Este repositorio contiene el proyecto de **Brasaland**. `CONTEXT.md` (y su versi
 | Script de reporte de incidentes | [`scripts/incident-report/`](./scripts/incident-report/README.es.md) | CLI en Python que valida y resume el CSV de incidentes y exporta `data/process/results.csv`. Reutiliza la lógica de análisis de la API |
 | Paquetes compartidos | [`packages/`](./packages/README.es.md) | `@repo/brasa-core` es transitorio (lo usa `/funciones`); `@repo/shared-types` aún no tiene consumidores |
 | Datos | [`data/raw/`](./data/raw/README.es.md) | `incidents-brasaland.csv` (100 incidentes de prueba) |
+| Pipeline de negocio | [`data/pipelines/`](./data/pipelines/README.es.md), [`data/process/`](./data/process/README.es.md) y [`services/reporting/`](./services/reporting/README.es.md) | Flow de Prefect que calcula cada lunes el Reporte Semanal de Costo y Merma por Local en `reporting.weekly_location_performance` (Supabase), y sus tres endpoints en `/reporting` ([diseño](./data/pipelines/PIPELINE_DESIGN.md)) |
 | IA, automatización e infraestructura | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Solo la estructura y los ejemplos de la plantilla |
 
 - Las instrucciones para agentes de código están en el [`AGENTS.md`](./AGENTS.md) raíz, con reglas y skills de desarrollo en `.agents/`.
@@ -70,7 +71,7 @@ Este repositorio contiene el proyecto de **Brasaland**. `CONTEXT.md` (y su versi
 
 ## Ejecutar con Docker
 
-El entorno de desarrollo está definido en [`docker-compose.yml`](./docker-compose.yml) (ticket #infra-40): dos contenedores en la red `brasaland-net`, con recarga en caliente y el código montado desde el host.
+El entorno de desarrollo está definido en [`docker-compose.yml`](./docker-compose.yml) (ticket #infra-40): cuatro contenedores en la red `brasaland-net`, con recarga en caliente y el código montado desde el host.
 
 **Requisitos:** Docker Desktop, o Docker Engine con el plugin Compose v2. No hace falta tener Node ni Python en la máquina.
 
@@ -85,6 +86,8 @@ Crear el `.env` es el único paso manual: los secretos no pueden estar en Git. S
 | --- | --- | --- |
 | `uis` | `uis/website` y `uis/backoffice` (`next dev`), lanzados por [`uis/start.sh`](./uis/start.sh) | http://localhost:3000 y http://localhost:3001 |
 | `api` | `services/brasaland-api` (Uvicorn con `--reload`) | http://localhost:8000 (documentación en `/docs`) |
+| `prefect-server` | Servidor de Prefect (`prefecthq/prefect:3.9.4-python3.12`) | http://localhost:4200 |
+| `reporting-pipeline` | El pipeline de negocio sirviendo su deployment de los lunes (`data/pipelines/pipeline.py --serve`). Lee la conexión de `data/pipelines/.env` (opcional: sin él, las corridas fallan sin conexión) | — |
 
 - **Las llamadas entre servicios usan el nombre del servicio.** El intermediario (BFF) del backoffice llama a `http://api:8000/api/v1` (`API_BASE_URL`). Las URL que usa el navegador (`NEXT_PUBLIC_API_BASE_URL`, `FRONTEND_URL`) siguen siendo de `localhost`.
 - **Recarga en caliente:** el código está montado con bind mounts, así que los cambios en el host se ven sin reconstruir. Docker Desktop no propaga los eventos de archivos de Windows ni de macOS, así que los dos servicios vigilan los cambios por sondeo (`NEXT_WATCH_POLL_INTERVAL_MS`, `WATCHFILES_FORCE_POLLING`). En Docker, Next.js corre con webpack (`next dev --webpack`) porque Turbopack no detecta los cambios en los bind mounts; fuera de Docker, `npm run dev` sigue con Turbopack.

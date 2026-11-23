@@ -34,7 +34,12 @@ from uuid import UUID
 
 import pandas as pd
 from brasaland_pipelines import config, repository
-from brasaland_pipelines.runs import DEPLOYMENT_NAME, FLOW_NAME, InvalidWeekRange, compute_weeks
+from brasaland_pipelines.runs import (
+    DEPLOYMENT_NAME,
+    FLOW_NAME,
+    InvalidWeekRange,
+    compute_weeks,
+)
 from brasaland_process.weekly_location_performance import (
     WeeklyPerformanceResult,
     build_weekly_location_performance,
@@ -42,9 +47,15 @@ from brasaland_process.weekly_location_performance import (
 from prefect import flow, get_run_logger, task
 from prefect.context import TaskRunContext
 from prefect.runtime import flow_run as current_flow_run
+from prefect.runtime import task_run as prefect_task_run
 from prefect.schedules import Cron
 from sqlalchemy import Engine
-from sqlalchemy.exc import DBAPIError, DisconnectionError, InterfaceError, OperationalError
+from sqlalchemy.exc import (
+    DBAPIError,
+    DisconnectionError,
+    InterfaceError,
+    OperationalError,
+)
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 SCHEDULE = Cron("0 6 * * 1", timezone="America/Bogota")
@@ -186,10 +197,21 @@ def open_pipeline_run(
         )
 
 
+def _weeks_run_name(task_name: str) -> str:
+    """Nombre de la task run con su rango de semanas, para leerlo en la interfaz de Prefect."""
+    weeks = prefect_task_run.parameters["weeks"]
+    return f"{task_name} {min(weeks)}..{max(weeks)}"
+
+
 # Tres reintentos con espera creciente (10, 30 y 90 s): la extracción es la primera lectura de la
 # corrida y la más expuesta a un pooler de Supabase saturado o a un corte breve; 2 minutos cubren esos
 # casos sin retrasar demasiado el reporte del lunes.
-@task(retries=3, retry_delay_seconds=[10, 30, 90], retry_condition_fn=_retry_on_transient_error)
+@task(
+    retries=3,
+    retry_delay_seconds=[10, 30, 90],
+    retry_condition_fn=_retry_on_transient_error,
+    task_run_name=lambda: _weeks_run_name("extract_business_events"),
+)
 def extract_business_events(weeks: list[date], environment: str) -> pd.DataFrame:
     """Los eventos de `telemetry_events` (solo lectura) de los cuatro tipos que alimentan un KPI."""
     with get_engine().connect() as conn:

@@ -22,7 +22,11 @@ from app.core.logs import console_logger
 from app.domains.auth.dependencies import require_admin, require_manager_or_admin
 from app.domains.users.models import User
 from brasaland_pipelines import repository, trigger
-from brasaland_reporting.schemas import PipelineRunRead, PipelineRunRequest, WeeklyLocationPerformance
+from brasaland_reporting.schemas import (
+    PipelineRunRead,
+    PipelineRunRequest,
+    WeeklyLocationPerformance,
+)
 from fastapi import APIRouter, Body, Depends, Query, Response, status
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session

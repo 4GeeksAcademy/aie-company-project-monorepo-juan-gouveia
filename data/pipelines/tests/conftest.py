@@ -19,7 +19,18 @@ from itertools import count
 import pytest
 from brasaland_pipelines import pipeline, repository
 from prefect.testing.utilities import prefect_test_harness
-from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, Table, Text, create_engine, event, insert
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    Integer,
+    MetaData,
+    Table,
+    Text,
+    create_engine,
+    event,
+    insert,
+)
 
 CODES = [
     "medellin_centro", "medellin_laureles", "medellin_envigado", "medellin_bello", "medellin_itagui",
