@@ -152,6 +152,11 @@ app/
     │   ├── router.py       # Endpoints de /inventory
     │   ├── cache.py        # Caché de GET /products (60 s) y GET /orders (5 min); las escrituras la limpian
     │   └── seed.py         # Datos semilla del briefing (`uv run seed-inventory`)
+    ├── locations/
+    │   ├── models.py       # Tabla locations (SQLModel con registro propio, fuera de init_db)
+    │   ├── schemas.py      # LocationRead
+    │   ├── service.py      # Lectura del catálogo, cache de 10 min y 503 si falta la tabla
+    │   └── router.py       # GET /locations
     ├── telemetry/
     │   ├── models.py       # Tabla telemetry_events (SQLModel con registro propio, fuera de init_db)
     │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch (laxo) y TelemetryReceipt
@@ -306,9 +311,15 @@ Todos exigen token. El router tiene el prefijo `/inventory` y se monta bajo `/ap
 | `GET /api/v1/inventory/products` | Ingredientes con `current_stock`; `?country=CO` o `US` filtra por mercado | 200, 422 |
 | `POST /api/v1/inventory/products` | Crea un ingrediente; nace con stock 0 | 201, 409 `duplicate_sku`, 422 |
 | `GET /api/v1/inventory/products/{id}` | Un ingrediente con su stock actual | 200, 404 `ingredient_not_found` |
-| `POST /api/v1/inventory/orders/inbound` | Registra una entrega de proveedor (`IngredientEntry`) | 201, 404, 422 |
-| `POST /api/v1/inventory/orders/outbound` | Registra un consumo o una merma (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422 |
+| `POST /api/v1/inventory/orders/inbound` | Registra una entrega de proveedor (`IngredientEntry`) | 201, 404, 422, 503 |
+| `POST /api/v1/inventory/orders/outbound` | Registra un consumo o una merma (`IngredientExit`) | 201, **400 `insufficient_stock`**, 404, 422, 503 |
 | `GET /api/v1/inventory/orders` | `{"inbound": [...], "outbound": [...]}` de la más reciente a la más antigua. Cada orden lleva una proyección plana de su ingrediente (`ingredient_id`, `ingredient_name`, `ingredient_sku`, `ingredient_unit`) y el `user_uuid`, sin objeto anidado; los dos `POST` devuelven la misma forma | 200 |
+
+**Local y país.** Cada orden busca su `location_id` en el [catálogo de locales](#catálogo-de-locales-get-apiv1locations): un local solo registra ingredientes de su país (1–9 Colombia, 10–14 Florida). Si no, 422 `location_country_mismatch` (o `unknown_location` si el local falta en el catálogo) con el error en el campo `location_id`, y no se escribe nada; sin la tabla `locations`, 503 `locations_unavailable`. En una salida, el local se comprueba antes que el stock. Las órdenes anteriores a esta regla no se reescriben.
+
+```json
+{"error": {"code": "location_country_mismatch", "message": "Miami Hialeah es un local de US y «Falda de ternera» es un ingrediente de CO. Elige un ingrediente de US u otro local.", "details": [{"field": "location_id", "message": "Miami Hialeah solo registra ingredientes de US."}]}}
+```
 
 Una salida que dejaría el stock en negativo se rechaza **antes de escribir nada**:
 
@@ -349,8 +360,22 @@ Stock resultante: Falda de ternera 52, Costilla de cerdo 32, Chimichurri 20 y el
 - Las órdenes llevan el UUID del administrador activo más antiguo de TinyDB: antes hay que ejecutar `uv run create-admin`.
 - Crea las tablas si no existen, valida los datos con los schemas de la API y lo inserta todo en una única transacción.
 - Es idempotente: si ya hay ingredientes, no inserta nada.
-- `location_id` es 1 para los ingredientes de Colombia y 10 para los de EE. UU. (valores de ejemplo: el briefing no asigna locales a países).
+- `location_id` es 1 (Medellín Centro) para los ingredientes de Colombia y 10 (Miami Doral) para los de EE. UU., según el catálogo de locales.
 - La API no siembra el inventario al arrancar.
+
+## Catálogo de locales (`GET /api/v1/locations`)
+
+Los 14 locales de Brasaland, en la tabla `locations`. El `id` es el `location_id` (1–14) de las órdenes del inventario y de la telemetría; cada local tiene la sede del briefing del gestor de incidencias (`code` y `name`), su ciudad, su país y su moneda.
+
+| `id` | Locales | `country` | `currency` |
+|---|---|---|---|
+| 1–9 | Medellín Centro, Laureles, Envigado, Bello e Itagüí; Bogotá Chapinero y Usaquén; Cali Granada; Barranquilla Norte | `CO` | `COP` |
+| 10–14 | Miami Doral, Hialeah y Kendall; Orlando International Drive; Fort Lauderdale | `US` | `USD` |
+
+- **Migración:** solo [`migrations/004_locations.sql`](./migrations/004_locations.sql) crea y llena la tabla, con RLS como la 002 y la 003; el modelo tiene un registro propio y `init_db` no la crea. Es idempotente: volver a ejecutarla deja las 14 filas como están en el script. Hay que ejecutarla una vez en el SQL Editor de Supabase.
+- **Endpoint:** `GET /api/v1/locations` exige token y devuelve la lista ordenada por `id` (`id`, `code`, `name`, `city`, `country`, `currency`). Se guarda 10 minutos (`X-Cache`). Sin la tabla responde 503 `locations_unavailable` y el log (`api.locations`) pide la migración.
+- **Sin clave foránea:** las órdenes guardan solo el entero (regla 5 del inventario).
+- Los códigos son exactamente los `branch` del gestor de incidencias sin `central`; una prueba lo comprueba, y las pruebas crean la tabla con las filas de la propia migración.
 
 ## Autenticación: `auth`, `users` y `profiles`
 
@@ -485,7 +510,7 @@ Sirve para elegir con datos qué endpoints merecen caché. Los errores no contro
 
 ## Errores
 
-Todos los errores responden con el formato `{"error": {"code": "...", "message": "..."}}`. El `code` es estable para que lo lea un programa, y el `message` está en español para mostrarlo al usuario. Los errores de validación añaden `details`, una lista de `{"field", "message"}` que indica qué campo falló y por qué.
+Todos los errores responden con el formato `{"error": {"code": "...", "message": "..."}}`. El `code` es estable para que lo lea un programa, y el `message` está en español para mostrarlo al usuario. Los errores de validación, y las reglas de negocio que dependen de un campo (como `location_country_mismatch` en el inventario), añaden `details`, una lista de `{"field", "message"}` que indica qué campo falló y por qué.
 
 | Caso | HTTP | `code` |
 |---|---|---|

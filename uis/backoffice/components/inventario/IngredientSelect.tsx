@@ -10,11 +10,14 @@ interface IngredientSelectProps {
   value: string;
   onChange: (value: string) => void;
   error?: string;
+  // Texto de ayuda bajo el select; por ejemplo, de qué país son los ingredientes de la lista.
+  hint?: string;
   disabled?: boolean;
 }
 
 // Selector de ingrediente de los formularios de entrada y salida: por nombre, con SKU y unidad para
-// distinguir los de cada país. Mientras carga queda deshabilitado; si falla, ofrece reintentar.
+// distinguir los de cada país. Mientras carga queda deshabilitado; si falla, ofrece reintentar. Quien
+// lo usa decide qué ingredientes ofrece (los formularios del inventario, solo los del país del local).
 export default function IngredientSelect({
   ingredients,
   fetchState,
@@ -22,6 +25,7 @@ export default function IngredientSelect({
   value,
   onChange,
   error,
+  hint,
   disabled,
 }: IngredientSelectProps) {
   if (fetchState.status === "error") {
@@ -57,6 +61,7 @@ export default function IngredientSelect({
       invalid={Boolean(error)}
       disabled={disabled || loading}
     >
+      {hint && <span className="text-xs text-gray-600">{hint}</span>}
       {error && <span className="text-xs text-red-700">{error}</span>}
     </LabeledSelect>
   );

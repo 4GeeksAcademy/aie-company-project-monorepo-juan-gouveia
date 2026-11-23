@@ -7,15 +7,16 @@ import FormField from "@/components/FormField";
 import LabeledSelect from "@/components/LabeledSelect";
 import FormAlert from "@/components/auth/FormAlert";
 import IngredientSelect from "@/components/inventario/IngredientSelect";
+import LocationSelect from "@/components/inventario/LocationSelect";
 import StockPanel from "@/components/inventario/StockPanel";
 import { useIngredientStock } from "@/hooks/useIngredientStock";
 import { useIngredients } from "@/hooks/useIngredients";
 import { useFormTelemetry } from "@/hooks/useFormTelemetry";
+import { useLocations } from "@/hooks/useLocations";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createExit } from "@/lib/inventory";
 import {
   FIELD_LABELS,
-  LOCATION_OPTIONS,
   REASON_DESCRIPTIONS,
   REASON_OPTIONS,
   WASTE_REASON_DESCRIPTIONS,
@@ -32,21 +33,34 @@ import {
   type ExitFormField,
   type ExitFormValues,
 } from "@/lib/inventory-validation";
+import {
+  conflictsWithLocation,
+  findLocation,
+  ingredientListHint,
+  ingredientsForLocation,
+  locationHintFor,
+  removedIngredientNotice,
+} from "@/lib/locations";
 
 type Message = { tone: "error" | "success"; text: string };
 
 const UNKNOWN_INGREDIENT = "El ingrediente del enlace ya no existe. Elige otro.";
 
 // Registro de salidas (consumo o merma), con el patrón de EntryForm:
+// - el local va primero y solo deja elegir ingredientes de su país; elegir un local de otro país
+//   descarta el ingrediente y lo avisa;
 // - muestra el stock actual del ingrediente elegido, pedido a la API al elegirlo;
 // - avisa, sin bloquear, si la cantidad supera ese stock: la API aplica la regla con el stock del
 //   momento (puede haber cambiado) y su 400 `insufficient_stock` se muestra junto a la cantidad;
 // - tras el éxito, limpia la cantidad (conserva ingrediente, motivo y local) y refresca el stock.
 export default function ExitForm({ presetIngredientId }: { presetIngredientId: string }) {
   const { ingredients, fetchState, reload } = useIngredients();
+  const { locations, fetchState: locationsState, reload: reloadLocations } = useLocations();
   // Telemetría: errores de validación y abandono del formulario (solo nombres de campo).
   const formTelemetry = useFormTelemetry("outbound_order");
   const [values, setValues] = useState<ExitFormValues>({ ...EMPTY_EXIT_FORM, ingredient_id: presetIngredientId });
+  // Aviso cuando un cambio de local descarta el ingrediente elegido.
+  const [ingredientNotice, setIngredientNotice] = useState<string | null>(null);
   // Los errores locales se muestran tras el primer intento de envío.
   const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -61,6 +75,7 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
   const { stock, refresh } = useIngredientStock(selected ? values.ingredient_id : "");
   const shownStock = stock.status === "success" ? stock.ingredient.current_stock : null;
   const overStock = exceedsStock(values.quantity, shownStock);
+  const location = findLocation(locations, values.location_id);
 
   function localErrors(): ExitFormErrors {
     const errors = validateExitForm(values);
@@ -78,6 +93,17 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
     setMessage(null);
     formTelemetry.fieldChanged(field);
+  }
+
+  function changeLocation(value: string) {
+    setField("location_id", value);
+    const next = findLocation(locations, value);
+    if (selected && next && conflictsWithLocation(selected, next)) {
+      setField("ingredient_id", "");
+      setIngredientNotice(removedIngredientNotice(selected, next));
+    } else {
+      setIngredientNotice(null);
+    }
   }
 
   function show(next: Message) {
@@ -100,7 +126,8 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
     setSubmitting(true);
     setApiFields({});
     try {
-      const exit = await createExit(toExitInput(values), selected ? { ingredient: selected } : undefined);
+      // `selected` y `location` existen: la validación local rechaza un ingrediente o un local desconocidos.
+      const exit = await createExit(toExitInput(values), selected && location ? { ingredient: selected, location } : undefined);
       formTelemetry.submitted();
       setValues((prev) => ({ ...prev, quantity: "" }));
       setAttempted(false);
@@ -142,12 +169,27 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
         )}
       </div>
 
+      <LocationSelect
+        locations={locations}
+        fetchState={locationsState}
+        onRetry={reloadLocations}
+        value={values.location_id}
+        onChange={changeLocation}
+        hint={locationHintFor("Local donde se consume o se desecha.", selected, location)}
+        error={errors.location_id}
+        disabled={submitting}
+      />
+
       <IngredientSelect
-        ingredients={ingredients}
+        ingredients={ingredientsForLocation(ingredients, location)}
         fetchState={fetchState}
         onRetry={reload}
         value={values.ingredient_id}
-        onChange={(value) => setField("ingredient_id", value)}
+        onChange={(value) => {
+          setField("ingredient_id", value);
+          setIngredientNotice(null);
+        }}
+        hint={ingredientNotice ?? ingredientListHint(location)}
         error={errors.ingredient_id}
         disabled={submitting}
       />
@@ -214,30 +256,14 @@ export default function ExitForm({ presetIngredientId }: { presetIngredientId: s
         </LabeledSelect>
       )}
 
-      <LabeledSelect
-        label={FIELD_LABELS.location_id}
-        value={values.location_id}
-        options={LOCATION_OPTIONS}
-        onChange={(value) => setField("location_id", value)}
-        placeholder="Elige el local"
-        required
-        size="lg"
-        fullWidth
-        invalid={Boolean(errors.location_id)}
-        disabled={submitting}
-      >
-        <span className="text-xs text-gray-600">Local donde se consume o se desecha.</span>
-        {errors.location_id && <span className="text-xs text-red-700">{errors.location_id}</span>}
-      </LabeledSelect>
-
       <p className="text-xs text-gray-600">Los campos con * son obligatorios.</p>
 
       <div className="flex justify-end">
         <Button
           type="submit"
           size="md"
-          // Sin la lista de ingredientes no se puede elegir ni comprobar el ingrediente.
-          disabled={submitting || fetchState.status !== "success"}
+          // Sin las listas de ingredientes y locales no se pueden elegir ni comprobar.
+          disabled={submitting || fetchState.status !== "success" || locationsState.status !== "success"}
           className="inline-flex items-center gap-2 px-6 py-3 text-base"
         >
           {submitting && (

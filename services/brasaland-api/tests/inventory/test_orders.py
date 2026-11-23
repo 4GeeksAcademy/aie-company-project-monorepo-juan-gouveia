@@ -45,9 +45,9 @@ def test_entry_of_missing_ingredient_is_404_and_writes_nothing(add_entry, sessio
 def test_exit_reduces_stock_and_keeps_reason_and_user(add_ingredient, add_entry, add_exit, user, session):
     add_ingredient()
     add_entry(quantity=50.0)
-    exit_ = add_exit(quantity=3.0, reason="waste", location_id=14)
+    exit_ = add_exit(quantity=3.0, reason="waste", location_id=9)
 
-    assert (exit_.reason, exit_.location_id, exit_.user_uuid) == ("waste", 14, user.id)
+    assert (exit_.reason, exit_.location_id, exit_.user_uuid) == ("waste", 9, user.id)
     assert get_product(1, session=session).current_stock == 47.0
 
 

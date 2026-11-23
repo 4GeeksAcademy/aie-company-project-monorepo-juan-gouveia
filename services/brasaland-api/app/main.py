@@ -18,6 +18,7 @@ from app.domains.auth.router import router as auth_router
 from app.domains.incidents.manager_router import router as incident_manager_router
 from app.domains.incidents.router import router as incidents_router
 from app.domains.inventory.router import router as inventory_router
+from app.domains.locations.router import router as locations_router
 from app.domains.profiles.router import router as profiles_router
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.router import router as suppliers_router
@@ -65,6 +66,8 @@ app.include_router(incident_manager_router, prefix=API_PREFIX, dependencies=PROT
 app.include_router(suppliers_router, prefix=API_PREFIX, dependencies=PROTECTED)
 # Inventario (Hito 5): APIRouter con prefijo /inventory, datos en Supabase. Todas sus rutas exigen token.
 app.include_router(inventory_router, prefix=API_PREFIX, dependencies=PROTECTED)
+# Catálogo de los 14 locales (tabla `locations`, migración 004): solo lectura y con token.
+app.include_router(locations_router, prefix=API_PREFIX, dependencies=PROTECTED)
 # Autenticación (AUTH-01): login, usuarios (solo credenciales) y perfiles. AUTH-03 añade a /auth el
 # restablecimiento (público) y el cambio (protegido) de contraseña.
 app.include_router(auth_router, prefix=API_PREFIX)

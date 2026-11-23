@@ -4,17 +4,28 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import Button from "@/components/Button";
 import FormField from "@/components/FormField";
-import LabeledSelect from "@/components/LabeledSelect";
 import FormAlert from "@/components/auth/FormAlert";
 import IngredientSelect from "@/components/inventario/IngredientSelect";
+import LocationSelect from "@/components/inventario/LocationSelect";
+import StockPanel from "@/components/inventario/StockPanel";
 import SupplierSelect from "@/components/inventario/SupplierSelect";
+import { useIngredientStock } from "@/hooks/useIngredientStock";
 import { useIngredientSuppliers } from "@/hooks/useIngredientSuppliers";
 import { useIngredients } from "@/hooks/useIngredients";
 import { useFormTelemetry } from "@/hooks/useFormTelemetry";
+import { useLocations } from "@/hooks/useLocations";
 import { formErrorsFromApi } from "@/lib/auth/api-errors";
 import { mergeFieldErrors } from "@/lib/auth/validation";
 import { createEntry } from "@/lib/inventory";
-import { COUNTRY_CURRENCY, FIELD_LABELS, LOCATION_OPTIONS, formatQuantity } from "@/lib/inventory-labels";
+import { FIELD_LABELS, formatQuantity } from "@/lib/inventory-labels";
+import {
+  conflictsWithLocation,
+  findLocation,
+  ingredientListHint,
+  ingredientsForLocation,
+  locationHintFor,
+  removedIngredientNotice,
+} from "@/lib/locations";
 import {
   EMPTY_ENTRY_FORM,
   ENTRY_FORM_FIELDS,
@@ -30,6 +41,9 @@ type Message = { tone: "error" | "success"; text: string };
 const UNKNOWN_INGREDIENT = "El ingrediente del enlace ya no existe. Elige otro.";
 
 // Registro de entradas (entregas de proveedor), con el patrón de IncidentForm:
+// - el local va primero y solo deja elegir ingredientes de su país (la API lo exige: 422
+//   `location_country_mismatch`); elegir un local de otro país descarta el ingrediente y lo avisa;
+// - muestra el stock actual del ingrediente elegido bajo la cantidad, como el formulario de salida;
 // - valida los obligatorios en el cliente antes de enviar; la API vuelve a validar (422 por campo);
 // - durante el envío, el botón queda deshabilitado y muestra un indicador;
 // - los errores de la API se muestran con su mensaje y, si señalan un campo, junto a él;
@@ -37,9 +51,12 @@ const UNKNOWN_INGREDIENT = "El ingrediente del enlace ya no existe. Elige otro."
 export default function EntryForm({ presetIngredientId }: { presetIngredientId: string }) {
   const initialValues: EntryFormValues = { ...EMPTY_ENTRY_FORM, ingredient_id: presetIngredientId };
   const { ingredients, fetchState, reload } = useIngredients();
+  const { locations, fetchState: locationsState, reload: reloadLocations } = useLocations();
   // Telemetría: errores de validación y abandono del formulario (solo nombres de campo).
   const formTelemetry = useFormTelemetry("inbound_order");
   const [values, setValues] = useState<EntryFormValues>(initialValues);
+  // Aviso cuando un cambio de local descarta el ingrediente elegido.
+  const [ingredientNotice, setIngredientNotice] = useState<string | null>(null);
   // Los errores locales se muestran tras el primer intento de envío.
   const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -51,8 +68,12 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
   // Un id del enlace que no está en la lista (ingrediente borrado o enlace manipulado).
   const unknownIngredient = fetchState.status === "success" && Boolean(values.ingredient_id) && !selected;
   const { suppliers, reload: reloadSuppliers } = useIngredientSuppliers(selected);
-  // Moneda del coste unitario: la del país del ingrediente (COP en Colombia, USD en Estados Unidos).
-  const currency = selected ? COUNTRY_CURRENCY[selected.country] : null;
+  // Stock actual del ingrediente, como en las salidas: solo se pide el de un ingrediente que existe.
+  const { stock, refresh: refreshStock } = useIngredientStock(selected ? values.ingredient_id : "");
+  const location = findLocation(locations, values.location_id);
+  // Moneda del coste unitario: la del local (COP en Colombia, USD en Florida). El ingrediente es del
+  // mismo país, porque la lista solo ofrece los del país del local.
+  const currency = location?.currency ?? null;
 
   function localErrors(): EntryFormErrors {
     const errors = validateEntryForm(values);
@@ -70,6 +91,18 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     setApiFields((prev) => ({ ...prev, [field]: undefined }));
     setMessage(null);
     formTelemetry.fieldChanged(field);
+  }
+
+  function changeLocation(value: string) {
+    setField("location_id", value);
+    const next = findLocation(locations, value);
+    if (selected && next && conflictsWithLocation(selected, next)) {
+      setField("ingredient_id", "");
+      setField("supplier_name", "");
+      setIngredientNotice(removedIngredientNotice(selected, next));
+    } else {
+      setIngredientNotice(null);
+    }
   }
 
   function show(next: Message) {
@@ -93,11 +126,17 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
     setApiFields({});
     try {
       const supplierId = suppliers.status === "success" ? suppliers.idsByName[values.supplier_name.trim()] : undefined;
-      // `selected` existe: la validación local rechaza un ingrediente desconocido.
-      const entry = await createEntry(toEntryInput(values), selected ? { ingredient: selected, supplierId } : undefined);
+      // `selected` y `location` existen: la validación local rechaza un ingrediente o un local desconocidos.
+      const entry = await createEntry(
+        toEntryInput(values),
+        selected && location ? { ingredient: selected, location, supplierId } : undefined
+      );
       formTelemetry.submitted();
       setValues(initialValues);
+      setIngredientNotice(null);
       setAttempted(false);
+      // Si el formulario conserva el ingrediente del enlace, su stock ya cambió con la entrada.
+      refreshStock();
       show({
         tone: "success",
         text: `Entrada #${entry.id} registrada: ${formatQuantity(entry.quantity, entry.ingredient_unit)} de ${entry.ingredient_name}.`,
@@ -133,8 +172,19 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
         )}
       </div>
 
+      <LocationSelect
+        locations={locations}
+        fetchState={locationsState}
+        onRetry={reloadLocations}
+        value={values.location_id}
+        onChange={changeLocation}
+        hint={locationHintFor("Local que recibe la entrega.", selected, location)}
+        error={errors.location_id}
+        disabled={submitting}
+      />
+
       <IngredientSelect
-        ingredients={ingredients}
+        ingredients={ingredientsForLocation(ingredients, location)}
         fetchState={fetchState}
         onRetry={reload}
         value={values.ingredient_id}
@@ -142,39 +192,27 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
           setField("ingredient_id", value);
           // Los proveedores dependen del ingrediente: el elegido puede no servir para el nuevo.
           setField("supplier_name", "");
+          setIngredientNotice(null);
         }}
+        hint={ingredientNotice ?? ingredientListHint(location)}
         error={errors.ingredient_id}
         disabled={submitting}
       />
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <FormField
-          label={selected ? `${FIELD_LABELS.quantity} (${selected.unit})` : FIELD_LABELS.quantity}
-          value={values.quantity}
-          onChange={(value) => setField("quantity", value)}
-          required
-          size="lg"
-          error={errors.quantity}
-          hint={selected ? `En ${selected.unit}. Admite decimales: 12.5` : "Elige primero el ingrediente para ver su unidad."}
-          disabled={submitting}
-          inputProps={{ name: "quantity", inputMode: "decimal", autoComplete: "off" }}
-        />
+      <FormField
+        label={selected ? `${FIELD_LABELS.quantity} (${selected.unit})` : FIELD_LABELS.quantity}
+        value={values.quantity}
+        onChange={(value) => setField("quantity", value)}
+        required
+        size="lg"
+        error={errors.quantity}
+        hint={selected ? `En ${selected.unit}. Admite decimales: 12.5` : "Elige primero el ingrediente para ver su unidad."}
+        disabled={submitting}
+        inputProps={{ name: "quantity", inputMode: "decimal", autoComplete: "off" }}
+      />
 
-        <LabeledSelect
-          label={FIELD_LABELS.location_id}
-          value={values.location_id}
-          options={LOCATION_OPTIONS}
-          onChange={(value) => setField("location_id", value)}
-          placeholder="Elige el local"
-          required
-          size="lg"
-          fullWidth
-          invalid={Boolean(errors.location_id)}
-          disabled={submitting}
-        >
-          <span className="text-xs text-gray-600">Local que recibe la entrega.</span>
-          {errors.location_id && <span className="text-xs text-red-700">{errors.location_id}</span>}
-        </LabeledSelect>
+      <div aria-live="polite" className="rounded-md border border-red-100 bg-red-50/40 p-3">
+        <StockPanel stock={stock} onRetry={refreshStock} />
       </div>
 
       <SupplierSelect
@@ -197,7 +235,7 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
         hint={
           selected && currency
             ? `Precio de este proveedor por cada ${selected.unit}, en ${currency}. Admite decimales: 6.8`
-            : "Elige primero el ingrediente para ver la moneda y la unidad."
+            : "Elige primero el local y el ingrediente para ver la moneda y la unidad."
         }
         disabled={submitting}
         inputProps={{ name: "unit_cost", inputMode: "decimal", autoComplete: "off" }}
@@ -209,8 +247,8 @@ export default function EntryForm({ presetIngredientId }: { presetIngredientId: 
         <Button
           type="submit"
           size="md"
-          // Sin la lista de ingredientes no se puede elegir ni comprobar el ingrediente.
-          disabled={submitting || fetchState.status !== "success"}
+          // Sin las listas de ingredientes y locales no se pueden elegir ni comprobar.
+          disabled={submitting || fetchState.status !== "success" || locationsState.status !== "success"}
           className="inline-flex items-center gap-2 px-6 py-3 text-base">
           {submitting && (
             <span

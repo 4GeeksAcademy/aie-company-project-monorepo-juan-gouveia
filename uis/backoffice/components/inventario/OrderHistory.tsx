@@ -6,14 +6,17 @@ import {
   WASTE_REASON_DESCRIPTIONS,
   formatAmount,
   formatQuantity,
-  locationLabel,
 } from "@/lib/inventory-labels";
 import type { OrderRow } from "@/lib/inventory-orders";
+import { locationName } from "@/lib/locations";
+import type { Location } from "@/types/locations";
 
 interface OrderHistoryProps {
   orders: OrderRow[];
   // id del usuario de la sesión: sus órdenes llevan la etiqueta "Tú" (decisión F6).
   currentUserId: string | null;
+  // Catálogo de locales, para mostrar el nombre de cada uno; sin él (cargando o con error), el número.
+  locations: Location[];
 }
 
 // Una sola lista: tarjetas apiladas en móvil y tablet, y columnas alineadas desde lg.
@@ -45,7 +48,7 @@ function detail(row: OrderRow): { label: string; text: string; extra: string | n
   };
 }
 
-export default function OrderHistory({ orders, currentUserId }: OrderHistoryProps) {
+export default function OrderHistory({ orders, currentUserId, locations }: OrderHistoryProps) {
   return (
     <div className="rounded-lg border border-red-200 bg-white shadow-md">
       <div
@@ -93,7 +96,7 @@ export default function OrderHistory({ orders, currentUserId }: OrderHistoryProp
 
               <p className="text-sm text-black">
                 <CardLabel>{FIELD_LABELS.location_id}</CardLabel>
-                {locationLabel(order.location_id)}
+                {locationName(locations, order.location_id)}
               </p>
 
               <p className="text-sm text-black">

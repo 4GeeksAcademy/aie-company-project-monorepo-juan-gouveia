@@ -15,12 +15,14 @@ from app.domains.incidents.dependencies import get_incident_repository, get_repo
 from app.domains.incidents.incident_repository import IncidentRepository
 from app.domains.incidents.repository import LastAnalysisRepository
 from app.domains.inventory.cache import invalidate_inventory
+from app.domains.locations.service import locations_cache
 from app.domains.telemetry.report import report_cache
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.repository import SupplierRepository
 from app.domains.users.database import AuthStore
 from app.domains.users.dependencies import get_auth_store
 from app.main import app
+from tests.locations.helpers import seed_locations
 
 SAMPLE = Path(__file__).resolve().parents[3] / "data" / "raw" / "incidents-brasaland.csv"
 
@@ -109,16 +111,22 @@ def inventory_engine(tmp_path):
         cursor.close()
 
     init_db(engine)
-    # Cada prueba tiene su propia base: las cachés en memoria del proceso (inventario y reporte de
-    # telemetría) no pueden arrastrar respuestas de la prueba anterior.
-    invalidate_inventory()
-    report_cache.invalidate()
+    # En Supabase, `locations` la crea y la llena la migración 004 (init_db no la conoce).
+    seed_locations(engine)
+    # Cada prueba tiene su propia base: las cachés en memoria del proceso (inventario, locales y reporte
+    # de telemetría) no pueden arrastrar respuestas de la prueba anterior.
+    invalidate_caches()
     app.dependency_overrides[get_engine] = lambda: engine
     yield engine
     app.dependency_overrides.pop(get_engine, None)
-    invalidate_inventory()
-    report_cache.invalidate()
+    invalidate_caches()
     engine.dispose()
+
+
+def invalidate_caches() -> None:
+    invalidate_inventory()
+    locations_cache.invalidate()
+    report_cache.invalidate()
 
 
 @pytest.fixture

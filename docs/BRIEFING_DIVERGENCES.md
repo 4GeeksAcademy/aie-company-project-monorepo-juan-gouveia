@@ -29,6 +29,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 16. [Captura de eventos de telemetría](#captura-de-eventos-de-telemetría) (enunciado "Sistema de captura", rama `feature/telemetry-capture`)
 17. [Almacenamiento de eventos de telemetría](#almacenamiento-de-eventos-de-telemetría) (enunciado "Telemetría — Almacenamiento", rama `feature/telemetry-storage`)
 18. [Reporte técnico de telemetría](#reporte-técnico-de-telemetría) (enunciado "Telemetría de tu compañía — Reporte técnico", rama `feature/telemetry-report`)
+19. [Pipeline de desempeño de negocio](#pipeline-de-desempeño-de-negocio) (briefing "Pipeline de Desempeño de Negocio" y enunciado de la Parte 1, rama `feature/pipeline-design`)
 
 ---
 
@@ -1599,3 +1600,130 @@ La rama sale de `feature/telemetry-storage` y el PR apunta a ella, porque los PR
 | Cada métrica responde una pregunta técnica u operacional | ✅ | Volumen, fallos, latencia y login (tabla de §16.2 del plan); ninguna métrica de negocio |
 | Las métricas tienen una dimensión de agrupamiento | ✅ | Todas por día UTC, y además por nivel, tipo de evento o método y ruta |
 | Datos reales con dimensión temporal | ✅ | 53 eventos de dos días; los totales por día y nivel, las tasas y los intentos de login coinciden con un `GROUP BY` independiente en SQL |
+
+---
+
+## Pipeline de desempeño de negocio
+
+Diseño (Parte 1 de 3) del pipeline que produce el "Reporte Semanal de Costo y Merma por Local", en la rama `feature/pipeline-design`. El entregable es `data/pipelines/PIPELINE_DESIGN.md`; la implementación con Prefect llega en las Partes 2 y 3. Coincide con el briefing y el enunciado en lo siguiente:
+
+- **Entregable y KPIs:** el propósito nombra el reporte, su audiencia (Mariana y Felipe), su frecuencia (fresco el lunes por la mañana) y los cinco KPIs con sus columnas (`total_purchase_cost`, `total_waste_cost`, `waste_ratio`, `stockout_events_count` y `price_alert_events_count`).
+- **Fuente:** `telemetry_events` en solo lectura, filtrada a los eventos obligatorios del briefing. `services/telemetry/analysis.py` y `GET /telemetry/report` no cambian.
+- **Destino:** `reporting.weekly_location_performance` con el DDL literal del briefing; el upsert se apoya en su `unique (location_id, week_start)`.
+- **Agregación:** una fila por local y semana ISO, con `week_start` en UTC, la moneda del local y sin convertir monedas.
+- **Endpoints:** las tres rutas literales del briefing en el módulo nuevo `services/reporting/`, separado de `services/telemetry/`.
+- **Coste en los eventos:** `inbound_order_created` ya tenía `unit_cost`; `stock_waste_registered` lo añade como campo aditivo (versión 1.1.0), como permite el enunciado.
+
+Las decisiones (P1 a P6) se tomaron con el desarrollador el 20 de noviembre de 2026; el ajuste de P5, el 23. Están en la sección 9 del documento de diseño.
+
+> **Estado:** diseño completo. Un commit por fase, hechos por el desarrollador: Fase 0 (catálogo de locales, `7658a09` a `d929b00`), Fase 1 (coste de la merma, `d5c4824`) y Fase 2 (documento, `5db3b2b`).
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Formato de `location_id` | Ejemplo `"medellin-centro"`, con guion | `medellin_centro`, con guion bajo | Es el `code` del catálogo `locations`, el `branch` del briefing del gestor de incidencias |
+| Nombre del local en la respuesta | No aparece | `location_name` en cada local de `GET /reporting/weekly-location-performance` | Mariana lee "Miami Hialeah", no un código |
+| Catálogo de locales | No lo menciona | Tabla `locations` (migración 004), validación del país en el inventario y local primero en el backoffice | `location_id` era un entero sin sede ni país; sin catálogo no hay `country` fiable por local |
+| Coste de una merma sin `unit_cost` | Suma de los costes de la semana | Cuenta con coste 0 y se registra en el log | Las mermas 1.0.0 no traen coste, y no se inventa |
+| Alertas de precio | "subió de forma anómala" | Solo `variance_pct > 0`; las bajadas se descartan y se cuentan en el log | El evento se emite con subidas y con bajadas |
+| Quiebre de stock | "cayó por debajo del mínimo configurado" en un local | Umbral provisional por unidad sobre el stock global (brecha B3) | No existen mínimos ni stock por local |
+| `outbound_order_created` | En la tabla de fuentes, como contexto | No se extrae en la v1 | No alimenta ningún KPI ni ninguna columna |
+| Entorno de los eventos | Sin especificar | Solo `environment = production`, configurable | Riesgo R7 del plan de telemetría: los datos de prueba no entran en los indicadores |
+| Locales sin actividad | Sin especificar | Una fila con ceros para cada uno de los 14 locales y cada semana | Una semana sin actividad debe distinguirse de una semana sin calcular |
+| Ventana de cada corrida | Sin especificar | Las 4 últimas semanas cerradas, recalculadas con upsert; backfill por rango | Absorbe los eventos que llegan tarde sin marca de agua (R4) |
+| Hora de la corrida | "fresco la mañana del lunes" | Lunes a las 06:00 America/Bogota (11:00 UTC) | La semana cierra el lunes a las 00:00 UTC |
+| Log de corridas | "estado y metadata de la última corrida" | Tabla `reporting.pipeline_runs` con 18 campos | El enunciado pide un log auditable con al menos cinco campos |
+| Lectura de `reporting.*` | El enunciado pide que los endpoints importen de `data/pipelines/` | El SQL de lectura y el disparo viven en `data/pipelines/`; `services/reporting/` solo hace HTTP | Ninguna lógica de datos en `services/` |
+| Acceso a los endpoints | Sin especificar | Lecturas para `admin` y `manager`; disparo solo `admin` | Los gerentes leen el reporte; reprocesar es una operación de administración |
+| Credenciales del pipeline | "por ejemplo, la conexión a Supabase" | Rol `reporting_pipeline` en un bloque `Secret` | La base garantiza la solo lectura sobre `telemetry_events` |
+| Destino del PR | Sin especificar | `feature/telemetry-report` | Los PR #17 a #24 siguen abiertos |
+
+### 1. `location_id` usa el código con guion bajo
+
+El ejemplo del briefing (§6) muestra `"location_id": "medellin-centro"`. La tabla de destino guarda el `code` del catálogo `locations`, que reproduce los `branch` del briefing del gestor de incidencias (`medellin_centro`… `fort_lauderdale`), con guion bajo. Usar el guion obligaría a mantener dos códigos para el mismo local, y el gestor ya guarda incidencias con el guion bajo. El tipo (`text`) y el significado son los del briefing; solo cambia el separador.
+
+**Coste:** quien compare con el ejemplo verá otro separador.
+
+### 2. La respuesta de KPIs añade `location_name`
+
+`GET /reporting/weekly-location-performance` devuelve cada local con la forma del briefing, más `location_name` ("Medellín Centro", de `locations.name`). Es un campo aditivo: los demás no cambian de nombre ni de tipo, y la tabla de destino queda exacta. El dashboard de la Parte 3 lo muestra sin otra llamada.
+
+### 3. Catálogo de locales y su restricción en el inventario (Fase 0)
+
+El briefing da por hecho que cada local tiene un `country` y una `currency`. Hasta esta tarea, `location_id` era un entero de 1 a 14 sin sede, y el país de cada evento salía del ingrediente (brecha B7): un mismo local podía aparecer con dos países. Antes del diseño se añadió:
+
+- la tabla `locations` con las 14 sedes (migración 004) y `GET /api/v1/locations`;
+- el 422 `location_country_mismatch` en entradas y salidas cuando el ingrediente es de otro país que el local;
+- en el backoffice, el local primero en los formularios del inventario, con solo los ingredientes de su país;
+- `country` y `currency` del local en los eventos del inventario.
+
+Las 3 órdenes de prueba que incumplían la regla se conservan (las tablas del inventario no se reescriben). El local asignado a cada cuenta (brecha B10) queda para una tarea propia.
+
+**Coste:** trabajo fuera del documento de diseño, en cuatro commits propios.
+
+### 4. Las mermas sin coste cuentan con coste 0
+
+El briefing calcula `total_waste_cost` como la suma de los costes de las mermas. `stock_waste_registered` 1.1.0 lleva `unit_cost`, que el backoffice calcula como el coste medio ponderado de las entradas del producto (plan de telemetría, §17). Las mermas 1.0.0, y las de productos sin entradas con coste, no lo traen: cuentan con coste 0, y el log de la corrida dice cuántas hubo (`waste_events_without_cost`).
+
+**Coste:** el KPI puede quedar por debajo del real, y la corrida lo indica.
+
+### 5. Solo cuentan las alertas de subida
+
+El briefing define la frecuencia de alertas de precio como las veces que el coste "subió de forma anómala". `ingredient_price_variance_detected` se emite con desviaciones de más del 10 % en los dos sentidos (plan de telemetría, §3.2). La transformación cuenta solo `variance_pct > 0` y descarta las bajadas con el motivo `price_decrease` en el log. La captura no cambia, y las bajadas siguen disponibles para otros usos.
+
+### 6. El quiebre de stock usa el umbral provisional
+
+El briefing cuenta las veces que el stock de un ingrediente "en un local" cayó por debajo del "mínimo configurado". No existen mínimos por local ni stock por local (brecha B3, decisión D7 del Hito 5): `stock_threshold_triggered` se emite cuando el stock global del producto cruza el umbral de stock bajo de su unidad (40 kg, 25 litros o 100 unidades), y se asigna al local de la salida que provocó el cruce. El pipeline lo cuenta tal como llega y el diseño documenta la limitación (§8). Los mínimos y el stock por local son una tarea propia; al cerrarla, la versión del evento subirá para distinguir las semanas medidas con cada criterio.
+
+**Coste:** `stockout_events_count` es una aproximación hasta entonces.
+
+### 7. `outbound_order_created` no se extrae
+
+El briefing lo incluye en la tabla de fuentes "solo como volumen operativo". No alimenta ningún KPI ni ninguna columna de `weekly_location_performance`, y el enunciado pide cuestionar toda etapa que no sostenga el entregable. Si la Parte 3 necesita detectar anomalías de volumen, se añade entonces.
+
+### 8. Solo los eventos de `production`
+
+El briefing no habla de entornos. Cada evento lleva `environment` en `tags`, y el plan de telemetría (riesgo R7) reserva los indicadores de negocio para `production`. El entorno vive en el bloque de configuración del pipeline: en desarrollo se apunta a `development` para verificarlo.
+
+**Coste:** con los datos actuales (todos de `development`), el reporte de producción saldría en ceros.
+
+### 9. Ventana, filas con ceros y hora de la corrida
+
+- **Ventana.** Cada corrida recalcula enteras las 4 últimas semanas ISO cerradas y hace upsert. La tabla de telemetría no guarda la hora de recepción (riesgo R4), así que no hay una marca de agua fiable para leer solo lo nuevo; recalcular absorbe los eventos que llegan tarde. Un backfill por rango (`POST /reporting/pipeline-runs`) cubre los retrasos mayores y los reprocesos.
+- **Ceros.** Cada corrida escribe una fila por cada uno de los 14 locales y cada semana, también sin actividad, para que la falta de una fila signifique "sin calcular".
+- **Hora.** Lunes a las 06:00 America/Bogota (11:00 UTC), con la semana ya cerrada a las 00:00 UTC. Un evento del domingo a partir de las 19:00 en Bogotá cae en la semana siguiente, porque el briefing fija la semana en UTC.
+
+### 10. Log de corridas en `reporting.pipeline_runs`
+
+El briefing pide "estado y metadata de la última corrida" y el enunciado, un log con al menos cinco campos justificados. La tabla tiene 18 campos (§4.4 del diseño), incluidos los conteos de eventos rechazados y descartados por motivo, y una columna `pipeline` para reutilizarla con otros pipelines. Un índice único parcial impide dos corridas activas del mismo pipeline. La crea la misma migración que la tabla de destino (`005_reporting.sql`).
+
+### 11. La lectura y el disparo viven en `data/pipelines/`
+
+El enunciado pide que cada endpoint importe una función o un flow de `data/pipelines/`, y que ninguna lógica de ETL viva en `services/`. La primera versión de P5 dejaba la lectura de `reporting.*` en `services/reporting/`; el 23 de noviembre se ajustó: `repository.py` (lecturas y upsert) y `trigger.py` (disparo con `run_deployment`) están en el paquete del pipeline, dueño de sus tablas, y `services/reporting/` solo autentica, valida y serializa. Las transformaciones reutilizables van en `data/process/`, como indica el enunciado.
+
+### 12. Acceso y credenciales
+
+- **Endpoints.** El briefing no dice quién puede usarlos. Las dos lecturas son para `admin` y `manager` (el reporte es para la dirección y los gerentes de operación); el disparo manual, solo para `admin`, porque reescribe semanas ya publicadas.
+- **Credenciales.** La conexión del pipeline usa un rol propio de Supabase, `reporting_pipeline`, con `SELECT` sobre `telemetry_events` y `locations` y escritura solo en `reporting.*`. Su cadena de conexión vive en un bloque `Secret` de Prefect. Así, la base garantiza que el pipeline nunca escribe en `telemetry_events`.
+
+**Coste:** el desarrollador crea el rol en Supabase antes de la Parte 2.
+
+### 13. Pull Request contra la rama anterior
+
+La rama sale de `feature/telemetry-report`, y el PR apunta a ella porque los PR #17 a #24 siguen abiertos. El commit del documento lleva el mensaje del enunciado, `feat: add business performance pipeline design document`.
+
+### Verificación de los criterios
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| `data/pipelines/PIPELINE_DESIGN.md` existe en Markdown legible | ✅ | Commit `5db3b2b`, con índice y nueve secciones |
+| Estado actual y brecha de negocio | ✅ | §2: eventos capturados, `telemetry_events` y `locations`, el reporte técnico y lo que no responde (§2.4) |
+| Formato de extracción (tablas, payload, cadencia) | ✅ | §3.1: las dos fuentes, la consulta SQL, un `tags` de ejemplo y la frecuencia de llegada de los eventos |
+| Propósito en una frase con el entregable y los KPIs | ✅ | §1: el reporte, su audiencia, los cinco KPIs y los cuatro eventos que los alimentan |
+| No toca `analysis.py`, `GET /telemetry/report` ni escribe en `telemetry_events` | ✅ | El diseño escribe solo en `reporting.*`, por un rol sin escritura en la fuente (§3.5); la única extensión es `unit_cost` en la merma (plan de telemetría, §17) |
+| Diagrama con tres etapas y nombres reales | ✅ | §3.2: Mermaid con extracción, transformación y carga, las tablas y las tasks |
+| Estrategia para registros que cambian | ✅ | §3.4: recálculo de la ventana, upsert por `(location_id, week_start)` con el SQL, y deduplicación por `order_id` |
+| Idempotencia tras un fallo en la carga | ✅ | §4.1: carga en una transacción y una tabla con el estado de las dos tablas en cada momento de la segunda corrida |
+| Log con al menos cinco campos con nombre, tipo y justificación | ✅ | §4.4: 18 campos |
+| Un flow y al menos tres tasks con nombres concretos | ✅ | §5: `weekly_location_performance_flow` y 7 tasks, con states, hooks, deployment y bloques |
+| Tres endpoints en `services/reporting/` con su función de `data/pipelines/` | ✅ | §6: `read_weekly_location_performance`, `read_latest_pipeline_run` y `trigger_pipeline_run` |
+| Coherente con los eventos y las métricas obligatorias del briefing | ✅ | Los nombres de eventos, propiedades, columnas y locales son los del catálogo de telemetría y del briefing |

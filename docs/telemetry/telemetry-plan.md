@@ -4,10 +4,11 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 
 - **Entregables:** este documento y [`event-schemas.json`](event-schemas.json) (los esquemas de cada evento).
 - **Fuentes:** el briefing de Brasaland (métricas obligatorias, entidades y restricciones), el enunciado del RFI y el código actual del monorepo.
-- **Estado:** aprobado, con las revisiones de las fases de captura, almacenamiento y reporte técnico (catálogo 1.2.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice, la fase de almacenamiento, una ficha por cada uno de los 44 eventos y la fase de reporte técnico.
+- **Estado:** aprobado, con las revisiones de las fases de captura, almacenamiento y reporte técnico, y los cambios para el pipeline de desempeño de negocio (catálogo 1.3.0 de los esquemas). Incluye el catálogo, el envelope, los datos sensibles, la estrategia de entrega, los riesgos y exclusiones, las brechas con el modelo actual, la fase de captura en el backoffice, la fase de almacenamiento, una ficha por cada uno de los 44 eventos y la fase de reporte técnico.
 - **Fase de captura:** implementada y verificada (2026-11-19). 34 de los 44 eventos se emiten desde el backoffice con una única función `track()`, al recibir la respuesta de la API que confirma o rechaza cada hecho; la sección 13.6 dice dónde se captura cada uno. Los 10 restantes esperan al emisor de la API (sección 13).
 - **Fase de almacenamiento:** el receptor guarda los eventos válidos en la tabla `telemetry_events` de Supabase y rechaza los demás uno a uno (sección 14).
 - **Fase de reporte técnico:** un pipeline en Python con Pandas calcula métricas operacionales por día sobre `telemetry_events`, y `GET /telemetry/report` las sirve con una cache de 60 s (sección 16).
+- **Pipeline de desempeño de negocio:** `stock_waste_registered` 1.1.0 lleva el coste unitario de la merma, que el pipeline semanal por local necesita para valorarla (sección 17).
 
 ## Índice
 
@@ -27,6 +28,7 @@ Respuesta técnica al RFI del equipo de gestión: qué datos vale la pena captur
 14. [Fase de almacenamiento](#14-fase-de-almacenamiento)
 15. [Fichas de los eventos](#15-fichas-de-los-eventos)
 16. [Fase de reporte técnico](#16-fase-de-reporte-técnico)
+17. [Cambios para el pipeline de desempeño de negocio](#17-cambios-para-el-pipeline-de-desempeño-de-negocio)
 
 ## 1. Propósito y alcance
 
@@ -553,8 +555,8 @@ Lo que necesita el sistema actual para emitir cada evento tal como lo define est
 | `OutboundOrder`, `order_id` | `IngredientExit`, `IngredientExit.id` (tabla `ingredient_exits`); motivo `consumption` → `outbound_order_created`, `waste` → `stock_waste_registered` |
 | `product_category` | `Ingredient.category`: `meat` → `proteína`, `produce` → `vegetal`, `sauce` → `salsa`, `beverage` → `bebida`, `packaging` → `empaque`, `cleaning` → `limpieza` |
 | `unit` | `Ingredient.unit` (`kg`, `unidad`, `litro`: los mismos valores) |
-| `location_id` | `location_id` de la orden (1–14), sin entidad propia |
-| `country` | Hoy solo existe `Ingredient.country`. Debe salir del **local** (brecha B7) |
+| `location_id` | `location_id` de la orden (1–14): el `id` del catálogo `locations` |
+| `country` | El del **local**, del catálogo `locations` (brecha B7 cerrada); coincide con `Ingredient.country`, porque la API lo exige |
 | `currency` | Derivada del país del local: `CO` → `COP`, `US` → `USD` |
 | `supplier`, `supplier_id` | Directorio de proveedores (`suppliers`, TinyDB). La entrada guarda `supplier_name` como texto (brecha B8) |
 | Directorio: `country` `Colombia`/`USA` | `CO`/`US` en los eventos de proveedores |
@@ -567,7 +569,7 @@ Lo que necesita el sistema actual para emitir cada evento tal como lo define est
 | B4 | `direct_stock_edit_rejected` | La API rechaza los intentos (405 y 422), pero no los distingue de otros errores. | En los manejadores de 405 y de validación de `app/core/errors.py`, detectar las rutas del inventario y el campo `current_stock`/`stock` en los errores `extra_forbidden`, y emitir el evento. |
 | B5 | `inbound_order_created`, `ingredient_price_variance_detected` | Las entradas no tienen coste unitario. | `unit_cost` obligatorio en `IngredientEntryCreate` y en la tabla (en la moneda del local), y una consulta de la media de 90 días por producto y proveedor. **Se cierra en la fase de captura** (`unit_cost`; la media la calcula el backoffice con `GET /orders`). |
 | B6 | `stock_waste_registered` | Las salidas solo distinguen `consumption`/`waste`, sin el motivo de la merma. | `waste_reason` (`expired`, `kitchen_error`, `theft_suspected`), obligatorio cuando `reason` = `waste` y prohibido en los consumos. El backoffice añade el desplegable al formulario de salida. **Se cierra en la fase de captura.** |
-| B7 | Todos los de inventario (`country`, `currency`) | No hay entidad de locales: `location_id` es un número sin país ni ciudad. | Tabla `locations` (`id` 1–14, `country`, `city`) en Supabase. `country` y `currency` salen del local de la orden. **Provisional en la fase de captura:** salen del país del ingrediente (`Ingredient.country`). |
+| B7 | Todos los de inventario (`country`, `currency`) | No hay entidad de locales: `location_id` es un número sin país ni ciudad. | Tabla `locations` (`id` 1–14, `country`, `city`) en Supabase. `country` y `currency` salen del local de la orden. **Cerrada (2026-11-20, diseño del pipeline de desempeño de negocio, Fase 0):** migración 004 con las 14 sedes del briefing del gestor de incidencias (1–9 Colombia, 10–14 Florida) y `GET /api/v1/locations`; la API exige que el ingrediente sea del país del local, y el backoffice toma `country` y `currency` del local. Hasta entonces salían del país del ingrediente. |
 | B8 | `inbound_order_created`, `ingredient_price_variance_detected` | La entrada guarda el nombre del proveedor, no su id, y el directorio vive en TinyDB. | `supplier_id` en `IngredientEntry`, que referencia al directorio (más fácil tras migrar `suppliers` a PostgreSQL, ya pendiente). **Provisional en la fase de captura:** el backoffice obtiene el `id` del directorio por el nombre elegido, que es único. |
 | B9 | Validación de la instrumentación | La semilla actual no cubre el §5 del briefing (3 mermas con motivos distintos, 2 cruces de umbral, 1 variación de precio). | Ampliar `seed-inventory` en la fase de captura con esos casos, una vez cerradas B3, B5 y B6. |
 | B10 | `direct_stock_edit_rejected` (decisión "en los locales donde ocurre") | Las cuentas no tienen local asignado. Un `PATCH /products/{id}` no indica local. | `location_id` en el perfil del usuario, para atribuir el intento al local de quien lo hace. Hasta entonces, `location_id` solo se rellena si la petición lo trae. |
@@ -788,7 +790,7 @@ Un local registra la llegada de mercancía de un proveedor.
 | **Clasificación** | Obligatorio |
 | **Versión** | `1.0.0` |
 | **Emisor** | Navegador (`source: browser`) |
-| **Se emite** | En el backoffice, al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada). `supplier_id` sale del directorio por el nombre elegido; `country` y `currency`, del ingrediente. |
+| **Se emite** | En el backoffice, al recibir el 201 de `POST /api/v1/inventory/orders/inbound` (la entrada ya está guardada). `supplier_id` sale del directorio por el nombre elegido; `location_id`, `country` y `currency`, del local de la orden (catálogo `locations`). |
 | **`userId`** | Usuario autenticado (`sub` del token). |
 | **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
@@ -847,9 +849,9 @@ Un local registra merma (producto vencido, error de cocina, o pérdida/robo).
 | | |
 |---|---|
 | **Clasificación** | Obligatorio |
-| **Versión** | `1.0.0` |
+| **Versión** | `1.1.0` |
 | **Emisor** | Navegador (`source: browser`) |
-| **Se emite** | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de merma; `reason` es el `waste_reason` de la salida. |
+| **Se emite** | Al recibir el 201 de `POST /api/v1/inventory/orders/outbound` con motivo de merma; `reason` es el `waste_reason` de la salida. `unit_cost` es el coste medio ponderado por cantidad de las entradas con coste de ese producto registradas hasta la merma, calculado con el historial de `GET /api/v1/inventory/orders`; se omite si no hay ninguna o el historial no responde. |
 | **`userId`** | Usuario autenticado (`sub` del token). |
 | **`sessionId`** | Sesión del navegador: se crea al iniciar sesión; `null` en las vistas públicas (antes del login). |
 | **`requestId`** | Id de la llamada a la API que confirma o rechaza el hecho (`X-Request-Id`, creado por `lib/api-client.ts`). |
@@ -869,6 +871,7 @@ Un local registra merma (producto vencido, error de cocina, o pérdida/robo).
 | `unit` | enum: `kg`, `unidad`, `litro` | sí | Unidad de medida del producto. |
 | `currency` | enum: `COP`, `USD` | sí | Moneda del local (`COP` en Colombia, `USD` en Florida). Sin conversión. |
 | `reason` | enum: `expired`, `kitchen_error`, `theft_suspected` | sí | Motivo de la merma, con los valores del briefing. |
+| `unit_cost` | number (> 0) | no | Coste por unidad del producto perdido, en `currency`: media ponderada por cantidad de sus entradas con coste (desde la versión 1.1.0). Sin él, la merma no tiene valor monetario. |
 | `stock_after` | number (≥ 0) | no | Stock del producto tras la merma, en `unit`. |
 
 #### `stock_threshold_triggered`
@@ -1983,3 +1986,12 @@ cargar (SQL) → refinar (Pandas) → convertir tipos → agrupar → agregar �
 - **Cálculo.** Los totales por día y nivel, los fallos por tipo, sus tasas (2 de 12 = 0,1667) y los intentos de login del reporte coinciden con un `GROUP BY` independiente en SQL sobre la misma tabla.
 - **Endpoint.** Sin parámetros, los 7 días hasta ahora, con ceros en los días sin eventos; con `start_date=2026-11-19&end_date=2026-11-21`, los dos días. La segunda petición igual responde `X-Cache: HIT`; un período al revés, 422 `invalid_period`; sin token, 401.
 - **Vista.** `/telemetria` muestra el período y las cuatro métricas a través del intermediario; revisada por el desarrollador en el navegador.
+
+## 17. Cambios para el pipeline de desempeño de negocio
+
+El pipeline semanal por local (diseño en `data/pipelines/PIPELINE_DESIGN.md`) valora la merma en dinero, y los eventos de merma solo traían la cantidad. Para no depender de leer el inventario desde el pipeline, el coste viaja en el propio evento.
+
+- **`stock_waste_registered` 1.1.0.** Admite `unit_cost` (opcional), con la misma definición que en `inbound_order_created`: coste por unidad en `currency`. El backoffice lo calcula al registrar la merma como la media de los `unit_cost` de las entradas de ese producto registradas hasta ese momento, ponderada por su cantidad, con el historial de `GET /api/v1/inventory/orders` que ya usa la alerta de precio. Cada producto es de un solo país, así que todas sus entradas están en la misma moneda. Si no hay entradas con coste o el historial no responde, el evento se emite sin `unit_cost`.
+- **Mermas anteriores.** Las 1.0.0 siguen siendo válidas en `telemetry_events`; el pipeline las cuenta con coste 0 y lo registra en el log de la corrida.
+- **`inbound_order_created`.** Su disparo ya no dice que `country` y `currency` salen del ingrediente: salen del local de la orden desde que se cerró la brecha B7 (§12.2). Es una corrección del texto, no del esquema.
+- **Catálogo:** `urn:brasaland:telemetry:event-schemas:1.3.0`. Los catálogos generados de la API (`uv run telemetry-catalog`) y del backoffice (`npm run telemetry:catalog`) se regeneran con él.

@@ -63,7 +63,7 @@ export const TELEMETRY_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     ]
   },
   "stock_waste_registered": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "required": [
       "order_id",
       "location_id",
@@ -85,6 +85,7 @@ export const TELEMETRY_CATALOG: Readonly<Record<string, CatalogEntry>> = {
       "unit",
       "currency",
       "reason",
+      "unit_cost",
       "stock_after"
     ]
   },
