@@ -61,7 +61,7 @@ Este repositorio contiene el proyecto de **Brasaland**. `CONTEXT.md` (y su versi
 | Script de reporte de incidentes | [`scripts/incident-report/`](./scripts/incident-report/README.es.md) | CLI en Python que valida y resume el CSV de incidentes y exporta `data/process/results.csv`. Reutiliza la lógica de análisis de la API |
 | Paquetes compartidos | [`packages/`](./packages/README.es.md) | `@repo/brasa-core` es transitorio (lo usa `/funciones`); `@repo/shared-types` aún no tiene consumidores |
 | Datos | [`data/raw/`](./data/raw/README.es.md) | `incidents-brasaland.csv` (100 incidentes de prueba) |
-| Pipeline de negocio | [`data/pipelines/`](./data/pipelines/README.es.md), [`data/process/`](./data/process/README.es.md) y [`services/reporting/`](./services/reporting/README.es.md) | Flow de Prefect que calcula cada lunes el Reporte Semanal de Costo y Merma por Local en `reporting.weekly_location_performance` (Supabase), y sus tres endpoints en `/reporting` ([diseño](./data/pipelines/PIPELINE_DESIGN.md)) |
+| Pipeline de negocio | [`data/pipelines/`](./data/pipelines/README.es.md), [`data/process/`](./data/process/README.es.md) y [`services/reporting/`](./services/reporting/README.es.md) | Flow de Prefect que calcula cada lunes el Reporte Semanal de Costo y Merma por Local en `reporting.weekly_location_performance` (Supabase), en subflows; sus tres endpoints en `/reporting`; el dashboard [`/reporte-semanal`](./uis/backoffice/README.es.md#herramientas) del backoffice, y los tests unitarios de sus tasks en [`tests/pipelines/`](./tests/pipelines/README.es.md) ([diseño](./data/pipelines/PIPELINE_DESIGN.md)) |
 | IA, automatización e infraestructura | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Solo la estructura y los ejemplos de la plantilla |
 
 - Las instrucciones para agentes de código están en el [`AGENTS.md`](./AGENTS.md) raíz, con reglas y skills de desarrollo en `.agents/`.
@@ -241,6 +241,14 @@ Lee el `README.md` enlazado dentro de cada carpeta antes de empezar a programar 
 
 → Ver [`shared/README.md`](./shared/README.md)
 
+### `tests/` — tests transversales
+
+**Propósito:** Tests que no pertenecen a un solo proyecto o que una consigna pide en la raíz.
+
+| Subcarpeta | Propósito | Qué haces aquí |
+| --- | --- | --- |
+| [`tests/pipelines/`](./tests/pipelines/README.es.md) | Tests unitarios de los pipelines de `data/pipelines/` | Probar las tasks de forma aislada, con datos en memoria; se ejecutan con el entorno de `data/pipelines` |
+
 ### `docs/` — documentación transversal
 
 **Propósito:** Arquitectura y decisiones que abarcan todo el proyecto de la empresa.
@@ -300,6 +308,7 @@ Guía rápida de decisión:
 ¿Es dato crudo o transformado?             → data/raw/ o data/process/
 ¿Mueve datos entre sistemas?               → data/pipelines/
 ¿Mides calidad de IA/pipelines?            → data/eval/
+¿Es un test unitario de un pipeline?       → tests/pipelines/
 ¿Es un asistente de IA con un objetivo?    → agents/
 ¿Es una capacidad/instrucción reutilizable?→ skills/
 ¿La IA necesita llamar tools/APIs externas?→ mcps/
@@ -332,6 +341,7 @@ ai-engineering-company-project-monorepo/
 │   ├── pipelines/             # Jobs ETL/ELT
 │   ├── process/               # Salidas limpias / intermedias
 │   └── eval/                  # Conjuntos de evaluación y métricas
+├── tests/pipelines/           # Tests unitarios de los pipelines
 ├── agents/                    # Agentes de IA (+ plantilla _template/)
 ├── skills/                    # Skills reutilizables para agentes
 ├── mcps/                      # Servidores MCP para acceso a tools

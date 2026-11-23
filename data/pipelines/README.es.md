@@ -11,13 +11,13 @@ Cada subcarpeta o archivo dentro de `data/pipelines/` debe representar **un pipe
 
 ### Desempeño semanal por local (`weekly_location_performance`)
 
-- **Estado:** implementado con Prefect (Parte 2); la Parte 3 dividirá las etapas en subflows y añadirá el dashboard. Diseño, ajustes y verificación en [`PIPELINE_DESIGN.md`](./PIPELINE_DESIGN.md).
+- **Estado:** en producción (Parte 3): el flow principal coordina tres subflows (extracción, transformación con una task por KPI y carga) y dos opcionales; los KPIs se ven en el dashboard [`/reporte-semanal`](../../uis/backoffice/README.es.md#herramientas) del backoffice. Diseño, ajustes de cada parte y verificación en [`PIPELINE_DESIGN.md`](./PIPELINE_DESIGN.md).
 - **Objetivo:** producir el "Reporte Semanal de Costo y Merma por Local" para la dirección: costo de compra, costo de merma, ratio de merma, quiebres de stock y alertas de precio por local y semana ISO.
 - **Origen:** `telemetry_events` (solo lectura, solo `production`) y `locations`, en Supabase.
 - **Destino:** `reporting.weekly_location_performance` (una fila por local y semana, con upsert) y el log de corridas `reporting.pipeline_runs`.
 - **Orquestación:** el flow `weekly_location_performance_flow` de [`pipeline.py`](./pipeline.py), los lunes a las 06:00 America/Bogota, recalcula las 4 últimas semanas cerradas; backfill por rango desde la CLI o `POST /reporting/pipeline-runs`.
 - **Dependencias:** las transformaciones de Pandas, en `data/process/`; los endpoints de `services/reporting/` importan las lecturas y el disparo de este paquete, nunca al revés.
-- **Divergencias con el briefing:** [diseño](../../docs/BRIEFING_DIVERGENCES.md#pipeline-de-desempeño-de-negocio) e [implementación](../../docs/BRIEFING_DIVERGENCES.md#pipeline-de-desempeño-de-negocio-resiliente), en `docs/BRIEFING_DIVERGENCES.md`.
+- **Divergencias con el briefing:** [diseño](../../docs/BRIEFING_DIVERGENCES.md#pipeline-de-desempeño-de-negocio) e [implementación](../../docs/BRIEFING_DIVERGENCES.md#pipeline-de-desempeño-de-negocio-resiliente) y [producción](../../docs/BRIEFING_DIVERGENCES.md#pipeline-a-producción-subflows-tests-y-dashboard), en `docs/BRIEFING_DIVERGENCES.md`.
 
 #### Cómo ejecutarlo
 
@@ -26,11 +26,14 @@ cd data/pipelines
 uv sync                       # el paquete, data/process, Prefect (grupo orchestration) y pytest
 cp .env.example .env          # REPORTING_DATABASE_URL: Session pooler de Supabase con el rol reporting_pipeline
 uv run python pipeline.py     # una corrida: las 4 últimas semanas cerradas de production
-uv run pytest                 # pruebas: el flow contra SQLite, el disparo y las lecturas
+uv run pytest                 # pruebas: el flow y cada subflow contra SQLite, el disparo y las lecturas
 ```
+
+Los tests unitarios de las tasks de KPI están en [`tests/pipelines/`](../../tests/pipelines/README.es.md), en la raíz: `python -m pytest tests/pipelines/test_pipeline.py` desde la raíz, con este entorno activado.
 
 - **Requisitos:** la migración [`005_reporting.sql`](../../services/brasaland-api/migrations/005_reporting.sql) ejecutada en Supabase y el login del rol `reporting_pipeline` (instrucciones en su cabecera).
 - **Más comandos:** backfill (`--week-from`, `--week-to`), verificación con los eventos del backoffice local (`--environment development --include-current-week`), deployment de los lunes (`--serve`) y bloques de Prefect (`--register-blocks`). Están en la §10 del diseño, con la frecuencia.
+- **Señales de silencio:** cada corrida marca en su log las semanas sin ningún evento de telemetría (`weeks_without_telemetry`, probable fallo de captura) y las que tienen telemetría pero ningún evento de negocio (`weeks_without_business_events`). Las semanas anteriores al 19-nov-2026 salen sin telemetría: la captura no existía.
 - **Con Docker:** `docker compose up --build` en la raíz levanta `prefect-server` (http://localhost:4200) y `reporting-pipeline`, que sirve el deployment con `data/pipelines/.env`.
 - **Servidor de Prefect:** sin `PREFECT_API_URL`, cada comando arranca uno temporal. En Windows, ese servidor escribe errores internos de su SQLite (`UNIQUE constraint failed: task_run_state`) que no afectan a la corrida; con `PREFECT_API_URL=http://localhost:4200/api` no aparecen.
 - **Caché:** la transformación y el catálogo de locales se reutilizan durante 1 hora en el mismo proceso (almacenamiento de resultados de Prefect); una corrida desde el host no aprovecha la del contenedor.
