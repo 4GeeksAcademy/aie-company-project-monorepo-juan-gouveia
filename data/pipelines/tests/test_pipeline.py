@@ -1,11 +1,14 @@
-"""El flow completo contra SQLite: KPIs, log de corridas, idempotencia, resiliencia y caché."""
+"""El flow completo y sus subflows contra SQLite: KPIs, log de corridas, idempotencia, resiliencia y caché."""
 
 import json
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
+import pandas as pd
 import pytest
 from brasaland_pipelines import pipeline, repository
+from brasaland_process import weekly_location_performance as process
 from conftest import add_event, telemetry_events
 from sqlalchemy import func, insert, select
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -143,7 +146,7 @@ def test_a_failed_load_closes_the_run_as_failed_and_keeps_the_table(database, mo
 
     failed = runs(database)[-1]
     assert failed["status"] == "failed"
-    assert failed["failed_task"] == "load_weekly_location_performance"
+    assert failed["failed_task"] == "upsert_weekly_location_performance"
     assert "ProgrammingError" in failed["error_message"]
     assert failed["events_read"] == 8
     assert table(database) == before
@@ -229,16 +232,17 @@ def test_a_credential_error_is_not_retried(database, monkeypatch, message):
     assert calls["n"] == 1
     assert runs(database)[-1]["failed_task"] == "extract_business_events"
 
+
 def test_the_transformation_is_cached_while_its_inputs_do_not_change(database, monkeypatch):
     seed(database)
     calls = {"n": 0}
-    real_build = pipeline.build_weekly_location_performance
+    real_prepare = process.prepare_weekly_location_facts
 
-    def counting_build(events, locations, weeks):
+    def counting_prepare(events, locations, weeks):
         calls["n"] += 1
-        return real_build(events, locations, weeks)
+        return real_prepare(events, locations, weeks)
 
-    monkeypatch.setattr(pipeline, "build_weekly_location_performance", counting_build)
+    monkeypatch.setattr(process, "prepare_weekly_location_facts", counting_prepare)
 
     run()
     run()
@@ -306,6 +310,109 @@ def test_the_command_line_rejects_an_invalid_range_without_creating_a_run(databa
 
     assert "lunes" in capsys.readouterr().err
     assert runs(database) == []
+
+
+# --- Subflows -------------------------------------------------------------------------------------
+
+
+def test_a_failure_inside_the_transformation_names_its_task(database, monkeypatch):
+    seed(database)
+
+    def broken_ratio(rows):
+        raise ValueError("waste_ratio: los costes de compra y de merma deben ser números no negativos.")
+
+    monkeypatch.setattr(process, "compute_waste_ratio", broken_ratio)
+
+    with pytest.raises(ValueError, match="waste_ratio"):
+        run()
+
+    failed = runs(database)[-1]
+    assert (failed["status"], failed["failed_task"]) == ("failed", "compute_waste_ratio")
+
+
+def test_the_extraction_subflow_runs_on_its_own(database):
+    seed(database)
+
+    sources = pipeline.extract_weekly_location_performance_sources([WEEK_A, WEEK_B], "production")
+
+    assert len(sources.business_events) == 8
+    assert list(sources.business_events.columns) == ["id", "timestamp", "event_type", "tags"]
+    assert len(sources.locations) == 14
+    assert sources.telemetry_events_per_week == {WEEK_A: 2, WEEK_B: 6}
+    assert runs(database) == []
+
+
+def test_the_transformation_subflow_runs_on_its_own_without_a_database():
+    events = pd.DataFrame(
+        [
+            {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "timestamp": "2026-11-17T15:00:00+00:00",
+                "event_type": "inbound_order_created",
+                "tags": {"location_id": 1, "country": "CO", "currency": "COP", "order_id": 1, "quantity": 4, "unit_cost": 250},
+            }
+        ]
+    )
+    locations = pd.DataFrame(
+        {"id": [1, 10], "code": ["medellin_centro", "miami_doral"], "country": ["CO", "US"], "currency": ["COP", "USD"]}
+    )
+
+    result = pipeline.transform_weekly_location_performance(events, locations, [WEEK_B])
+
+    assert result.rows["location_id"].tolist() == ["medellin_centro", "miami_doral"]
+    assert result.rows["total_purchase_cost"].tolist() == [1000.0, 0.0]
+    assert result.events_read == 1
+
+
+def test_the_load_subflow_runs_on_its_own_and_is_idempotent(database):
+    rows = pd.DataFrame(
+        [
+            {
+                "location_id": "medellin_centro", "country": "CO", "week_start": WEEK_B,
+                "total_purchase_cost": 850.0, "total_waste_cost": 106.25, "waste_ratio": 0.125,
+                "stockout_events_count": 1, "price_alert_events_count": 1, "currency": "COP",
+            }
+        ]
+    )
+
+    assert pipeline.load_weekly_location_performance(rows) == 1
+    assert pipeline.load_weekly_location_performance(rows) == 1
+    assert len(table(database)) == 1
+    assert kpis(database, "medellin_centro", WEEK_B)["waste_ratio"] == 0.125
+
+
+def test_the_optional_subflows_run_on_their_own(database):
+    seed(database)
+    events = pipeline.extract_business_events.fn([WEEK_A, WEEK_B], "production")
+    run_id = uuid4()
+
+    raw = pipeline.archive_weekly_location_performance_extract(events, run_id, [WEEK_A, WEEK_B], "production")
+    assert json.loads(Path(raw).read_text(encoding="utf-8"))["run_id"] == str(run_id)
+
+    locations = pipeline.extract_locations.fn()
+    result = pipeline.transform_weekly_location_performance(events, locations, [WEEK_A, WEEK_B])
+    snapshot = pipeline.export_weekly_location_performance_eval(result, 28, run_id, [WEEK_A, WEEK_B])
+    assert all(json.loads(Path(snapshot).read_text(encoding="utf-8"))["checks"].values())
+
+
+# --- Señales de silencio --------------------------------------------------------------------------
+
+
+def test_silent_weeks_are_logged_without_failing_the_run(database):
+    seed(database)
+    week_without_telemetry = date(2026, 10, 26)
+    week_without_business_events = date(2026, 11, 2)
+    add_event(database, "page_viewed", timestamp="2026-11-04T10:00:00+00:00", path="/inventario")
+
+    summary = pipeline.weekly_location_performance_flow(
+        week_from=week_without_telemetry, week_to=WEEK_B, trigger="manual"
+    )
+
+    assert summary["status"] == "completed"
+    assert summary["issues"]["weeks_without_telemetry"] == 1
+    assert summary["issues"]["weeks_without_business_events"] == 1
+    assert runs(database)[-1]["issues"]["weeks_without_telemetry"] == 1
+    assert kpis(database, "medellin_envigado", week_without_business_events)["total_purchase_cost"] == 0.0
 
 
 # --- resolve_weeks --------------------------------------------------------------------------------

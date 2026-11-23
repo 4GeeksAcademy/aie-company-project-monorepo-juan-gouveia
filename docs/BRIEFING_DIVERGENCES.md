@@ -31,6 +31,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 18. [Reporte técnico de telemetría](#reporte-técnico-de-telemetría) (enunciado "Telemetría de tu compañía — Reporte técnico", rama `feature/telemetry-report`)
 19. [Pipeline de desempeño de negocio](#pipeline-de-desempeño-de-negocio) (briefing "Pipeline de Desempeño de Negocio" y enunciado de la Parte 1, rama `feature/pipeline-design`)
 20. [Pipeline de desempeño de negocio resiliente](#pipeline-de-desempeño-de-negocio-resiliente) (enunciado de la Parte 2, rama `feature/pipeline-implementation`)
+21. [Pipeline a producción: subflows, tests y dashboard](#pipeline-a-producción-subflows-tests-y-dashboard) (enunciado de la Parte 3, rama `feature/pipeline-production`)
 
 ---
 
@@ -1826,3 +1827,95 @@ El enunciado pide un commit con el mensaje `feat: implement resilient business p
 | Endpoint con las filas de KPIs | ✅ | `GET /reporting/weekly-location-performance`, con la forma del briefing más `location_name` |
 | KPIs según "KPIs a medir" | ✅ | Las 70 filas de una corrida coinciden con un cálculo independiente en SQL |
 | Implementación coherente con `PIPELINE_DESIGN.md` | ✅ | Etapas, tablas, nombres y estrategias del diseño; los ajustes, con su motivo, en su sección 11 |
+
+---
+
+## Pipeline a producción: subflows, tests y dashboard
+
+Parte 3 de 3 del pipeline del "Reporte Semanal de Costo y Merma por Local", en la rama `feature/pipeline-production`. Los entregables son `data/pipelines/pipeline.py` dividido en subflows, `tests/pipelines/test_pipeline.py` y el dashboard `/reporte-semanal` del backoffice. Coincide con el briefing y el enunciado en lo siguiente:
+
+- **Subflows:** el flow principal coordina tres subflows con los nombres de etapa del diseño (`extract_weekly_location_performance_sources`, `transform_weekly_location_performance` y `load_weekly_location_performance`) y no contiene su lógica. Los dos pasos opcionales son subflows invocados con `return_state=True`. Cada subflow tiene entradas y salidas explícitas y se ejecuta solo en las pruebas.
+- **Tasks por KPI:** el subflow de transformación tiene una task por KPI con el nombre de su columna del briefing; la lógica sigue en `data/process/`.
+- **Tests:** `tests/pipelines/test_pipeline.py` prueba esas tasks aisladas, con eventos en memoria con la forma de `telemetry_events`: un test por KPI, los cinco KPIs calculados a mano y casos defensivos.
+- **CLI:** `python data/pipelines/pipeline.py` sigue corriendo el ETL completo; el entrypoint y la documentación de la Parte 2 no cambiaron.
+- **Dashboard:** cada KPI con su nombre exacto del briefing y lo que mide, el período de la semana, y datos reales de `reporting.weekly_location_performance` a través de `services/reporting/`.
+- **Intactos:** `telemetry_events` (el pipeline solo lee, con un rol sin escritura), `services/telemetry/analysis.py` y `GET /telemetry/report`.
+
+Las decisiones (J0 a J6) se tomaron con el desarrollador el 23 de noviembre de 2026. Están en la sección 12 de `data/pipelines/PIPELINE_DESIGN.md`, junto a la mejora adicional (señales de silencio) y la pregunta de diseño que responde.
+
+> **Estado:** completa. Un commit por fase, hechos por el desarrollador: Fase 0 (estado del proyecto, `9689787`), Fase 1 (funciones por KPI, `e4f8275`), Fase 2 (subflows, `a527852`), Fase 3 (tests, `3f9bf0f`), Fase 4 (dashboard, `9b25bee`) y Fase 5 (documentación, con el mensaje del enunciado).
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Ruta del dashboard | "ej. `/reporting`" | `/reporte-semanal` | Las vistas del backoffice están en español; `/reporting` era un ejemplo |
+| Entorno de los tests | `python -m pytest tests/pipelines/test_pipeline.py` | El mismo comando, con el entorno de `data/pipelines` activado (o `uv run --project data/pipelines`) | La raíz del monorepo no tiene entorno de Python propio |
+| Nombres de los tests | Vocabulario del dominio y nombres de KPI del briefing | En español (`test_costo_de_compra_por_local_…`); el resto del monorepo los nombra en inglés | Los nombres de KPI del briefing están en español |
+| Cómo se prueba una task | Tests unitarios aislados de las tasks | Cada test llama a la task con `.fn(...)` | Es la función que ejecuta Prefect, sin servidor ni base |
+| Caché | Al menos una task de transformación con caché (Parte 2) | En `prepare_weekly_location_facts`, ya no en toda la transformación | Es la parte costosa; los KPIs son sumas y conteos sobre sus hechos |
+| `failed_task` de la carga | `load_weekly_location_performance` (Parte 2) | `upsert_weekly_location_performance` | El nombre de etapa pasó al subflow; el log nombra la task concreta |
+| Alertas de precio | "Le indica a Lucía cuándo necesita renegociar" | Conteo semanal por local; sin aviso al registrar la entrada ni detalle por producto | Fuera del alcance de la Parte 3; queda como tarea del inventario |
+| Rutas nuevas en Docker | Sin especificar | `docker compose restart uis` tras añadir una ruta de `app/` | `next dev --webpack` del contenedor no detectó las carpetas nuevas |
+| Mensaje del commit | `feat: refactor business performance pipeline into subflows, add unit tests, and add reporting dashboard` | En el último commit; los anteriores, un mensaje por fase | Un commit por fase, como el resto del proyecto |
+| Destino del PR | "Sobre el PR de la Parte 2 o uno nuevo" | Uno nuevo, contra `feature/pipeline-implementation` | El PR #26 sigue abierto y conserva solo la Parte 2 |
+
+### 1. El dashboard está en `/reporte-semanal`
+
+El enunciado pone `/reporting` como ejemplo de ruta del backoffice. Todas las vistas del backoffice están en español (`/inventario`, `/proveedores`, `/gestor-incidencias`, `/telemetria`), y `AGENTS.md` pide seguir las convenciones locales. La ruta usa el nombre del entregable del briefing. La API sigue sirviendo `/reporting/...`, que es la que nombra el briefing.
+
+**Coste:** la ruta de la vista y la de la API no coinciden.
+
+### 2. Los tests usan el entorno de `data/pipelines`
+
+`python -m pytest tests/pipelines/test_pipeline.py` pasa desde la raíz con el entorno de `data/pipelines` activado, que tiene Prefect, Pandas y los paquetes del pipeline. La raíz no tiene entorno de Python: cada proyecto del monorepo tiene el suyo, y `AGENTS.md` pide no añadir implementación a la raíz sin necesidad. Un `pyproject.toml` en la raíz habría sido un segundo entorno con Prefect que mantener. `tests/pipelines/README.md`, el diseño (§10) y el README de `data/pipelines` explican cómo activarlo.
+
+**Coste:** con un `python` sin ese entorno, los tests fallan al importar.
+
+### 3. Los tests llevan los nombres de KPI del briefing, en español
+
+El enunciado pide que los nombres de los tests reflejen los nombres de KPI del briefing. Están en español, como los KPI de "KPIs a medir" (`test_costo_de_compra_por_local_suma_cantidad_por_costo_unitario_de_las_entradas`, `test_ratio_de_merma_es_cero_sin_compras_y_puede_superar_uno`). El resto del monorepo nombra sus pruebas en inglés.
+
+### 4. Las tasks se prueban con `.fn(...)`
+
+Cada test llama a la task del subflow de transformación con `.fn(...)`, la función que Prefect ejecuta, en lugar de lanzarla dentro de un flow. Así el test no necesita un servidor de Prefect ni una base, como pide el enunciado. El comportamiento de las tasks dentro de los subflows (reintentos, caché, estados) se prueba aparte, contra SQLite, en `data/pipelines/tests/`.
+
+### 5. La caché pasa a la preparación de los hechos
+
+En la Parte 2, la task con caché era la transformación entera. Al dividirla en una task por KPI, la caché queda en `prepare_weekly_location_facts` (refinar, validar y deduplicar), la parte costosa, con la misma clave (los `id` de los eventos, las semanas, el catálogo y la versión, que sube a 2). Los KPIs que siguen son sumas y conteos. El criterio de la Parte 2 (una task de transformación con `cache_key_fn` y `cache_expiration`) se sigue cumpliendo.
+
+### 6. `failed_task` nombra la task del upsert
+
+En la Parte 2, una carga fallida quedaba en el log con `failed_task = load_weekly_location_performance`. Ese nombre es ahora el del subflow de carga, y la task es `upsert_weekly_location_performance`. Cada subflow anota en la excepción la task que falló, así que el log sigue diciendo la task concreta aunque el error llegue a través del subflow.
+
+**Coste:** las corridas fallidas anteriores y las nuevas usan nombres distintos para la misma etapa.
+
+### 7. Las alertas de precio se quedan en el conteo semanal
+
+El briefing define la frecuencia de alertas de precio como la señal para que Lucía renegocie. El reporte la da por local y semana, como pide la tabla de destino. Dos cosas quedan fuera de la Parte 3 (decisión del desarrollador, 2026-11-23) y se registran en el diseño (§8) como tarea del inventario:
+
+- **Aviso al registrar:** quien registra una entrada con un coste anómalo no ve ningún aviso; el backoffice solo emite el evento.
+- **Productos afectados:** Lucía no puede ver qué producto subió; hará falta un detalle por producto desde los eventos.
+
+### 8. Una ruta nueva del backoffice exige reiniciar `uis` en Docker
+
+`next dev --webpack`, como corre en el contenedor, no detectó las carpetas nuevas de `app/` (la página y las rutas del intermediario respondían 404) hasta `docker compose restart uis`. Los cambios en archivos existentes sí se detectan. Está documentado en el README del backoffice.
+
+### 9. Commits por fase y PR nuevo
+
+Como en el resto del proyecto, el trabajo va en un commit por fase y el último lleva el mensaje del enunciado. El enunciado permite construir sobre el PR de la Parte 2 o abrir uno nuevo: el PR nuevo apunta a `feature/pipeline-implementation`, y el #26 sigue con solo la Parte 2. Su descripción dice qué mejora adicional se implementó (las señales de silencio) y qué pregunta de diseño responde.
+
+### Verificación de los criterios
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| El flow principal invoca al menos tres subflows | ✅ | `weekly_location_performance_flow` llama a 3 subflows de etapa y 2 opcionales (diseño, §5.1) |
+| Cada subflow con entradas y salidas explícitas, ejecutable solo | ✅ | Parámetros y retornos tipados (`WeeklyLocationPerformanceSources`, `WeeklyPerformanceResult`, filas escritas); pruebas de cada subflow por separado en `data/pipelines/tests/` |
+| `tests/pipelines/test_pipeline.py` con al menos tres tests de tasks de transformación | ✅ | 10 tests: uno por KPI, los cinco a mano y cuatro defensivos |
+| Tests aislados, con datos en memoria con forma de telemetría | ✅ | `.fn(...)` y eventos con `id`, `timestamp`, `event_type` y `tags`; sin base, APIs ni servidor de Prefect |
+| Un test del comportamiento defensivo | ✅ | Eventos mal formados rechazados sin romper la corrida; tasks de KPI y ratio que fallan ante datos inválidos; semanas que no empiezan en lunes |
+| Un test del valor de un KPI frente a su definición | ✅ | Los cinco KPIs de una semana de Medellín Centro, con las cuentas en el docstring (850 COP, 106,25, 0,125, 1 y 1) |
+| `python -m pytest tests/pipelines/test_pipeline.py` pasa | ✅ | 10 pasan desde la raíz con el entorno de `data/pipelines` (apartado 2) |
+| `python data/pipelines/pipeline.py` sigue corriendo el ETL completo | ✅ | Código 0, 5 subflows, 56 filas; contra Supabase, 70/70 filas iguales a un cálculo independiente en SQL |
+| Nombres con el vocabulario del dominio y los KPI del briefing | ✅ | Subflows con el nombre del reporte; tasks y tests con los nombres de las columnas y de los KPI |
+| `telemetry_events` y `analysis.py` sin modificar | ✅ | El pipeline lee `telemetry_events` con un rol sin escritura; `services/telemetry/` no cambió en la rama |
+| Dashboard en `uis/backoffice/` con cada KPI etiquetado, desde `services/reporting/` | ✅ | `/reporte-semanal`: los cinco KPIs con su nombre del briefing, el período en palabras, vía `GET /reporting/weekly-location-performance` |
+| Legible para un stakeholder no técnico | ✅ | Resumen por país, una sección por KPI con lo que mide, importes con su moneda, avisos en lenguaje llano; revisado por el desarrollador |

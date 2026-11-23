@@ -61,7 +61,7 @@ This repository holds the **Brasaland** project. `CONTEXT.md` (and its Spanish v
 | Incident report script | [`scripts/incident-report/`](./scripts/incident-report/README.md) | Python CLI that validates and summarizes the incidents CSV and exports `data/process/results.csv`. It reuses the API's analysis logic |
 | Shared packages | [`packages/`](./packages/README.md) | `@repo/brasa-core` is transitional (used by `/funciones`); `@repo/shared-types` has no consumers yet |
 | Data | [`data/raw/`](./data/raw/README.md) | `incidents-brasaland.csv` (100 test incidents) |
-| Business pipeline | [`data/pipelines/`](./data/pipelines/README.md), [`data/process/`](./data/process/README.md) and [`services/reporting/`](./services/reporting/README.md) | Prefect flow that computes the weekly cost and waste report per location every Monday into `reporting.weekly_location_performance` (Supabase), and its three endpoints under `/reporting` ([design](./data/pipelines/PIPELINE_DESIGN.md), in Spanish) |
+| Business pipeline | [`data/pipelines/`](./data/pipelines/README.md), [`data/process/`](./data/process/README.md) and [`services/reporting/`](./services/reporting/README.md) | Prefect flow that computes the weekly cost and waste report per location every Monday into `reporting.weekly_location_performance` (Supabase), in subflows; its three endpoints under `/reporting`; the backoffice dashboard [`/reporte-semanal`](./uis/backoffice/README.md#tools), and the unit tests of its tasks in [`tests/pipelines/`](./tests/pipelines/README.md) ([design](./data/pipelines/PIPELINE_DESIGN.md), in Spanish) |
 | AI, automation and infrastructure | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Template structure and examples only |
 
 - Instructions for coding agents are in the root [`AGENTS.md`](./AGENTS.md), with development rules and skills in `.agents/`.
@@ -241,6 +241,14 @@ Read the linked `README.md` inside each folder before you start coding there.
 
 → See [`shared/README.md`](./shared/README.md)
 
+### `tests/` — cross-cutting tests
+
+**Purpose:** Tests that do not belong to a single project, or that an assignment asks for at the root.
+
+| Subfolder | Purpose | What you do here |
+| --- | --- | --- |
+| [`tests/pipelines/`](./tests/pipelines/README.md) | Unit tests for the pipelines in `data/pipelines/` | Test the tasks in isolation, with in-memory data; run them with the `data/pipelines` environment |
+
 ### `docs/` — cross-cutting documentation
 
 **Purpose:** Architecture and decisions that span the whole company project.
@@ -300,6 +308,7 @@ Does it run on a server / API / queue?     → services/
 Is it raw or transformed data?             → data/raw/ or data/process/
 Does it move data between systems?         → data/pipelines/
 Do you measure AI/pipeline quality?        → data/eval/
+Is it a unit test for a pipeline?          → tests/pipelines/
 Is it an AI assistant with a goal?         → agents/
 Is it a reusable AI capability/instruction?→ skills/
 Does AI need to call external tools/APIs?  → mcps/
@@ -332,6 +341,7 @@ ai-engineering-company-project-monorepo/
 │   ├── pipelines/             # ETL/ELT jobs
 │   ├── process/               # Clean / intermediate outputs
 │   └── eval/                  # Evaluation sets and metrics
+├── tests/pipelines/           # Unit tests for the pipelines
 ├── agents/                    # AI agents (+ _template/ starter)
 ├── skills/                    # Reusable agent skills
 ├── mcps/                      # MCP servers for tool access

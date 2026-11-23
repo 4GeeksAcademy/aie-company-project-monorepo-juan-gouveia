@@ -16,6 +16,17 @@ export interface ToolSection {
 // y una entrada aquí, dentro de su sección.
 export const toolSections: ToolSection[] = [
   {
+    name: "Reportes",
+    tools: [
+      {
+        href: "/reporte-semanal",
+        name: "Reporte semanal de costo y merma",
+        description:
+          "Costo de compra, costo de merma, ratio de merma, quiebres de stock y alertas de precio de cada local, semana a semana. Para administradores y gerentes.",
+      },
+    ],
+  },
+  {
     name: "Inventario",
     tools: [
       {

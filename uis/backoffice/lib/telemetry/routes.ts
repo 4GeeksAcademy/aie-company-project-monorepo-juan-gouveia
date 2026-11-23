@@ -11,7 +11,7 @@ const PARAM_BY_RESOURCE: Record<string, string> = {
 };
 
 // Recursos que la API publica en la raíz, no bajo /api/v1.
-const API_ROOT_RESOURCES = new Set(["telemetry"]);
+const API_ROOT_RESOURCES = new Set(["telemetry", "reporting"]);
 
 const ID_SEGMENT = /^(\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
@@ -23,7 +23,7 @@ export function apiRouteTemplate(path: string): string {
   const templated = segments.map((segment, index) =>
     ID_SEGMENT.test(segment) ? (PARAM_BY_RESOURCE[segments[index - 1]] ?? "{id}") : segment
   );
-  // La API sirve /telemetry fuera de /api/v1 (el reporte llega por su propia ruta del intermediario).
+  // La API sirve /telemetry y /reporting fuera de /api/v1 (llegan por sus propias rutas del intermediario).
   const prefix = API_ROOT_RESOURCES.has(segments[0]) ? "" : "/api/v1";
   return `${prefix}/${templated.join("/")}`;
 }

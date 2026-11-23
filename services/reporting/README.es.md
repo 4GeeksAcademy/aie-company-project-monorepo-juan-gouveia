@@ -58,3 +58,4 @@ La última fila de `reporting.pipeline_runs`: `id`, `trigger`, `status` (`pendin
 - **Sin Prefect.** La API no importa Prefect: al importarse, Prefect reconfigura el logging del proceso (el logger raíz y el de uvicorn). `trigger.py` habla con la API REST de Prefect con httpx, y `brasaland-pipelines` no declara Prefect como dependencia del paquete (está en su grupo `orchestration`). Una prueba lo vigila.
 - **Paquete local** `brasaland-reporting` (se importa como `brasaland_reporting`), instalado en la API en modo editable y montado en `app/main.py`. Solo funciona dentro de la API: usa su `ApiError`, su autenticación, su base y su `TTLCache`.
 - **Pruebas:** `tests/reporting/` en la API (`uv run pytest tests/reporting`).
+- **Quién los usa:** el dashboard [`/reporte-semanal`](../../uis/backoffice/README.es.md#herramientas) del backoffice lee las dos rutas GET a través de su intermediario; el disparo manual no tiene botón en el backoffice.

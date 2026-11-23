@@ -1,8 +1,8 @@
 # Diseño del pipeline de desempeño de negocio — Brasaland
 
-Documento de diseño del pipeline que produce el **"Reporte Semanal de Costo y Merma por Local"**. La Parte 1 de 3 lo diseñó; la Parte 2 lo implementa con Prefect (`data/pipelines/pipeline.py`), y la Parte 3 dividirá las etapas en subflows y añadirá el dashboard. Las secciones 1 a 9 describen el pipeline tal como está implementado; la §11 recoge lo que cambió respecto al diseño aprobado y por qué.
+Documento de diseño del pipeline que produce el **"Reporte Semanal de Costo y Merma por Local"**. La Parte 1 de 3 lo diseñó; la Parte 2 lo implementó con Prefect (`data/pipelines/pipeline.py`), y la Parte 3 lo dividió en subflows, añadió los tests unitarios de las tasks de KPI (`tests/pipelines/test_pipeline.py`) y el dashboard del backoffice (`/reporte-semanal`). Las secciones 1 a 10 describen el pipeline tal como está; la §11 y la §12 recogen lo que cambió en cada parte respecto al diseño aprobado, y por qué.
 
-- **Fecha:** 2026-11-23 (diseño); implementación, 2026-11-23.
+- **Fecha:** 2026-11-23 (diseño, implementación y Parte 3).
 - **Frecuencia y comando de ejecución:** §10.
 - **Fuentes:** briefing del pipeline de desempeño de negocio (secciones 1 a 7), briefing y plan de telemetría ([`docs/telemetry/telemetry-plan.md`](../../docs/telemetry/telemetry-plan.md), [`event-schemas.json`](../../docs/telemetry/event-schemas.json)) y el código actual del monorepo.
 - **Fuera de alcance:** el reporte técnico de ingeniería (`services/telemetry/analysis.py` y `GET /telemetry/report`) no cambia. El pipeline **lee** `telemetry_events` y **nunca escribe** en ella.
@@ -21,6 +21,7 @@ Documento de diseño del pipeline que produce el **"Reporte Semanal de Costo y M
 9. [Decisiones](#9-decisiones)
 10. [Ejecución: frecuencia y comandos](#10-ejecución-frecuencia-y-comandos)
 11. [Implementación (Parte 2): ajustes al diseño y verificación](#11-implementación-parte-2-ajustes-al-diseño-y-verificación)
+12. [Producción (Parte 3): subflows, tests, dashboard y señales de silencio](#12-producción-parte-3-subflows-tests-dashboard-y-señales-de-silencio)
 
 ---
 
@@ -123,29 +124,33 @@ ORDER BY "timestamp", id;
 
 ### 3.2 Flujo de datos
 
+El flow principal, `weekly_location_performance_flow`, resuelve las semanas (`resolve_weeks`), abre la corrida en el log y llama a los subflows en este orden; al final cierra la corrida (§5).
+
 ```mermaid
 flowchart LR
     subgraph Fuente["Supabase · public (solo lectura)"]
-        TE[("telemetry_events<br/>4 event_type · production")]
+        TE[("telemetry_events<br/>production")]
         LOC[("locations<br/>14 locales")]
     end
 
-    subgraph Extraccion["1 · Extracción"]
-        RW["resolve_weeks<br/>4 semanas ISO cerradas<br/>o el rango pedido"]
-        EE["extract_business_events"]
+    subgraph Extraccion["Subflow 1 · extract_weekly_location_performance_sources"]
+        EE["extract_business_events<br/>4 event_type de negocio"]
         EL["extract_locations"]
+        CT["count_telemetry_events<br/>todos los tipos, por semana"]
     end
 
-    subgraph Transformacion["2 · Transformación (Pandas)"]
-        V["validar: local, país y moneda<br/>rechazados → log"]
-        D["deduplicar por order_id<br/>/ trigger_order_id"]
-        F["filtrar alertas de subida<br/>descartadas → log"]
-        A["week_start · costes = quantity × unit_cost<br/>agrupar por local y semana"]
-        Z["completar 14 locales × semanas<br/>waste_ratio"]
+    subgraph Transformacion["Subflow 2 · transform_weekly_location_performance (Pandas)"]
+        P["prepare_weekly_location_facts<br/>validar · deduplicar · subidas · semana"]
+        K1["compute_total_purchase_cost"]
+        K2["compute_total_waste_cost"]
+        K3["count_stockout_events"]
+        K4["count_price_alert_events"]
+        AS["assemble_weekly_location_performance<br/>14 locales × semanas, con ceros"]
+        WR["compute_waste_ratio"]
     end
 
-    subgraph Carga["3 · Carga"]
-        UP["load_weekly_location_performance<br/>upsert en una transacción"]
+    subgraph Carga["Subflow 3 · load_weekly_location_performance"]
+        UP["upsert_weekly_location_performance<br/>una transacción"]
     end
 
     subgraph Destino["Supabase · reporting"]
@@ -153,27 +158,30 @@ flowchart LR
         PR[("pipeline_runs<br/>log de corridas")]
     end
 
-    subgraph Opcionales["Pasos opcionales (return_state=True)"]
-        RAW["save_raw_extract<br/>data/raw/telemetry_events/"]
-        EV["export_eval_snapshot<br/>data/eval/weekly_location_performance/"]
+    subgraph Opcionales["Subflows opcionales (return_state=True)"]
+        RAW["archive_weekly_location_performance_extract<br/>data/raw/telemetry_events/"]
+        EV["export_weekly_location_performance_eval<br/>data/eval/weekly_location_performance/"]
     end
 
-    RW --> EE & EL
-    TE --> EE
+    SW["detect_silent_weeks<br/>semanas sin señal"]
+    DASH["Dashboard /reporte-semanal<br/>backoffice, vía services/reporting"]
+
+    TE --> EE & CT
     LOC --> EL
-    EE --> V
-    EL --> V
-    V --> D --> F --> A --> Z --> UP --> WLP
+    EE & EL --> P
+    P --> K1 & K2 & K3 & K4 --> AS --> WR --> UP --> WLP
+    EE & CT --> SW
+    SW -. issues .-> PR
+    P -. rechazados y descartados .-> PR
     UP -. filas escritas .-> PR
-    V -. rechazados .-> PR
-    F -. descartados .-> PR
     EE -.-> RAW
     UP -.-> EV
+    WLP & PR --> DASH
 ```
 
 ### 3.3 Reglas de la transformación
 
-Funciones puras de Pandas (`data/process/`), sin bucles y sin acceso a la base, en este orden:
+Funciones puras de Pandas (`data/process/weekly_location_performance.py`), sin bucles y sin acceso a la base, en este orden. En el subflow de transformación, cada grupo de pasos es una task: los pasos 1 a 5 son `prepare_weekly_location_facts`; los 6 y 7, una task por KPI (`compute_total_purchase_cost`, `compute_total_waste_cost`, `count_stockout_events`, `count_price_alert_events`); los 8 y 10, `assemble_weekly_location_performance`; el 9, `compute_waste_ratio`.
 
 1. **Refinar.** Expandir `tags` a columnas (`location_id`, `country`, `currency`, `quantity`, `unit_cost`, `order_id`, `trigger_order_id`, `variance_pct`, `schema_version`). `timestamp` se convierte con `pd.to_datetime(..., utc=True)`.
 2. **Validar contra `locations`.** Se rechaza el evento cuyo `location_id` no está en el catálogo (`unknown_location`), cuyo `country` o `currency` no son los del local (`country_mismatch`, `currency_mismatch`), o al que le falta un número imprescindible (`invalid_payload`: `quantity` o `unit_cost` de una entrada, `variance_pct` de una alerta). Los rechazados no se cuentan en ningún KPI; su número por motivo queda en el log de la corrida.
@@ -181,10 +189,12 @@ Funciones puras de Pandas (`data/process/`), sin bucles y sin acceso a la base, 
 4. **Alertas de precio.** Solo cuentan las subidas (`variance_pct > 0`); las bajadas se descartan con el motivo `price_decrease`.
 5. **Semana.** `week_start` = el lunes de la semana ISO del `timestamp`, en UTC: `(ts.dt.normalize() - pd.to_timedelta(ts.dt.day_of_week, unit="D")).dt.date`, sobre la columna ya convertida a UTC. Un hecho cuya semana no está entre las de la corrida se descarta con el motivo `outside_window` (salvaguarda: la consulta ya filtra por la ventana).
 6. **Importes.** `cost = quantity × unit_cost` en entradas y mermas. Una merma sin `unit_cost` (versión 1.0.0, o sin entradas previas del producto) cuenta con coste 0 y suma en `waste_events_without_cost` del log: el KPI queda por debajo del real y la corrida lo dice.
-7. **Agregar.** `groupby(["location_id", "week_start"])` con `sum` de los importes y `count` de quiebres y alertas.
+7. **Agregar, un KPI cada vez.** `groupby(["location_id", "week_start"])` con `sum` de los importes de compra y de merma y `count` de quiebres y de alertas, en una función por KPI con el nombre de su columna.
 8. **Completar.** Producto cruzado de los 14 locales por las semanas de la corrida, con ceros donde no hubo actividad: Mariana ve los 14 locales todas las semanas, y una semana sin eventos se distingue de una semana sin calcular.
-9. **Ratio.** `waste_ratio = total_waste_cost / total_purchase_cost`, redondeado a 4 decimales; 0 si `total_purchase_cost = 0`. Puede superar 1: un local puede perder en una semana producto comprado en semanas anteriores.
+9. **Ratio.** `waste_ratio = total_waste_cost / total_purchase_cost` de cada fila, sobre los totales ya redondeados (la definición del briefing), redondeado a 4 decimales; 0 si `total_purchase_cost = 0`. Puede superar 1: un local puede perder en una semana producto comprado en semanas anteriores.
 10. **Dimensiones finales.** `location_id` = `locations.code`, y `country` y `currency` del local. Los importes se redondean a 2 decimales en la moneda del local, **sin convertir** COP y USD.
+
+**Entradas inválidas.** Un evento mal formado (un número que no lo es, un dato imprescindible nulo, `tags` vacío) se rechaza en el paso 2 y queda en el log: no rompe la corrida. Las funciones de los KPIs fallan con `ValueError` si les llega un hecho que la preparación debía haber rechazado (una entrada sin coste, una alerta de bajada, un coste negativo): un KPI mal contado en silencio es peor que una corrida fallida, que queda en el log con la task y el error.
 
 ### 3.4 Registros que cambian y duplicados
 
@@ -264,7 +274,7 @@ Tres rutas en el módulo nuevo `services/reporting/`, fuera de `/api/v1` como la
 | Momento | Estado de `weekly_location_performance` | Estado de `pipeline_runs` |
 |---|---|---|
 | Antes de la corrida | Las filas de la corrida anterior | — |
-| Falla la carga | **Sin cambios:** PostgreSQL deshace la transacción entera, y no queda ninguna de las 56 filas a medias ni con una mezcla de valores viejos y nuevos | La corrida queda en `failed`, con `failed_task = load_weekly_location_performance` y el error |
+| Falla la carga | **Sin cambios:** PostgreSQL deshace la transacción entera, y no queda ninguna de las 56 filas a medias ni con una mezcla de valores viejos y nuevos | La corrida queda en `failed`, con `failed_task = upsert_weekly_location_performance` y el error |
 | Reintento automático de la task (hasta 2, §5.2) | Si la base vuelve: se escriben las 56 filas; las que ya existían se reescriben | `completed`, con `rows_written = 56` |
 | Segunda corrida manual (si los reintentos se agotan) | Recalcula desde la fuente las mismas 56 filas; el upsert escribe sobre las que ya hubiera | Una fila nueva en `completed`; la fallida se conserva como rastro |
 
@@ -305,9 +315,9 @@ Una fila por corrida, creada al dispararla y cerrada al terminar, con éxito o s
 | `events_rejected` | `integer` NOT NULL | Cuántos se excluyeron por datos inválidos |
 | `events_discarded` | `integer` NOT NULL | Cuántos se excluyeron por regla (duplicados, alertas de bajada) |
 | `waste_events_without_cost` | `integer` NOT NULL | Mermas que contaron con coste 0: cuánto subestima la corrida el coste de merma |
-| `issues` | `jsonb` NOT NULL | Conteo por motivo (`unknown_location`, `country_mismatch`, `currency_mismatch`, `invalid_payload`, `duplicate_fact`, `price_decrease`, `outside_window`) y los pasos opcionales que fallaron (`save_raw_extract_failed`, `export_eval_snapshot_failed`); nunca valores del payload |
+| `issues` | `jsonb` NOT NULL | Conteo por motivo (`unknown_location`, `country_mismatch`, `currency_mismatch`, `invalid_payload`, `duplicate_fact`, `price_decrease`, `outside_window`) ; los pasos opcionales que fallaron (`save_raw_extract_failed`, `export_eval_snapshot_failed`), y las semanas sin señal (`weeks_without_telemetry`, `weeks_without_business_events`, §12); nunca valores del payload |
 | `rows_written` | `integer` NOT NULL | Filas escritas por el upsert (14 × semanas en una corrida completa) |
-| `failed_task` | `text` NULL | En qué etapa falló: extracción, transformación o carga |
+| `failed_task` | `text` NULL | Qué task falló (p. ej. `extract_business_events`, `compute_waste_ratio`, `upsert_weekly_location_performance`), aunque el error llegue a través de un subflow |
 | `error_message` | `text` NULL | El error resumido (tipo y mensaje, sin cadenas de conexión) |
 
 Restricciones: `CHECK (week_from <= week_to)`, `CHECK` de los valores de `trigger` y `status`, y el índice único parcial de la §4.3. Los conteos cumplen `events_read = válidos + events_rejected + events_discarded`, lo que permite cuadrar cada corrida.
@@ -316,37 +326,56 @@ Restricciones: `CHECK (week_from <= week_to)`, `CHECK` de los valores de `trigge
 
 ## 5. Mapeo a Prefect
 
-### 5.1 Flow principal
+### 5.1 Flow principal y subflows
 
 `weekly_location_performance_flow(week_from: date | None = None, week_to: date | None = None, trigger: str = "scheduled", run_id: UUID | None = None, environment: str | None = None, include_current_week: bool = False)`, en `data/pipelines/pipeline.py`, con el nombre `weekly-location-performance`.
 
-- Sin rango, calcula las 4 últimas semanas ISO cerradas; con rango, hace un backfill. El mismo flow sirve para los dos casos, así que la v1 no necesita un segundo flow.
+- **Solo coordina** (Parte 3): resuelve las semanas, abre la corrida, invoca los subflows en secuencia y cierra la corrida. No contiene la lógica de ninguna etapa.
+- Sin rango, calcula las 4 últimas semanas ISO cerradas; con rango, hace un backfill. El mismo flow sirve para los dos casos.
 - `run_id` llega cuando lo dispara la API, que ya registró la corrida en `pending` (§6.3). En las corridas programadas, el flow la crea.
 - `environment` sustituye al del bloque de configuración (la CLI lo pasa con `--environment`). `include_current_week` solo sirve para verificar: incluye la semana en curso, parcial; la corrida programada nunca lo usa.
 - `timeout_seconds=1800` y `log_prints=False`: el flow registra con `get_run_logger()`. Los hooks `on_crashed` y `on_cancellation` cierran la corrida (§5.3).
 - El flow devuelve el resumen de la corrida (`run_id`, `status`, semanas, conteos y `rows_written`), que la CLI imprime en JSON.
 
+| Subflow | Entrada → salida | Si falla |
+|---|---|---|
+| `extract_weekly_location_performance_sources` | Semanas y entorno → `WeeklyLocationPerformanceSources` (eventos de negocio, locales y eventos de telemetría por semana) | Corrida `failed` |
+| `archive_weekly_location_performance_extract` (opcional) | Eventos, corrida, semanas y entorno → ruta del archivo en `data/raw/` | La corrida sigue; `save_raw_extract_failed` en `issues` |
+| `transform_weekly_location_performance` | Eventos, locales y semanas → `WeeklyPerformanceResult` (filas de destino y conteos del log) | Corrida `failed` |
+| `load_weekly_location_performance` | Filas → filas escritas | Invocado con `return_state=True`: el flow cierra la corrida en `failed` y termina en `Failed` |
+| `export_weekly_location_performance_eval` (opcional) | Resultado, filas escritas, corrida y semanas → ruta del archivo en `data/eval/` | La corrida sigue; `export_eval_snapshot_failed` en `issues` |
+
+Cada subflow recibe y devuelve sus datos de forma explícita, sin estado compartido, y se puede ejecutar solo (por ejemplo, `transform_weekly_location_performance(events, locations, weeks)` con DataFrames en memoria, sin base). Las pruebas de `data/pipelines/tests/` ejecutan cada uno por separado.
+
 ### 5.2 Tasks
 
 En el orden en que corren:
 
-| Task | Etapa | Entrada → salida | Reintentos | Caché |
+| Task | Dónde | Entrada → salida | Reintentos | Caché |
 |---|---|---|---|---|
-| `resolve_weeks` | Control | `week_from`, `week_to` y la fecha actual → lista de lunes; rechaza la semana en curso | No: es pura | No |
-| `open_pipeline_run` | Control | Parámetros → `run_id` en `running`; cierra las corridas abandonadas | 2, cada 10 s | No |
+| `resolve_weeks` | Flow principal | `week_from`, `week_to` y la fecha actual → lista de lunes; rechaza la semana en curso | No: es pura | No |
+| `open_pipeline_run` | Flow principal | Parámetros → `run_id` en `running`; cierra las corridas abandonadas | 2, cada 10 s | No |
 | `extract_business_events` | Extracción | Semanas y entorno → `DataFrame` de `telemetry_events` (§3.1) | 3, con espera de 10, 30 y 90 s | No: los eventos llegan en cualquier momento |
-| `save_raw_extract` (opcional) | Extracción | Eventos → `data/raw/telemetry_events/<run_id>.json` | No | No |
 | `extract_locations` | Extracción | — → `DataFrame` de las 14 filas de `locations` | 3, con espera de 10, 30 y 90 s | 1 hora; clave: la huella de la base |
-| `transform_weekly_location_performance` | Transformación | Eventos, locales y semanas → filas de destino y conteos para el log (§3.3) | No: es determinista | 1 hora; clave: versión de la transformación, semanas, `id` de los eventos y catálogo |
-| `load_weekly_location_performance` | Carga | Filas → `rows_written`, con upsert en una transacción (§3.4) | 2, con espera de 30 y 120 s | No: el upsert es la garantía de idempotencia |
-| `export_eval_snapshot` (opcional) | Validación | Filas y conteos → `data/eval/weekly_location_performance/<run_id>.json` | No | No |
-| `close_pipeline_run` | Control | `run_id`, conteos → la corrida en `completed` | 2, cada 10 s | No |
+| `count_telemetry_events` | Extracción | Semanas y entorno → eventos de telemetría de cualquier tipo por semana | 3, con espera de 10, 30 y 90 s | No |
+| `save_raw_extract` | Opcional (archivo) | Eventos → `data/raw/telemetry_events/<run_id>.json` | No | No |
+| `detect_silent_weeks` | Flow principal | Semanas, conteos y eventos → semanas sin telemetría y sin eventos de negocio (§12) | No: es pura | No |
+| `prepare_weekly_location_facts` | Transformación | Eventos, locales y semanas → hechos válidos con su semana y conteos del log (§3.3, pasos 1–5) | No: es determinista | 1 hora; clave: versión de la transformación, semanas, `id` de los eventos y catálogo |
+| `compute_total_purchase_cost` | Transformación | Hechos → costo de compra por local y semana | No | No |
+| `compute_total_waste_cost` | Transformación | Hechos → costo de merma por local y semana | No | No |
+| `count_stockout_events` | Transformación | Hechos → quiebres de stock por local y semana | No | No |
+| `count_price_alert_events` | Transformación | Hechos → alertas de precio de subida por local y semana | No | No |
+| `assemble_weekly_location_performance` | Transformación | Los cuatro KPIs, locales y semanas → 14 × semanas filas, con ceros | No | No |
+| `compute_waste_ratio` | Transformación | Filas → filas con el ratio de merma | No | No |
+| `upsert_weekly_location_performance` | Carga | Filas → `rows_written`, con upsert en una transacción (§3.4) | 2, con espera de 30 y 120 s | No: el upsert es la garantía de idempotencia |
+| `export_eval_snapshot` | Opcional (evaluación) | Filas y conteos → `data/eval/weekly_location_performance/<run_id>.json` | No | No |
+| `close_pipeline_run` | Flow principal | `run_id`, conteos → la corrida en `completed` o `failed` | 2, cada 10 s | No |
 
-- **Transformación.** La task llama a las funciones puras de `data/process/weekly_location_performance.py`: solo las orquesta. `extract_business_events` lleva el rango de semanas en su nombre (`task_run_name`), para leerlo en la interfaz de Prefect.
-- **Reintentos.** El número de cada task está justificado en un comentario del código. Una `retry_condition_fn` limita los reintentos a los fallos transitorios de la base. psycopg2 da como `OperationalError`, sin código SQLSTATE, también una contraseña incorrecta o un usuario del pooler que no existe: esos fallos se reconocen por el mensaje del servidor y no se reintentan, porque repetirlos no sirve y el pooler de Supabase puede bloquear la IP por intentos fallidos.
-- **Caché.** La transformación es la etapa costosa. Su clave cambia si cambian los eventos (nuevos o tardíos), las semanas, el catálogo o la versión de la transformación (`TRANSFORM_VERSION`): una corrida repetida en la misma hora sobre los mismos datos reutiliza el resultado. Vale 1 hora porque la corrida programada es semanal y las manuales se repiten sobre todo al verificar. El catálogo de locales solo cambia con una migración. Los resultados se guardan en el almacenamiento local de Prefect (`~/.prefect/storage`; en Docker, el volumen `prefect-results`), así que cada proceso tiene su propia caché.
-- **Pasos opcionales.** `save_raw_extract` guarda la extracción de la corrida sin `user_id`, `session_id` ni `request_id` (plan de telemetría, §8). `export_eval_snapshot` guarda las filas, los conteos de la corrida y cinco comprobaciones de calidad: 14 filas por semana, `waste_ratio` coherente con los costes, la moneda del país, ningún valor negativo y todas las filas escritas. Los dos se invocan con `return_state=True`: si fallan, el flow lo registra en `issues` (`save_raw_extract_failed`, `export_eval_snapshot_failed`) y la corrida termina en `completed`. Las dos carpetas quedan fuera de Git.
-- **Fallo manejado explícitamente.** La carga se invoca con `return_state=True`: si falla tras sus reintentos, el flow cierra la corrida en `failed` (`failed_task = load_weekly_location_performance` y el error) y devuelve el estado `Failed`, en lugar de dejar que la excepción se propague sola. Las demás tasks críticas también cierran la corrida antes de que el flow falle.
+- **Transformación.** Cada task llama a una función pura de `data/process/weekly_location_performance.py` con el mismo nombre: solo la orquesta. Los tests unitarios de `tests/pipelines/test_pipeline.py` llaman a estas tasks con `.fn(...)`, sin servidor ni base (§10). Las tasks de extracción llevan el rango de semanas en su nombre (`task_run_name`), para leerlo en la interfaz de Prefect.
+- **Reintentos.** El número de cada task está justificado en un comentario del código. Una `retry_condition_fn` limita los reintentos a los fallos transitorios de la base. psycopg2 da como `OperationalError`, sin código SQLSTATE, también una contraseña incorrecta o un usuario del pooler que no existe: esos fallos se reconocen por el mensaje del servidor y no se reintentan, porque repetirlos no sirve y el pooler de Supabase puede bloquear la IP por intentos fallidos. Las tasks de la transformación no se reintentan: son deterministas.
+- **Caché.** La preparación de los hechos es la etapa costosa (expandir `tags`, validar y deduplicar). Su clave cambia si cambian los eventos (nuevos o tardíos), las semanas, el catálogo o la versión de la transformación (`TRANSFORM_VERSION`, 2 desde la Parte 3): una corrida repetida en la misma hora sobre los mismos datos reutiliza los hechos, y los KPIs que siguen son sumas y conteos. Vale 1 hora porque la corrida programada es semanal y las manuales se repiten sobre todo al verificar. El catálogo de locales solo cambia con una migración. Los resultados se guardan en el almacenamiento local de Prefect (`~/.prefect/storage`; en Docker, el volumen `prefect-results`), así que cada proceso tiene su propia caché.
+- **Pasos opcionales.** `save_raw_extract` guarda la extracción de la corrida sin `user_id`, `session_id` ni `request_id` (plan de telemetría, §8). `export_eval_snapshot` guarda las filas, los conteos de la corrida y cinco comprobaciones de calidad: 14 filas por semana, `waste_ratio` coherente con los costes, la moneda del país, ningún valor negativo y todas las filas escritas. Cada uno va en su subflow opcional, invocado con `return_state=True`: si falla, el flow lo registra en `issues` y la corrida termina en `completed`. Las dos carpetas quedan fuera de Git.
+- **Fallo manejado explícitamente.** El subflow de carga se invoca con `return_state=True`: si falla tras los reintentos del upsert, el flow cierra la corrida en `failed` (`failed_task = upsert_weekly_location_performance` y el error) y devuelve el estado `Failed`, en lugar de dejar que la excepción se propague sola. Los demás subflows críticos también cierran la corrida antes de que el flow falle. Cada subflow anota en la excepción la task que falló, así que `failed_task` dice la task concreta aunque el error llegue a través del subflow.
 
 ### 5.3 States
 
@@ -438,41 +467,59 @@ Los errores siguen el formato de la API (`{"error": {"code", "message"}}`): 401 
 - **Errores:** 422 `invalid_week_range`; 409 `pipeline_run_in_progress`; 503 `orchestrator_unavailable` si Prefect no está configurado, no responde o no tiene el deployment (en los dos últimos casos, la corrida se marca `failed` con ese error).
 - **La API nunca ejecuta el ETL:** lo pone en la cola de Prefect, y el proceso `--serve` lo corre fuera del proceso de la API.
 
+### 6.4 Dashboard: `/reporte-semanal` (Parte 3)
+
+La vista del backoffice que leen Mariana y Felipe (`uis/backoffice/app/(protegido)/reporte-semanal/`), primera sección ("Reportes") de la navegación. Consume `GET /reporting/weekly-location-performance` y `GET /reporting/pipeline-runs/latest` por dos rutas propias del intermediario (`app/api/reporting/`, solo GET: el backoffice no dispara corridas).
+
+- **Período:** "Semana del lunes 16 al domingo 22 de noviembre de 2026", con semana anterior y siguiente; una semana sin calcular se explica como tal.
+- **Actualización y avisos:** cuándo se actualizaron los datos (la última corrida), y avisos si tienen más de 8 días, si la última corrida falló, si la semana está en curso (datos parciales) o si ningún local tuvo actividad (§12).
+- **Resumen por país**, lado a lado: Colombia en COP y Estados Unidos en USD, nunca sumados (briefing, §7). El ratio del país es su merma sobre sus compras.
+- **Una sección por KPI**, con su nombre y su "Qué mide" del briefing, y una barra por local de mayor a menor, separada por país, con el valor escrito.
+- **La tabla de los 14 locales**, agrupada por país. Importes en formato colombiano con su moneda; el ratio, en porcentaje.
+- **Acceso:** `admin` y `manager`; con otro rol, "Solo los administradores y los gerentes pueden ver el reporte semanal."
+
 ---
 
 ## 7. Estructura del código
 
-Las transformaciones reutilizables van en `data/process/`; la orquestación y el acceso a `reporting.*`, en `data/pipelines/`; el HTTP, en `services/reporting/`.
+Las transformaciones reutilizables van en `data/process/`; la orquestación y el acceso a `reporting.*`, en `data/pipelines/`; el HTTP, en `services/reporting/`; la vista, en `uis/backoffice/`.
 
 ```
 data/
 ├── process/                             # paquete local brasaland-process (solo Pandas)
-│   └── weekly_location_performance.py   # funciones puras (§3.3): refine_events, validate_events,
-│                                        # deduplicate_facts, keep_price_increases, week_start_of,
-│                                        # aggregate_weekly, complete_and_finalize
+│   ├── weekly_location_performance.py   # funciones puras (§3.3): prepare_weekly_location_facts, una por
+│   │                                    # KPI, assemble_weekly_location_performance, compute_waste_ratio,
+│   │                                    # detect_silent_weeks
+│   └── tests/                           # cada paso con DataFrames en memoria
 ├── pipelines/                           # paquete local brasaland-pipelines
 │   ├── PIPELINE_DESIGN.md               # este documento
-│   ├── pipeline.py                      # el flow, sus 9 tasks y hooks, la CLI y --serve (deployment)
-│   ├── repository.py                    # SQL: extracción, upsert, log de corridas y lecturas de la API
+│   ├── pipeline.py                      # flow principal, 5 subflows, sus tasks y hooks, la CLI y --serve
+│   ├── repository.py                    # SQL: extracción, conteo de telemetría, upsert, log y lecturas de la API
 │   ├── config.py                        # bloques de Prefect (Secret y configuración) y sus alternativas
 │   ├── runs.py                          # nombres, valores por defecto y semanas de una corrida (sin Prefect)
 │   ├── trigger.py                       # trigger_pipeline_run por la API REST de Prefect (sin Prefect)
 │   ├── Dockerfile                       # imagen del servicio reporting-pipeline
 │   ├── .env.example                     # REPORTING_DATABASE_URL y PREFECT_API_URL
-│   └── tests/                           # el flow contra SQLite, el disparo y las lecturas
+│   └── tests/                           # el flow y cada subflow contra SQLite, el disparo y las lecturas
 ├── raw/telemetry_events/                # extracción de cada corrida (opcional; fuera de Git)
 └── eval/weekly_location_performance/    # filas y comprobaciones de cada corrida (opcional; fuera de Git)
+
+tests/pipelines/test_pipeline.py         # tests unitarios de las tasks de KPI (Parte 3)
 
 services/
 ├── brasaland-api/migrations/005_reporting.sql   # esquema reporting, las dos tablas, permisos y RLS
 └── reporting/                           # paquete local brasaland-reporting (solo HTTP)
     ├── router.py                        # las 3 rutas de la §6
     └── schemas.py                       # modelos de respuesta
+
+uis/backoffice/                          # dashboard /reporte-semanal (§6.4)
+├── app/(protegido)/reporte-semanal/     # la página
+├── app/api/reporting/                   # intermediario de las dos lecturas
+├── components/reporte-semanal/          # período, avisos, resumen por país, KPIs y tabla
+└── lib/weekly-report.ts                 # peticiones, nombres de los KPIs, formato y avisos
 ```
 
 Prefect y python-dotenv van en el grupo de dependencias `orchestration` de `brasaland-pipelines`, que se instala por defecto con `uv sync` en `data/pipelines/` pero no viaja a la API.
-
-En la Parte 3, la extracción, la transformación y la carga pasan de tasks a **subflows** del flow principal, cada uno con sus tasks y sus pruebas.
 
 ---
 
@@ -484,8 +531,9 @@ En la Parte 3, la extracción, la transformación y la carga pasan de tasks a **
 - **Historia anterior a la captura.** Las órdenes del inventario anteriores al 2026-11-19 no tienen eventos, y el pipeline no las lee: mezclar dos fuentes del mismo hecho rompería la trazabilidad. Un backfill desde las tablas del inventario es una decisión aparte.
 - **Mermas sin coste.** Las mermas 1.0.0 (y las de productos sin entradas con coste) cuentan con coste 0 y quedan contadas en el log (§3.3, paso 6).
 - **Sin conversión de monedas** (briefing, §4): cada fila está en la moneda de su local, y COP y USD nunca se suman. La comparación entre países se hace con `waste_ratio`, que no tiene unidad.
-- **`outbound_order_created` no se extrae.** El briefing lo da como contexto de volumen y no alimenta ningún KPI ni ninguna columna de la tabla de destino. Si la Parte 3 necesita detectar anomalías de volumen, se añade entonces.
-- **Sin alertas automáticas.** Una corrida fallida queda en el log y en Prefect; notificar (correo o Slack con un bloque de Prefect) es una mejora posterior.
+- **`outbound_order_created` no se extrae.** El briefing lo da como contexto de volumen y no alimenta ningún KPI ni ninguna columna de la tabla de destino. La Parte 3 no lo necesitó: las señales de silencio (§12) cuentan la telemetría de cualquier tipo.
+- **Sin notificaciones.** Una corrida fallida, unos datos desactualizados o una semana sin señal quedan en el log, en Prefect y en los avisos del dashboard (§6.4, §12), pero nadie recibe un correo ni un mensaje: notificar (correo o Slack con un bloque de Prefect) es una mejora posterior.
+- **Alertas de precio solo como conteo semanal.** Quien registra una entrada cuyo coste dispara `ingredient_price_variance_detected` no ve ningún aviso en ese momento (el backoffice solo emite el evento), y el reporte cuenta las alertas por local, sin decir qué producto subió. Queda como tarea del inventario (decisión del desarrollador, 2026-11-23): un aviso en el formulario de entradas al guardar (la variación y la media de 90 días del proveedor), y que Lucía pueda ver qué producto o productos tuvieron alertas de precio, con un detalle por producto desde los eventos (`product_id`, `supplier_id`, `variance_pct`).
 
 ---
 
@@ -529,6 +577,16 @@ cp .env.example .env          # y rellenar REPORTING_DATABASE_URL (cadena del Se
 La CLI imprime el resumen de la corrida en JSON y termina con código 0 si la corrida quedó en `completed`; si la corrida falla, Prefect muestra el error y el código es 1. Sin conexión configurada o con un rango no válido, termina con código 2 y un mensaje, sin abrir ninguna corrida.
 
 **Con Docker** (desde la raíz): `docker compose up --build` levanta, además de la API y el backoffice, `prefect-server` y `reporting-pipeline` (que ejecuta `--serve` con `data/pipelines/.env`). `--build` hace falta si la imagen de la API es anterior a este pipeline. Una corrida a mano dentro del contenedor: `docker compose exec reporting-pipeline python pipeline.py`.
+
+**Tests** (desde la raíz, con el entorno de `data/pipelines` activado; o `uv run --project data/pipelines python -m pytest …` sin activarlo):
+
+| Comando | Qué prueba |
+|---|---|
+| `python -m pytest tests/pipelines/test_pipeline.py` | Tests unitarios de las tasks de KPI, con `.fn(...)` y eventos en memoria: uno por KPI, los cinco calculados a mano y los casos defensivos (Parte 3) |
+| `python -m pytest data/pipelines/tests` | El flow y cada subflow contra SQLite: log de corridas, idempotencia, reintentos, caché, pasos opcionales y señales de silencio; el disparo y las lecturas de la API |
+| `cd data/process && uv run pytest` | Las funciones puras de la transformación, paso a paso |
+
+**Dashboard:** `http://localhost:3001/reporte-semanal` con el backoffice en marcha (`docker compose up` o `npm run dev` en `uis/backoffice`), con una cuenta `admin` o `manager`.
 
 **Servidor de Prefect.** Sin `PREFECT_API_URL`, cada comando arranca un servidor temporal de Prefect solo para esa corrida. En Windows, ese servidor temporal escribe en su consola errores internos de su base SQLite (`UNIQUE constraint failed: task_run_state`) al registrar estados con la misma marca de tiempo. No afectan a la corrida, que termina en `completed`. Con `PREFECT_API_URL=http://localhost:4200/api`, el servidor de Docker, no aparecen, y las corridas quedan visibles en su interfaz.
 
@@ -577,3 +635,56 @@ Las decisiones de la Parte 2 (I0 a I5), tomadas con el desarrollador el 2026-11-
 | Validación | Una merma anterior a la corrección de la brecha B7 (local de Florida con `country = CO`) se rechaza como `country_mismatch` |
 | Endpoints | 200 con `X-Cache` `MISS` y `HIT`, 404, 422 (fecha y rango), 202 con la corrida ejecutada por `reporting-pipeline`, y 409 con una corrida activa |
 | CLI | `python data/pipelines/pipeline.py` completa una corrida de `production` (56 filas) con código 0 |
+
+---
+
+## 12. Producción (Parte 3): subflows, tests, dashboard y señales de silencio
+
+La Parte 3 no cambia qué calcula el pipeline: lo reorganiza para que cada etapa se pueda ejecutar, seguir y probar por separado, y pone los KPIs frente a la dirección.
+
+| Tema | Parte 2 | Parte 3 | Motivo |
+|---|---|---|---|
+| Topología | Un flow con todas sus tasks | El flow principal coordina 3 subflows (extracción, transformación y carga) y 2 opcionales (§5.1) | El enunciado pide al menos tres subflows con entradas y salidas explícitas, y los opcionales también como subflows |
+| Transformación | Una task (`transform_weekly_location_performance`) | Un subflow con ese nombre y 7 tasks: la preparación, una por KPI, el completado y el ratio (§5.2) | Los tests unitarios deben probar las tasks que calculan cada KPI |
+| Caché | La transformación entera | `prepare_weekly_location_facts` (`TRANSFORM_VERSION` = 2) | Es la parte costosa; los KPIs son sumas y conteos sobre sus hechos |
+| Carga | La task `load_weekly_location_performance` | El subflow `load_weekly_location_performance` y la task `upsert_weekly_location_performance` | El nombre de etapa pasa al subflow; `failed_task` de las corridas nuevas dice `upsert_weekly_location_performance` |
+| Ratio | Sobre los importes sin redondear | Sobre los totales de la fila, ya redondeados (§3.3, paso 9) | Es la definición del briefing (`total_waste_cost / total_purchase_cost`) y lo que muestra el dashboard; con importes de 2 decimales, el valor no cambia |
+| Tests | En `data/process/tests` y `data/pipelines/tests` | Además, `tests/pipelines/test_pipeline.py` en la raíz, con el entorno de `data/pipelines` (§10) | El enunciado fija esa ruta y ese comando; la raíz no tiene entorno de Python propio |
+| Dashboard | — | `/reporte-semanal` en el backoffice (§6.4) | Nadie de la dirección consulta un endpoint |
+
+Las decisiones de la Parte 3 (J0 a J6), tomadas con el desarrollador el 2026-11-23:
+
+| # | Decisión |
+|---|---|
+| J0 | Rama `feature/pipeline-production` desde la de la Parte 2; PR contra ella |
+| J1 | Los subflows toman los nombres de etapa del diseño; las tasks internas nombran su operación (la carga, `upsert_weekly_location_performance`) |
+| J2 | Una task por KPI sobre una función pura de `data/process/`, con el ratio como task propia; la caché, en la preparación |
+| J3 | `tests/pipelines/` con el entorno de `data/pipelines`, sin `pyproject.toml` en la raíz |
+| J4 | Ruta `/reporte-semanal` (las vistas del backoffice están en español; `/reporting` era un ejemplo del enunciado), en una sección "Reportes" que va primera |
+| J5 | Período, actualización, resumen por país, una sección por KPI con barras y la tabla completa |
+| J6 | Mejora adicional: señales de silencio (abajo) |
+
+### 12.1 Mejora adicional: señales de silencio
+
+**Pregunta que responde.** "Silencio vs. ausencia real" (Observabilidad, pregunta 1 de la Parte 1): *¿cómo distingues actividad cero de una captura fallida o de un pipeline que nunca corrió? ¿Qué señales mínimas registrarías?*
+
+**Por qué se priorizó.** El diseño ya lo señalaba (§4.4: "un 0 en un lunes normal delata un problema en la captura"; §8: sin alertas), y es el único hueco que engaña a quien lee el reporte: para Mariana, un local en ceros o un reporte desactualizado se ven igual que uno correcto. Las demás preguntas de la Parte 1 ya tenían respuesta en el código: los duplicados (deduplicación por `eventId` y por hecho), el reintento tras un fallo en la carga (upsert en una transacción), la caída de la base (reintentos y el rango de semanas como unidad de recuperación), el buffer del navegador y los reintentos de `POST /telemetry` (captura de telemetría), y las corridas concurrentes (índice único parcial, `global_limit=1` y 409).
+
+**Cómo funciona.** Tres señales, una por cada caso de la pregunta:
+
+| Caso | Señal | Dónde se ve |
+|---|---|---|
+| Captura caída: ningún evento de telemetría de ningún tipo en la semana | `count_telemetry_events` cuenta, en solo lectura, todos los eventos de cada semana del entorno; `detect_silent_weeks` marca la semana como `weeks_without_telemetry` | `issues` del log, aviso en Prefect y aviso del dashboard si la semana mostrada está en cero |
+| Actividad cero real: hay telemetría (logins, páginas) pero ningún evento de negocio | `weeks_without_business_events` | `issues` del log y aviso en Prefect; el dashboard avisa que ningún local registró actividad |
+| El pipeline no corrió | La última corrida (`GET /reporting/pipeline-runs/latest`): si la última correcta tiene más de 8 días, se saltó un lunes; si falló, también se dice | Aviso del dashboard |
+
+La corrida sigue terminando en `completed`: cero puede ser real, y la señal es para quien lee, no para detener el reporte. Con los datos actuales, las semanas anteriores al 19 de noviembre de 2026 salen como `weeks_without_telemetry`: la captura no existía todavía, y es exactamente lo que la señal debe decir.
+
+**Lo que no se hizo, y por qué.** El historial de valores recalculados (Idempotencia, pregunta 3: hoy el upsert sobrescribe el valor anterior y solo `pipeline_runs` dice qué corrida recalculó qué semanas) necesita una tabla y una migración nuevas. La comparación de volumen entre semanas (Observabilidad, pregunta 3) queda en parte cubierta, porque los conteos de cada corrida quedan en el log. Ninguna de las dos engaña a quien lee el reporte, así que quedan para después.
+
+### 12.2 Verificación (2026-11-23)
+
+- **Tests:** `tests/pipelines/test_pipeline.py`, 10 (uno por KPI, los cinco calculados a mano para una semana de Medellín Centro y cuatro defensivos); `data/process`, 30; `data/pipelines`, 41 (incluidos cada subflow por separado y las señales de silencio); backoffice, 385.
+- **Contra Supabase**, en el contenedor `reporting-pipeline`: los 5 subflows y sus tasks en Prefect; las 70 filas de una corrida (14 locales × 5 semanas) iguales a un cálculo independiente en SQL; `weeks_without_telemetry: 3` en las semanas anteriores a la captura.
+- **CLI:** `python data/pipelines/pipeline.py` desde la raíz, con el entorno de `data/pipelines`: código 0, 5 subflows, 56 filas.
+- **Dashboard:** revisado por el desarrollador con los datos de prueba registrados desde el backoffice: período, navegación entre semanas, avisos, resumen por país, KPIs y tabla.
