@@ -84,9 +84,26 @@ def _summarize(error: BaseException) -> str:
 # espera). Un error de SQL, de permisos o de datos fallaría igual en el reintento: se corta enseguida.
 _TRANSIENT_ERRORS = (OperationalError, InterfaceError, DisconnectionError, PoolTimeoutError, ConnectionError, TimeoutError)
 
+# psycopg2 también da OperationalError, sin SQLSTATE, cuando la conexión se rechaza por credenciales o
+# por un usuario que no existe. No es transitorio, y repetirlo puede hacer que el pooler de Supabase
+# bloquee la IP por intentos fallidos: se reconoce por el mensaje del servidor y no se reintenta.
+_CREDENTIAL_ERROR_MARKERS = (
+    "password authentication failed",
+    "tenant/user",  # Supavisor: usuario `rol.<project-ref>` desconocido
+    "is not permitted to log in",
+    "no pg_hba.conf entry",
+)
+
+
+def _is_credential_error(error: BaseException) -> bool:
+    message = str(getattr(error, "orig", None) or error).lower()
+    return any(marker in message for marker in _CREDENTIAL_ERROR_MARKERS)
+
 
 def _retry_on_transient_error(task, task_run, state) -> bool:
     error = state.result(raise_on_failure=False)
+    if _is_credential_error(error):
+        return False
     if isinstance(error, DBAPIError) and error.connection_invalidated:
         return True
     return isinstance(error, _TRANSIENT_ERRORS)

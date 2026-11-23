@@ -114,9 +114,21 @@ class PipelineRunNotPending(RuntimeError):
     """La corrida que registró la API ya no está en `pending` (o no existe)."""
 
 
+def with_psycopg2_driver(url: str) -> str:
+    """La cadena tal como la copia Supabase (`postgresql://...`), con el driver psycopg2 explícito.
+
+    SQLAlchemy 2.1 usa por defecto psycopg (v3) para `postgresql://`, que no está instalado: sin
+    indicarlo, la conexión falla con ModuleNotFoundError. Lo mismo hace la API (`app.core.database`).
+    """
+    for scheme in ("postgresql://", "postgres://"):
+        if url.startswith(scheme):
+            return "postgresql+psycopg2://" + url.removeprefix(scheme)
+    return url
+
+
 def create_reporting_engine(url: str) -> Engine:
     """Motor de SQLAlchemy para la cadena del rol `reporting_pipeline`."""
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(with_psycopg2_driver(url), pool_pre_ping=True)
 
 
 # --- Extracción (solo lectura) ------------------------------------------------------------------

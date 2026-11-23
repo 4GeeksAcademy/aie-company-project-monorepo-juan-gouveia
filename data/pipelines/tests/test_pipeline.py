@@ -203,6 +203,32 @@ def test_a_non_transient_error_is_not_retried_and_closes_the_run(database, monke
     assert (failed["status"], failed["failed_task"]) == ("failed", "extract_business_events")
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        'FATAL:  password authentication failed for user "reporting_pipeline"',
+        "FATAL:  (ENOTFOUND) tenant/user reporting_pipeline.abc not found",
+    ],
+)
+def test_a_credential_error_is_not_retried(database, monkeypatch, message):
+    # psycopg2 lo da como OperationalError, sin SQLSTATE: reintentarlo no sirve y el pooler puede
+    # bloquear la IP por intentos fallidos.
+    seed(database)
+    calls = {"n": 0}
+
+    def rejected_fetch(conn, weeks, environment):
+        calls["n"] += 1
+        raise OperationalError("SELECT", {}, Exception(message))
+
+    monkeypatch.setattr(repository, "fetch_business_events", rejected_fetch)
+    monkeypatch.setattr(pipeline, "extract_business_events", pipeline.extract_business_events.with_options(retry_delay_seconds=0))
+
+    with pytest.raises(OperationalError):
+        run()
+
+    assert calls["n"] == 1
+    assert runs(database)[-1]["failed_task"] == "extract_business_events"
+
 def test_the_transformation_is_cached_while_its_inputs_do_not_change(database, monkeypatch):
     seed(database)
     calls = {"n": 0}

@@ -187,3 +187,19 @@ def test_reads_a_week_with_location_names_ordered_by_country_and_location(databa
 def test_without_any_computed_week_there_is_nothing_to_read(database):
     with database.connect() as conn:
         assert repository.read_weekly_location_performance(conn) is None
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("postgresql://u:p@h:5432/postgres", "postgresql+psycopg2://u:p@h:5432/postgres"),
+        ("postgres://u:p@h:5432/postgres", "postgresql+psycopg2://u:p@h:5432/postgres"),
+        ("postgresql+psycopg2://u:p@h/postgres", "postgresql+psycopg2://u:p@h/postgres"),
+        ("sqlite://", "sqlite://"),
+    ],
+)
+def test_the_supabase_url_uses_the_installed_psycopg2_driver(url, expected):
+    # SQLAlchemy 2.1 elige psycopg (v3) para postgresql://, que no está instalado.
+    assert repository.with_psycopg2_driver(url) == expected
+    if url.startswith("postgres"):
+        assert repository.create_reporting_engine(url).dialect.driver == "psycopg2"
