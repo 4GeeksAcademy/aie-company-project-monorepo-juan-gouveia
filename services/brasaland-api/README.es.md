@@ -496,6 +496,21 @@ Métricas operacionales calculadas sobre `telemetry_events` para el equipo de in
 - **Cache:** en memoria, 60 s, por combinación de parámetros (`2026-11-14` y `2026-11-14T00:00:00Z` son la misma). Sin parámetros, el período se resuelve una vez y se guarda con el resultado, así que dos peticiones dentro del TTL reciben el mismo JSON. Cabecera `X-Cache: HIT` o `MISS`. El reporte puede ir hasta 60 s por detrás de la tabla.
 - **Fallos de la base:** `503 telemetry_report_unavailable`, sin guardar nada en la cache, y una línea de error en `api.telemetry` (si falta la tabla, pide ejecutar la migración 002).
 
+## Esquema `reporting` (pipeline de desempeño de negocio)
+
+Destino del pipeline que produce el "Reporte Semanal de Costo y Merma por Local" ([diseño](../../data/pipelines/PIPELINE_DESIGN.md)). Lo crea solo [`migrations/005_reporting.sql`](./migrations/005_reporting.sql), que necesita la 002 y la 004:
+
+- **`reporting.weekly_location_performance`:** la tabla del briefing, sin cambios, con su `unique (location_id, week_start)` para el upsert.
+- **`reporting.pipeline_runs`:** el log de corridas, con un índice único parcial que impide dos corridas activas del mismo pipeline.
+- **Rol `reporting_pipeline`:** el pipeline se conecta con él, no con `postgres`. Lee `telemetry_events` y `locations` (con una política de RLS de solo lectura) y solo puede leer, insertar y actualizar en `reporting.*`. La migración lo crea sin login; la contraseña se le da a mano y nunca va en el repositorio.
+- **Cerradas a la API REST de Supabase:** RLS activado y ningún permiso para `anon` ni `authenticated`, como las demás.
+
+**Cómo ejecutarla:**
+
+1. Supabase → SQL Editor → pegar la migración y ejecutarla. Es idempotente. Sus tres consultas finales muestran RLS activado en las dos tablas, los permisos del rol y ninguna fila para `anon` ni `authenticated`.
+2. En una consulta aparte, que no se guarda como snippet: `ALTER ROLE reporting_pipeline WITH LOGIN PASSWORD '<contraseña>';`.
+3. La cadena de conexión del pipeline es la del Session pooler con ese usuario: `postgresql://reporting_pipeline.<ref>:<contraseña>@<host>.pooler.supabase.com:5432/postgres`. Va en `REPORTING_DATABASE_URL` o en el bloque `Secret` de Prefect `brasaland-reporting-db`.
+
 ## Log de timing
 
 `app/core/timing.py` registra una línea por petición en el logger `api.timing`, con el método, la ruta (sin la query), el estado, la duración dentro de la API y el id de la petición:
