@@ -185,6 +185,30 @@ def fetch_business_events(conn: Connection, weeks: list[date], environment: str)
     return pd.DataFrame(result.mappings().all(), columns=["id", "timestamp", "event_type", "tags"])
 
 
+# Señal de silencio (diseño, §12): cuántos eventos de telemetría de cualquier tipo llegaron en una
+# semana. Un conteo, no las filas: la telemetría técnica (latencia, páginas) es mucho más voluminosa
+# que la de negocio. Usa el índice de `timestamp`.
+_TELEMETRY_COUNT_SQL = text(
+    """
+    SELECT count(*)
+    FROM telemetry_events
+    WHERE "timestamp" >= :window_start
+      AND "timestamp" < :window_end
+      AND tags->>'environment' = :environment
+    """
+).bindparams(bindparam("window_start", type_=_UTC_DATETIME), bindparam("window_end", type_=_UTC_DATETIME))
+
+
+def count_telemetry_events_per_week(conn: Connection, weeks: list[date], environment: str) -> dict[date, int]:
+    """Eventos de telemetría de cualquier tipo en cada semana de la corrida (solo lectura)."""
+    counts = {}
+    for week in sorted(weeks):
+        window_start, window_end = week_window([week])
+        params = {"window_start": window_start, "window_end": window_end, "environment": environment}
+        counts[week] = int(conn.execute(_TELEMETRY_COUNT_SQL, params).scalar_one())
+    return counts
+
+
 def fetch_locations(conn: Connection) -> pd.DataFrame:
     """El catálogo de los 14 locales (migración 004)."""
     result = conn.execute(_LOCATIONS_SQL)
