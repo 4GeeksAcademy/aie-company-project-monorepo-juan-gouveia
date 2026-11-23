@@ -10,7 +10,6 @@ from itertools import count
 
 import pandas as pd
 import pytest
-
 from brasaland_process.weekly_location_performance import (
     OUTPUT_COLUMNS,
     build_weekly_location_performance,
