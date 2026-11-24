@@ -1,0 +1,8 @@
+# Script nocturno de telemetría (ticket #DEV-53). Lo lee supercronic en el contenedor nightly-scheduler
+# (services/jobs/Dockerfile), que corre con TZ=UTC.
+#
+# Cada día a las 08:00 UTC: las 03:00 en Bogotá y las 03:00 o 04:00 en Florida, sin actividad en los
+# locales, y con 8 horas de margen para los lotes de telemetría del día anterior que lleguen tarde.
+# supercronic no lanza una ejecución mientras la anterior siga en marcha; aun así, el lock que cuenta es
+# el estado processing de ops.job_runs, que vale también entre máquinas y frente a ejecuciones a mano.
+0 8 * * * cd /repo && python scripts/nightly_export.py

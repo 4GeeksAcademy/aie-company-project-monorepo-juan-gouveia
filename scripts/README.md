@@ -12,6 +12,7 @@ This folder contains **helper scripts** for the monorepo: development automation
 | [`incident-report/`](./incident-report/README.md) | Validates and summarizes the operational incidents CSV, and exports the metrics to `data/process/results.csv` (Python, no dependencies; the rules live in `packages/shared`). |
 | [`seed_incidents.py`](./seed_incidents.py) | Loads the historical incidents CSV into the API's incident manager: validates each row with the `packages/shared` rules, transforms it to the manager's model (status, category, title, date and location) with origin `customer`, and inserts only the rows that were not loaded before. It needs the API environment (TinyDB). |
 | [`seed_volume.py`](./seed_volume.py) | Loads realistic volume to measure API performance (caching task): 150 ingredients and about 21,000 orders in Supabase, and 10,000 incidents in TinyDB. Everything is marked (`VOL-`) and `--clear` removes it without touching real data. It needs the API environment and its `.env`. |
+| [`nightly_export.py`](./nightly_export.py) | Nightly telemetry script (ticket #DEV-53): exports the previous day's (UTC) `telemetry_events` to CSV in `data/raw/telemetry_exports/`, launches the business performance pipeline as a subprocess and records every execution in `ops.job_runs`, with a lock and per-date idempotency. The `nightly-scheduler` service triggers it every night (crontab in [`nightly_export.crontab`](./nightly_export.crontab)). It needs the `services/jobs` environment and its `.env`. |
 
 ## `seed_incidents.py`
 
@@ -57,4 +58,32 @@ Tests (10, with temporary SQLite and TinyDB; they do not touch Supabase):
 
 ```bash
 uv run --project services/brasaland-api python -m unittest scripts/test_seed_volume.py
+```
+
+## `nightly_export.py`
+
+From the repository root, with the [`services/jobs`](../services/jobs/README.md) environment and its `.env` (`JOBS_DATABASE_URL`, the `nightly_jobs` role's connection string):
+
+```bash
+uv run --project services/jobs python scripts/nightly_export.py                         # yesterday in UTC
+TARGET_DATE=2026-11-20 uv run --project services/jobs python scripts/nightly_export.py  # another date
+```
+
+On every execution:
+
+1. **Target date:** `TARGET_DATE` (`YYYY-MM-DD`) or, without it, yesterday in UTC (`datetime.now(timezone.utc).date() - timedelta(days=1)`). Only finished days are accepted: the CSV of a day in progress would be incomplete and never exported again.
+2. **State:** `run_job` from `services/jobs` closes abandoned executions, skips the date if it already has a `completed` execution (duplicate skip), silently aborts if another instance is `processing` (the lock) and moves the row from `pending` to `processing` before starting.
+3. **CSV:** the day's `telemetry_events` rows (00:00 to 00:00 UTC, in order) to `data/raw/telemetry_exports/telemetry_YYYY-MM-DD.csv`, **only if the file does not exist**. Columns `id`, `timestamp` (UTC), `service`, `event_type`, `level`, `value`, `message` and `tags` (JSON). It is written to a temporary file and renamed at the end, so no half-written CSV is left behind. It is a backup: the pipeline reads from the database, not from this file.
+4. **Pipeline:** `python data/pipelines/pipeline.py --week-from … --week-to … --trigger scheduled`, with the same interpreter, over the 4 ISO weeks closed as of `target_date + 1` (without `TARGET_DATE`, the pipeline's default run). The result is read from the exit code, with a time limit (`NIGHTLY_PIPELINE_TIMEOUT_MINUTES`, 90 by default).
+5. **Closing:** `completed` if all went well; `failed` with the message on any exception. `SIGTERM` also goes through the `finally`.
+
+- **Exit codes:** 0 if it finished, was skipped as a duplicate or was cancelled by the lock; 1 if it failed; 2 if the configuration is invalid (no row is created).
+- **Logs:** to `stderr`, one line per event with a UTC timestamp, level, job and status (`INFO` for start, end, skip and cancellation; `ERROR` with the traceback for failures). The pipeline's output is interleaved.
+- **Optional** (in `services/jobs/.env`): `NIGHTLY_STALE_MINUTES` (120), `NIGHTLY_PIPELINE_TIMEOUT_MINUTES` (90, lower than the former), `NIGHTLY_PIPELINE_ENVIRONMENT` (the pipeline's `--environment`; locally, `development`) and `PREFECT_API_URL` (without it, each execution starts a temporary Prefect server).
+- **Trigger:** the `nightly-scheduler` service in `docker-compose.yml` runs the script with supercronic according to [`nightly_export.crontab`](./nightly_export.crontab): `0 8 * * *` in UTC (03:00 in Bogotá).
+
+Tests (31, with a temporary SQLite and a simulated pipeline; they do not touch Supabase):
+
+```bash
+uv run --project services/jobs python -m unittest scripts/test_nightly_export.py
 ```

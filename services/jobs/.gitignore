@@ -1,0 +1,4 @@
+# Entorno y metadatos que genera uv sync (instalación editable del paquete).
+.venv/
+*.egg-info/
+build/

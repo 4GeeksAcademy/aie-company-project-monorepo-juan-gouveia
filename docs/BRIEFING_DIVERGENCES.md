@@ -32,6 +32,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 19. [Pipeline de desempeño de negocio](#pipeline-de-desempeño-de-negocio) (briefing "Pipeline de Desempeño de Negocio" y enunciado de la Parte 1, rama `feature/pipeline-design`)
 20. [Pipeline de desempeño de negocio resiliente](#pipeline-de-desempeño-de-negocio-resiliente) (enunciado de la Parte 2, rama `feature/pipeline-implementation`)
 21. [Pipeline a producción: subflows, tests y dashboard](#pipeline-a-producción-subflows-tests-y-dashboard) (enunciado de la Parte 3, rama `feature/pipeline-production`)
+22. [Script nocturno de telemetría](#script-nocturno-de-telemetría) (ticket #DEV-53, rama `feature/nightly-export`)
 
 ---
 
@@ -1919,3 +1920,103 @@ Como en el resto del proyecto, el trabajo va en un commit por fase y el último 
 | `telemetry_events` y `analysis.py` sin modificar | ✅ | El pipeline lee `telemetry_events` con un rol sin escritura; `services/telemetry/` no cambió en la rama |
 | Dashboard en `uis/backoffice/` con cada KPI etiquetado, desde `services/reporting/` | ✅ | `/reporte-semanal`: los cinco KPIs con su nombre del briefing, el período en palabras, vía `GET /reporting/weekly-location-performance` |
 | Legible para un stakeholder no técnico | ✅ | Resumen por país, una sección por KPI con lo que mide, importes con su moneda, avisos en lenguaje llano; revisado por el desarrollador |
+
+## Script nocturno de telemetría
+
+Ticket #DEV-53, en la rama `feature/nightly-export`. `scripts/nightly_export.py` se ejecuta cada noche fuera de la API: exporta a CSV los `telemetry_events` del día anterior en UTC (o de `TARGET_DATE`), lanza el pipeline del Hito 6 como subproceso y registra cada ejecución en `ops.job_runs` (`pending → processing → completed | failed`), con `processing` como único lock e idempotencia por `(job_name, target_date)`. `job_runs` no sustituye a `reporting.pipeline_runs`: el script registra la orquestación y el pipeline sigue registrando su ETL. Coincide con el ticket en lo siguiente:
+
+- **Modelo de datos:** `job_runs` con `id`, `job_name`, `target_date` (obligatorio), `status` con los cuatro valores exactos, `started_at`, `finished_at`, `error_message` y `created_at`; índice en `(job_name, target_date)`; migración `services/brasaland-api/migrations/006_job_runs.sql`; sin fusionar con `pipeline_runs`.
+- **Script:** `scripts/nightly_export.py`, ejecutable con `python scripts/nightly_export.py` (con el entorno de `services/jobs`); `TARGET_DATE` o ayer en UTC; CSV solo si no existe; pipeline como subproceso tras el export; resultado en `job_runs`.
+- **Control de estado:** módulo `job_runner` en `services/` (`services/jobs/job_runner.py`), con `has_processing_lock` y `has_completed_for_date`; toda excepción pasa la fila a `failed` con el mensaje y se registra en el log con su traza.
+- **Disparador:** contenedor scheduler dedicado (`nightly-scheduler`, supercronic), fuera del proceso de FastAPI: sin APScheduler, `@repeat_every` ni hooks de `lifespan`.
+- **Observabilidad:** `INFO` para inicio, fin, omisión y cancelación; `ERROR` para las excepciones; cada línea con timestamp, nombre del job y estado.
+
+Las decisiones (N1 a N12) se tomaron con el desarrollador el 24 de noviembre de 2026; están al final de esta sección. El cambio en el pipeline del Hito 6 está en la §13 de `data/pipelines/PIPELINE_DESIGN.md`.
+
+> **Estado:** completa. Un commit por fase, hechos por el desarrollador: Fase 0 (estado del proyecto, `44c142e`), Fase 1 (migración 006, `e975d44`), Fase 2 (`services/jobs`, `4a277bd`), Fase 3 (script, `0cbd48d`), Fase 4 (disparador, `6ec42eb`) y Fase 6 (documentación). La Fase 5, la verificación contra Supabase, no cambió el repositorio.
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Ruta del CSV | `data/raw/telemetry_YYYY-MM-DD.csv` | `data/raw/telemetry_exports/telemetry_YYYY-MM-DD.csv`, fuera de Git | Mantener ordenada `data/raw/` |
+| Comando del pipeline | `python -m data.pipelines.telemetry_kpi_daily.run --no-prefect` "o tu entry point CLI del Hito 6" | `python data/pipelines/pipeline.py --week-from … --week-to … --trigger scheduled`, con Prefect | Es el entry point del Hito 6; no existe un pipeline diario ni un modo sin Prefect |
+| Disparo programado del pipeline | Ejecución programada de los lunes (Partes 2 y 3) | Solo el job nocturno; la ejecución de Prefect se conserva sin horario | Un único programador para el mismo pipeline |
+| "Registra la cancelación" y "registra omisión por duplicado" | Sin especificar dónde | En el log (`INFO`), sin fila nueva en `job_runs` | `status` solo admite los cuatro estados, y así dos ejecuciones dejan la tabla igual que una |
+| "Sin tabla o columna lock aparte" | El estado `processing` es el lock | El estado `processing`, garantizado por un índice único parcial | Sin el índice, dos instancias simultáneas pueden pasar la comprobación a la vez |
+| `TARGET_DATE` | Fechas arbitrarias | Fechas arbitrarias, siempre días ya terminados en UTC | El CSV de un día a medias quedaría incompleto para siempre |
+| Destino del PR | `main` | `feature/pipeline-production` | Los PR #17 a #27 siguen abiertos |
+
+### 1. Los CSV van en `data/raw/telemetry_exports/`
+
+El ticket deja el archivo directamente en `data/raw/` (`telemetry_2025-01-15.csv`). Como se genera uno por noche, en pocas semanas `data/raw/` acumularía decenas de archivos junto a los datos fuente (`incidents-brasaland.csv`). Una subcarpeta propia mantiene `data/raw/` ordenada, como ya hace `data/raw/telemetry_events/` con las extracciones del pipeline. El nombre del archivo es el del ticket. La subcarpeta está fuera de Git: la columna `tags` lleva `user_id`, `session_id` y `request_id` seudonimizados, y un archivo diario haría crecer el repositorio sin límite.
+
+**Coste:** la ruta no coincide con el ejemplo del ticket, y el respaldo solo existe en la máquina que ejecuta el script.
+
+### 2. El pipeline se lanza con su CLI del Hito 6
+
+El comando de referencia del ticket supone un pipeline diario con un modo sin Prefect. El del Hito 6 es semanal y siempre corre con Prefect. El script lo lanza como subproceso con `python data/pipelines/pipeline.py`, con su mismo intérprete, y le pasa las 4 semanas ISO cerradas a fecha de `target_date + 1`: sin `TARGET_DATE` equivale a la corrida por defecto, y con `TARGET_DATE` la ventana es siempre la misma para la misma fecha. Nunca escribe semanas incompletas en `reporting.weekly_location_performance`. El resultado se lee del código de salida (el pipeline cierra su `pipeline_runs` en `failed` y termina con error), con un tiempo máximo de 90 minutos. Sin `PREFECT_API_URL`, cada ejecución arranca un servidor temporal de Prefect.
+
+El CLI suma la opción `--trigger {manual,scheduled}` (`manual` por defecto, el comportamiento anterior): el script pasa `scheduled`, y `pipeline_runs.trigger` sigue distinguiendo la corrida programada de las manuales, sin cambios en la migración 005 ni en la API.
+
+**Coste:** casi todas las noches se recalculan semanas que no cambiaron (es idempotente y recoge los eventos que llegan tarde), y el servidor temporal añade unos segundos.
+
+### 3. El job nocturno es el único disparador programado
+
+Las Partes 2 y 3 dejaron una ejecución programada de Prefect los lunes a las 06:00 (America/Bogota) sobre las mismas 4 semanas que ahora recalcula el job nocturno. Mantener las dos habría duplicado el cálculo de los lunes y repartido las ejecuciones programadas entre `job_runs` y Prefect. Además, si coincidieran, la segunda fallaría (una sola corrida activa por pipeline). Se quita solo el horario: la ejecución de Prefect sigue existiendo para `POST /reporting/pipeline-runs` y el disparo manual del backoffice. El lunes por la mañana los datos están igual de frescos, porque la corrida de esa noche (08:00 UTC, 03:00 en Bogotá) ya incluye la semana cerrada el domingo.
+
+**Coste:** cambia un detalle de las Partes 2 y 3; `PIPELINE_DESIGN.md` (§5.4, §10 y §13) y los README del pipeline lo explican.
+
+### 4. La cancelación y la omisión se registran en el log
+
+El ticket pide que la instancia bloqueada "registre la cancelación" y que la ejecución repetida "registre la omisión por duplicado", pero `status` solo admite `pending`, `processing`, `completed` y `failed`, con los valores exactos del ticket. Escribirlas como `failed` daría falsos fallos, y como `completed`, ejecuciones que no hicieron nada; con una columna nueva, la tabla tampoco quedaría igual tras dos ejecuciones. Por eso se registran en el log con nivel `INFO` (timestamp, job, estado `skipped` o `cancelled` y fecha), que es donde el apartado de observabilidad pide la omisión por duplicado, y las comprobaciones se hacen antes de crear la fila `pending`. Así, ejecutar dos veces deja `job_runs` exactamente igual que una vez.
+
+La única excepción es la instancia que pierde la carrera del índice (apartado 5): ya había creado su fila `pending`, que no puede quedarse así, y la cierra como `failed` con `error_message = 'lock_held: …'`.
+
+**Coste:** la cancelación y la omisión normales no dejan rastro en la base, solo en el log.
+
+### 5. Un índice único parcial garantiza el lock
+
+El lock es el estado `processing`, como pide el ticket. Pero si cada instancia comprueba `has_processing_lock` y después pasa su fila a `processing`, dos instancias lanzadas a la vez pueden pasar la comprobación en el mismo instante, justo la prueba del criterio de evaluación. El índice único parcial `uq_job_runs_one_processing ON ops.job_runs (job_name) WHERE status = 'processing'` hace que la segunda transición falle de forma atómica. No guarda nada nuevo: no es una tabla ni una columna de lock, solo impide que el estado `processing` se duplique. Es el mismo patrón que `uq_pipeline_runs_one_active` del pipeline. En la verificación contra Supabase, dos instancias pasaron la comprobación en el mismo segundo y el índice decidió.
+
+**Coste:** un revisor estricto podría verlo como un mecanismo aparte; este apartado lo justifica.
+
+### 6. `TARGET_DATE` solo admite días terminados
+
+`TARGET_DATE` acepta cualquier fecha anterior a hoy en UTC. Con hoy o una fecha futura, el script termina con código 2 sin crear ninguna fila: el CSV de un día sin terminar quedaría incompleto y, como nunca se sobrescribe, ese día no se volvería a exportar. El formato también se valida estrictamente (`YYYY-MM-DD`).
+
+**Coste:** ninguno práctico; para volver a exportar un día hay que borrar su CSV.
+
+### 7. El PR va contra la rama anterior
+
+El ticket pide el PR hacia `main`. Como los PR #17 a #27 siguen abiertos, el PR va contra `feature/pipeline-production`, como el resto de la cadena, para que solo muestre los commits de este ticket.
+
+### Decisiones
+
+- **N1, semanas:** las 4 semanas ISO cerradas a fecha de `target_date + 1`.
+- **N2, pipeline:** subproceso con el CLI del Hito 6, con Prefect; resultado por el código de salida.
+- **N3, un disparador:** se quita el horario de los lunes del deployment de Prefect.
+- **N4, CSV:** `data/raw/telemetry_exports/`, fuera de Git (apartado 1).
+- **N5, `job_runner`:** paquete `services/jobs/` (`brasaland-jobs`), solo SQLAlchemy y psycopg2, sin FastAPI.
+- **N6, esquema:** `ops.job_runs`, un esquema propio para la capa de orquestación, como `reporting` para la de negocio.
+- **N7, rol:** `nightly_jobs`, que solo lee `telemetry_events` y lee, inserta y actualiza `ops.job_runs` (sin `DELETE`); `JOBS_DATABASE_URL`.
+- **N8, disparador:** contenedor `nightly-scheduler` con supercronic v0.2.51 (sha256 fijado), `0 8 * * *` en UTC: 03:00 en Bogotá y 03:00 o 04:00 en Florida, sin actividad en los locales y con 8 horas de margen para la telemetría que llega tarde. Se eligió frente al crontab del sistema operativo porque el equipo de desarrollo es Windows (sin crontab) y porque el contenedor es reproducible y es la opción que el ticket recomienda para producción.
+- **N9, atomicidad del lock:** índice único parcial (apartado 5).
+- **N10, cancelación y omisión:** en el log (apartado 4).
+- **N11, filas abandonadas:** `SIGTERM` pasa por el `finally`; un `SIGKILL` no, así que al arrancar se cierran como `failed` (`abandoned: …`) las filas abiertas con más de `NIGHTLY_STALE_MINUTES` (120). El tiempo máximo del pipeline (90) debe ser menor.
+- **N12, `--trigger`:** la corrida del script queda como `scheduled` en `pipeline_runs` (apartado 2).
+
+### Verificación de los criterios
+
+Contra Supabase el 24 de noviembre de 2026, con la telemetría real (entorno `development`), desde el host y desde el contenedor `nightly-scheduler`.
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| Proceso independiente: no importa ni ejecuta código de FastAPI en el hilo principal | ✅ | `services/jobs` no depende de FastAPI; una prueba importa el script en un proceso nuevo y comprueba que no carga `fastapi`, `starlette`, `app` ni `prefect`; el disparo es un contenedor aparte |
+| Máquina de estados implementada y `job_runs` refleja el estado real, con `target_date` | ✅ | 9 ejecuciones reales: 6 `completed` y 3 `failed` (`lock_held`, `PipelineFailed` y `abandoned`), cada una con su fecha, sus timestamps y su mensaje |
+| `processing` como lock sin mecanismo aparte, demostrable con dos instancias a la vez | ✅ | Dos instancias lanzadas a la vez: una `completed`, la otra cancelada por el índice (`lock_held`); una segunda instancia 3 s después, cancelada sin fila |
+| Idempotente por `target_date`: dos ejecuciones el mismo día equivalen a una | ✅ | La segunda ejecución del 23-nov se omitió: sin fila nueva, CSV idéntico (sha256) y sin relanzar el pipeline; desde el contenedor, la misma fecha cada 20 s: una `completed` y el resto omitidas |
+| Ningún registro queda en `processing` tras un fallo (`try/except/finally`) | ✅ | Fallo forzado del pipeline: `failed` con `PipelineFailed: …` y código 1; `docker kill` (SIGKILL) a mitad: la fila quedó en `processing` y la siguiente ejecución la cerró como `abandoned`; estado final sin filas en `processing` |
+| CSV en `data/raw/` con el nombre correcto y los datos de `telemetry_events` del día (solo backup) | ✅ | `data/raw/telemetry_exports/telemetry_2026-11-23.csv` con las 106 filas del día; el pipeline sigue leyendo de la base (apartado 1) |
+| `job_runs` y `pipeline_runs` coexisten sin duplicar responsabilidades | ✅ | 6 corridas `scheduled` en `pipeline_runs`, una por cada `completed` de `job_runs`; las ejecuciones canceladas, omitidas o muertas antes del pipeline no dejan corrida |
+| Logs con timestamp, nombre del job y estado en cada evento | ✅ | `2026-11-24T12:12:15Z \| INFO \| nightly_export \| processing \| target_date=2026-11-23 \| …`; `ERROR` con la traza en los fallos |
+| Disparador configurado y expresión cron documentada en el PR | ✅ | `scripts/nightly_export.crontab` (`0 8 * * *`, UTC) en el servicio `nightly-scheduler`; `supercronic -test` lo da por válido y lanzó el script desde el contenedor |
+| `TARGET_DATE` permite ejecutar el script sobre fechas arbitrarias | ✅ | Ejecuciones del 18 al 23 de noviembre con `TARGET_DATE`, sin tocar el código (apartado 6) |

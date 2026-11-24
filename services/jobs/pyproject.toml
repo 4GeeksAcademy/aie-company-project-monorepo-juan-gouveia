@@ -1,0 +1,43 @@
+[project]
+name = "brasaland-jobs"
+version = "0.1.0"
+description = "Control de estado de los jobs programados de Brasaland (ops.job_runs): máquina de estados, lock e idempotencia."
+requires-python = ">=3.11"
+# Solo lo que necesita job_runner: sin FastAPI ni nada de la API. El script nocturno es un proceso
+# independiente (ticket #DEV-53, criterio 1), y este paquete lo garantiza por construcción.
+dependencies = [
+    # ops.job_runs (migración 006): PostgreSQL en Supabase, SQLite en las pruebas.
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9.13",
+]
+
+[dependency-groups]
+# El entorno de scripts/nightly_export.py (uv run --project services/jobs ...): no viaja a quien instala
+# el paquete. El script usa compute_weeks de brasaland_pipelines.runs (sin Prefect) y lanza el pipeline
+# del Hito 6 como subproceso con este mismo intérprete, así que el entorno necesita también Prefect y
+# python-dotenv. Prefect, en la versión del servidor de docker-compose.yml y de data/pipelines/uv.lock.
+script = [
+    "brasaland-pipelines",
+    "prefect==3.9.4",
+    "python-dotenv>=1.0",
+]
+dev = ["pytest>=8"]
+
+[tool.uv]
+default-groups = ["script", "dev"]
+
+[tool.uv.sources]
+brasaland-pipelines = { path = "../../data/pipelines", editable = true }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Esta carpeta es el paquete: services/jobs/job_runner.py se importa como brasaland_jobs.job_runner.
+# Así el módulo queda en services/, como pide el ticket.
+[tool.setuptools]
+package-dir = { "brasaland_jobs" = "." }
+packages = ["brasaland_jobs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

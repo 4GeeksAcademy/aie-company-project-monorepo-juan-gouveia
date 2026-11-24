@@ -10,5 +10,9 @@ data/process/results.csv
 data/raw/telemetry_events/
 data/eval/weekly_location_performance/
 
+# Copia de seguridad diaria de telemetry_events que exporta scripts/nightly_export.py (#DEV-53): lleva
+# los seudónimos de usuario y sesión de `tags`, y un archivo por día haría crecer el repositorio.
+data/raw/telemetry_exports/
+
 # Caché de bytecode de Python.
 __pycache__/

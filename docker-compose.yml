@@ -6,7 +6,10 @@
 #   api -> API de Brasaland en http://localhost:8000 (Uvicorn con --reload; documentación en /docs)
 #   prefect-server -> servidor de Prefect en http://localhost:4200 (interfaz y API del orquestador)
 #   reporting-pipeline -> pipeline del Reporte Semanal de Costo y Merma por Local (pipeline.py --serve):
-#     la corrida de los lunes y las manuales que pide la API. Lee su conexión de data/pipelines/.env.
+#     las corridas manuales que pide la API. Lee su conexión de data/pipelines/.env.
+#   nightly-scheduler -> script nocturno de telemetría (#DEV-53): supercronic ejecuta cada día a las
+#     08:00 UTC scripts/nightly_export.py (export del CSV y corrida programada del pipeline). Lee su
+#     conexión de services/jobs/.env y la del pipeline de data/pipelines/.env.
 # El código se monta desde el host (bind mounts): los cambios se ven sin reconstruir las imágenes.
 # Las variables se leen del .env de la raíz y se interpolan aquí con ${VARIABLE}; ningún valor real
 # vive en este archivo. Cada servicio recibe solo las variables que necesita.
@@ -127,6 +130,40 @@ services:
       - prefect-results:/home/brasaland/.prefect
     env_file:
       # REPORTING_DATABASE_URL: la cadena del rol reporting_pipeline (ver data/pipelines/.env.example).
+      - path: ./data/pipelines/.env
+        required: false
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - brasaland-net
+
+  nightly-scheduler:
+    # Disparador del script nocturno (#DEV-53): un contenedor dedicado, fuera del proceso de la API. La
+    # expresión cron está en scripts/nightly_export.crontab (0 8 * * *, UTC).
+    build:
+      context: ./services
+      dockerfile: jobs/Dockerfile
+      additional_contexts:
+        # data/pipelines y data/process: el pipeline que el script lanza como subproceso.
+        data: ./data
+        scripts: ./scripts
+    volumes:
+      # El código del host: el script, su crontab, job_runner y el pipeline.
+      - ./services/jobs:/repo/services/jobs
+      - ./scripts:/repo/scripts
+      # También la salida: el CSV en data/raw/telemetry_exports y las del pipeline (fuera de Git).
+      - ./data:/repo/data
+      # Resultados cacheados de Prefect del pipeline, compartidos con reporting-pipeline.
+      - prefect-results:/home/brasaland/.prefect
+    env_file:
+      # JOBS_DATABASE_URL: la cadena del rol nightly_jobs (ver services/jobs/.env.example).
+      - path: ./services/jobs/.env
+        required: false
+      # REPORTING_DATABASE_URL: la del rol reporting_pipeline, para el subproceso del pipeline.
       - path: ./data/pipelines/.env
         required: false
     environment:

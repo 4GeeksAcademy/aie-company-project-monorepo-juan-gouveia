@@ -1,5 +1,6 @@
-# Imagen del servicio reporting-pipeline: sirve el deployment de los lunes del pipeline del Reporte
-# Semanal de Costo y Merma por Local (`python pipeline.py --serve`) y ejecuta las corridas que pide la API.
+# Imagen del servicio reporting-pipeline: sirve el deployment del pipeline del Reporte Semanal de Costo y
+# Merma por Local (`python pipeline.py --serve`) y ejecuta las corridas manuales que pide la API. La
+# corrida programada la lanza cada noche el servicio nightly-scheduler (ticket #DEV-53).
 #
 # Se construye desde docker-compose.yml (raíz) con `context: ./data`. Instala lo fijado en
 # data/pipelines/uv.lock, con Prefect (grupo orchestration) y sin las pruebas. El entorno vive en

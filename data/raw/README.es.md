@@ -21,3 +21,10 @@ Esta carpeta está pensada para almacenar **datos en bruto** (raw) relacionados 
 - **Contenido:** las semanas, el entorno y los eventos de negocio leídos (`id`, `timestamp`, `event_type` y las propiedades de negocio de `tags`).
 - **Privacidad:** sin `user_id`, `session_id` ni `request_id` (plan de telemetría, §8).
 - **Versionado:** ignorada por Git (`.gitignore` raíz). Se puede borrar: el pipeline no la lee.
+
+### `telemetry_exports/` (script nocturno, fuera de Git)
+
+- **Origen:** [`scripts/nightly_export.py`](../../scripts/README.es.md#nightly_exportpy) (ticket #DEV-53) exporta cada noche las filas de `telemetry_events` del día anterior (UTC) a `telemetry_YYYY-MM-DD.csv`, solo si el archivo no existe. Es una copia de seguridad para auditoría y recuperación: el pipeline lee de la base, no de estos archivos.
+- **Contenido:** todas las filas del día, de cualquier entorno, con las columnas de la tabla: `id`, `timestamp` (UTC, ISO 8601), `service`, `event_type`, `level`, `value`, `message` y `tags` (JSON con las claves ordenadas). Un día sin eventos deja solo el encabezado.
+- **Privacidad:** `tags` conserva `user_id`, `session_id` y `request_id` (seudónimos del plan de telemetría), porque es una copia completa de la tabla.
+- **Versionado:** ignorada por Git (`.gitignore` raíz). Un archivo existente nunca se sobrescribe; para volver a exportar un día hay que borrarlo antes.

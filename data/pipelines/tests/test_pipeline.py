@@ -303,6 +303,23 @@ def test_the_command_line_runs_the_flow(database, capsys):
     assert pipeline.main(["--week-from", "2026-11-09", "--week-to", "2026-11-16"]) == 0
 
     assert json.loads(capsys.readouterr().out)["rows_written"] == 28
+    assert runs(database)[0]["trigger"] == "manual"  # sin --trigger, como antes
+
+
+def test_the_script_nocturno_marks_its_runs_as_scheduled(database, capsys):
+    # El script nocturno (#DEV-53) es el disparador programado: lanza el CLI con --trigger scheduled.
+    seed(database)
+
+    assert pipeline.main(["--week-from", "2026-11-16", "--trigger", "scheduled"]) == 0
+
+    assert runs(database)[0]["trigger"] == "scheduled"
+
+
+def test_the_command_line_rejects_an_unknown_trigger(database, capsys):
+    with pytest.raises(SystemExit):
+        pipeline.main(["--trigger", "nightly"])
+
+    assert runs(database) == []
 
 
 def test_the_command_line_rejects_an_invalid_range_without_creating_a_run(database, capsys):
