@@ -10,6 +10,8 @@
 #   nightly-scheduler -> script nocturno de telemetría (#DEV-53): supercronic ejecuta cada día a las
 #     08:00 UTC scripts/nightly_export.py (export del CSV y corrida programada del pipeline). Lee su
 #     conexión de services/jobs/.env y la del pipeline de data/pipelines/.env.
+#   redis -> broker y backend de resultados de la cola de tareas (#DEV-55), en localhost:6379 (solo en
+#     este equipo: Redis de desarrollo sin contraseña).
 # El código se monta desde el host (bind mounts): los cambios se ven sin reconstruir las imágenes.
 # Las variables se leen del .env de la raíz y se interpolan aquí con ${VARIABLE}; ningún valor real
 # vive en este archivo. Cada servicio recibe solo las variables que necesita.
@@ -175,6 +177,32 @@ services:
     networks:
       - brasaland-net
 
+  redis:
+    # Broker y backend de resultados de la cola de tareas (#DEV-55). La API (productor), el worker
+    # (consumidor) y Flower se conectan aquí con REDIS_URL=redis://redis:6379/0.
+    image: redis:8.10.3-alpine
+    command:
+      - redis-server
+      # Los mensajes en cola sobreviven a un reinicio de Redis (AOF en el volumen).
+      - --appendonly
+      - "yes"
+      # Sin memoria, Redis rechaza escrituras en vez de descartar claves: nunca borra mensajes ni resultados.
+      - --maxmemory-policy
+      - noeviction
+    ports:
+      # Puerto estándar, publicado solo en 127.0.0.1: es un Redis de desarrollo sin contraseña.
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - brasaland-net
+
 networks:
   brasaland-net:
     name: brasaland-net
@@ -182,3 +210,4 @@ networks:
 volumes:
   prefect-data:
   prefect-results:
+  redis-data:

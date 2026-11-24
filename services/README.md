@@ -14,6 +14,7 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 | [`brasaland-api/`](./brasaland-api/README.md) | Brasaland's central API (FastAPI), organized by domain. It implements the `incidents` domain (incident CSV analysis and results export), the `suppliers` domain (supplier directory in TinyDB) and the `inventory` domain (ingredient inventory in Supabase with SQLModel), plus JWT authentication (`auth`, `users` and `profiles`, in TinyDB). |
 | [`telemetry/`](./telemetry/README.md) | Analysis pipeline for the telemetry technical report (`analysis.py`, with Pandas): daily operational metrics over `telemetry_events`. It is a Python package (`brasaland-telemetry`) that the API installs in editable mode; it is not a service that runs on its own. |
 | [`jobs/`](./jobs/README.md) | State control for scheduled jobs (`job_runner`, package `brasaland-jobs`): the `ops.job_runs` state machine, with `processing` as the lock and per-date idempotency. Used by the nightly telemetry script (`scripts/nightly_export.py`); it does not depend on the API. Its `Dockerfile` is the image of the `nightly-scheduler` service (supercronic). |
+| [`tasks/`](./tasks/README.md) | Asynchronous task queue (package `brasaland-tasks`, ticket #DEV-55): the Celery application with Redis as broker and result backend, and the `default` and `dead_letter` queues. The worker is a process of its own, outside FastAPI. |
 
 ## Docker
 
