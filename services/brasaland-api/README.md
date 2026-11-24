@@ -510,7 +510,7 @@ Sink of the pipeline that produces the "Reporte Semanal de Costo y Merma por Loc
 
 1. Supabase → SQL Editor → paste the migration and run it. It is idempotent. Its three final queries show RLS enabled on both tables, the role's privileges and no rows for `anon` or `authenticated`.
 2. In a separate query, not saved as a snippet: `ALTER ROLE reporting_pipeline WITH LOGIN PASSWORD '<password>';`.
-3. The pipeline's connection string is the Session pooler one with that user: `postgresql://reporting_pipeline.<ref>:<password>@<host>.pooler.supabase.com:5432/postgres`. It goes in `REPORTING_DATABASE_URL` or in the Prefect `Secret` block `brasaland-reporting-db`.
+3. The pipeline's connection string is the Session pooler one with that user: `postgresql://reporting_pipeline.<ref>:<password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres`. It goes in `REPORTING_DATABASE_URL` or in the Prefect `Secret` block `brasaland-reporting-db`.
 
 ## `ops` schema (nightly telemetry script)
 
@@ -526,7 +526,7 @@ Record of the nightly script's executions (ticket #DEV-53): it exports the previ
 
 1. Supabase → SQL Editor → paste the migration and run it. It is idempotent. Its three final queries show RLS enabled on `ops.job_runs`, the role's privileges and no rows for `anon` or `authenticated`.
 2. In a separate query, not saved as a snippet: `ALTER ROLE nightly_jobs WITH LOGIN PASSWORD '<password>';`.
-3. The script's connection string is the Session pooler one with that user: `postgresql://nightly_jobs.<ref>:<password>@<host>.pooler.supabase.com:5432/postgres`. It goes in `JOBS_DATABASE_URL`.
+3. The script's connection string is the Session pooler one with that user: `postgresql://nightly_jobs.<ref>:<password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres`. It goes in `JOBS_DATABASE_URL`.
 
 ## Timing log
 
