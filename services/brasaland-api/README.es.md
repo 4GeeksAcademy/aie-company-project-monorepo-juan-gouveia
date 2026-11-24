@@ -512,6 +512,22 @@ Destino del pipeline que produce el "Reporte Semanal de Costo y Merma por Local"
 2. En una consulta aparte, que no se guarda como snippet: `ALTER ROLE reporting_pipeline WITH LOGIN PASSWORD '<contraseña>';`.
 3. La cadena de conexión del pipeline es la del Session pooler con ese usuario: `postgresql://reporting_pipeline.<ref>:<contraseña>@<host>.pooler.supabase.com:5432/postgres`. Va en `REPORTING_DATABASE_URL` o en el bloque `Secret` de Prefect `brasaland-reporting-db`.
 
+## Esquema `ops` (script nocturno de telemetría)
+
+Registro de las ejecuciones del script nocturno (ticket #DEV-53): exporta la telemetría del día anterior a CSV y lanza el pipeline de desempeño de negocio. Lo crea solo [`migrations/006_job_runs.sql`](./migrations/006_job_runs.sql), que necesita la 002. La API no lo usa.
+
+- **`ops.job_runs`:** una fila por ejecución, con `job_name`, `target_date`, `status` (`pending`, `processing`, `completed` o `failed`), `started_at`, `finished_at`, `error_message` y `created_at`. Las restricciones obligan a que cada estado tenga sus datos: `processing` con `started_at`, `completed` y `failed` con `finished_at`, y `failed` con su mensaje.
+- **El lock es el estado:** un índice único parcial impide dos filas del mismo job en `processing`, sin tabla ni columna de lock aparte. El índice `(job_name, target_date)` sirve a la comprobación de idempotencia.
+- **No es `reporting.pipeline_runs`:** `job_runs` registra la orquestación (export, disparo, lock e idempotencia); el pipeline sigue registrando su ETL en `pipeline_runs`.
+- **Rol `nightly_jobs`:** el script se conecta con él. Lee `telemetry_events` (con una política de RLS de solo lectura) y solo puede leer, insertar y actualizar `ops.job_runs`, sin `DELETE`. La migración lo crea sin login; la contraseña se le da a mano y nunca va en el repositorio.
+- **Cerrada a la API REST de Supabase:** RLS activado y ningún permiso para `anon` ni `authenticated`, como las demás.
+
+**Cómo ejecutarla:**
+
+1. Supabase → SQL Editor → pegar la migración y ejecutarla. Es idempotente. Sus tres consultas finales muestran RLS activado en `ops.job_runs`, los permisos del rol y ninguna fila para `anon` ni `authenticated`.
+2. En una consulta aparte, que no se guarda como snippet: `ALTER ROLE nightly_jobs WITH LOGIN PASSWORD '<contraseña>';`.
+3. La cadena de conexión del script es la del Session pooler con ese usuario: `postgresql://nightly_jobs.<ref>:<contraseña>@<host>.pooler.supabase.com:5432/postgres`. Va en `JOBS_DATABASE_URL`.
+
 ## Log de timing
 
 `app/core/timing.py` registra una línea por petición en el logger `api.timing`, con el método, la ruta (sin la query), el estado, la duración dentro de la API y el id de la petición:
