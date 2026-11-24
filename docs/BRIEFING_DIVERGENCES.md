@@ -33,6 +33,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 20. [Pipeline de desempeño de negocio resiliente](#pipeline-de-desempeño-de-negocio-resiliente) (enunciado de la Parte 2, rama `feature/pipeline-implementation`)
 21. [Pipeline a producción: subflows, tests y dashboard](#pipeline-a-producción-subflows-tests-y-dashboard) (enunciado de la Parte 3, rama `feature/pipeline-production`)
 22. [Script nocturno de telemetría](#script-nocturno-de-telemetría) (ticket #DEV-53, rama `feature/nightly-export`)
+23. [Cola de tareas asíncronas](#cola-de-tareas-asíncronas) (ticket #DEV-55, rama `feature/async-tasks`)
 
 ---
 
@@ -2020,3 +2021,40 @@ Contra Supabase el 24 de noviembre de 2026, con la telemetría real (entorno `de
 | Logs con timestamp, nombre del job y estado en cada evento | ✅ | `2026-11-24T12:12:15Z \| INFO \| nightly_export \| processing \| target_date=2026-11-23 \| …`; `ERROR` con la traza en los fallos |
 | Disparador configurado y expresión cron documentada en el PR | ✅ | `scripts/nightly_export.crontab` (`0 8 * * *`, UTC) en el servicio `nightly-scheduler`; `supercronic -test` lo da por válido y lanzó el script desde el contenedor |
 | `TARGET_DATE` permite ejecutar el script sobre fechas arbitrarias | ✅ | Ejecuciones del 18 al 23 de noviembre con `TARGET_DATE`, sin tocar el código (apartado 6) |
+
+## Cola de tareas asíncronas
+
+Ticket #DEV-55, en la rama `feature/async-tasks`. El informe técnico de telemetría deja de calcularse dentro de la petición. La API lo encola en Redis y responde `202 Accepted` con un `task_id`; un worker de Celery, en un proceso aparte, lo calcula, y `GET /tasks/{task_id}` devuelve su estado (`pending`, `started`, `success`, `failure`) y el resultado. Los fallos acaban en una Dead Letter Queue registrada en base de datos, y Flower permite seguir la cola.
+
+**Operación elegida:** `GET /telemetry/report`. El ticket pide convertir "la que más tarde en responder", y se midieron los dos candidatos con el mismo procedimiento que `docs/CACHING_REPORT.md` (API local, 1 calentamiento + 30 peticiones, tiempos de `api.timing`):
+
+- **Informe:** 266 ms de mediana en 7 días y 253 ms en 90 días, sin caché. Su coste crece con la telemetría acumulada.
+- **`POST /incidents/analyze`:** 224 ms con un CSV de 4,9 MB. Es prácticamente su máximo, porque la API rechaza archivos de más de 5 MB.
+- **`GET /inventory/orders`:** no se convierte. Es un listado frecuente con caché, y su respuesta (5,8 MB) no cabe bien en un backend de resultados.
+
+Las decisiones (T1 a T14) se tomaron con el desarrollador el 24 de noviembre de 2026.
+
+> **Estado:** en curso. Esta sección se completa con la tabla de criterios al cerrar la tarea.
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Método del endpoint convertido | "El endpoint que antes ejecutaba la operación pesada ahora encola la tarea" | `POST /telemetry/report` (mismo path), y el `GET` desaparece | Un `GET` que crea trabajo no es seguro en HTTP |
+| Módulo Celery | `services/celery_app.py` "o similar"; `uv add celery redis flower` | `services/tasks/brasaland_tasks/celery_app.py`, en el proyecto uv `brasaland-tasks` | Cada paquete de `services/` es un proyecto uv propio; no hay un proyecto en la raíz |
+| "Si una tarea falla hasta tres veces" | `max_retries=3` | `max_retries=3`: tres reintentos, es decir, cuatro ejecuciones; la DLQ registra `attempt=4` | El checklist fija el valor de `max_retries` |
+| Qué llega a la DLQ | Las tareas que superan `max_retries` | Esas, y también los fallos permanentes, que no se reintentan (con `attempt=1`) | Que ningún fallo final quede solo en el log |
+| Destino del PR | Sin especificar (`main` en los anteriores) | `feature/nightly-export` | Los PR #17 a #28 siguen abiertos |
+
+### 1. El informe se pide con `POST`
+
+El ticket pide que el endpoint que antes ejecutaba la operación la encole y devuelva `202` con el `task_id`. Si se quedara como `GET`, crear una tarea sería un efecto lateral de una petición que HTTP considera segura. Los reintentos automáticos, la precarga del navegador o recargar la página encolarían informes repetidos. Por eso el endpoint pasa a `POST /telemetry/report`, con el mismo path; las fechas van en el cuerpo, con la misma validación que antes.
+
+Para que repetir la petición no cree trabajo, los mismos parámetros devuelven el mismo `task_id` mientras la tarea vive y 60 s después de que termine con éxito. Ese registro en Redis sustituye a la caché en memoria de 60 s del informe (`X-Cache`), y ahora es compartido entre procesos.
+
+**Coste:** cambia el contrato del informe (método y forma de la respuesta). El backoffice se adapta en la misma tarea.
+
+### 2. Los "tres fallos" son tres reintentos
+
+En Celery, `max_retries=3` permite tres reintentos además de la ejecución original: cuatro ejecuciones en total. El checklist fija ese valor y dice que la tarea pasa a la DLQ "cuando supera `max_retries`". Por eso se mantiene `max_retries=3`, y la DLQ guarda el número real de la última ejecución (4). Las esperas entre intentos son de 10, 20 y 40 s.
+
+**Coste:** el enunciado habla de "tres fallos" y el registro muestra el intento 4. El PR lo explica.
+
