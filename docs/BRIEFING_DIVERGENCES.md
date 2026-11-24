@@ -32,6 +32,7 @@ Registro de cada punto en que la implementación se aparta de un briefing o de l
 19. [Pipeline de desempeño de negocio](#pipeline-de-desempeño-de-negocio) (briefing "Pipeline de Desempeño de Negocio" y enunciado de la Parte 1, rama `feature/pipeline-design`)
 20. [Pipeline de desempeño de negocio resiliente](#pipeline-de-desempeño-de-negocio-resiliente) (enunciado de la Parte 2, rama `feature/pipeline-implementation`)
 21. [Pipeline a producción: subflows, tests y dashboard](#pipeline-a-producción-subflows-tests-y-dashboard) (enunciado de la Parte 3, rama `feature/pipeline-production`)
+22. [Script nocturno de telemetría](#script-nocturno-de-telemetría) (ticket #DEV-53, rama `feature/nightly-export`)
 
 ---
 
@@ -1919,3 +1920,35 @@ Como en el resto del proyecto, el trabajo va en un commit por fase y el último 
 | `telemetry_events` y `analysis.py` sin modificar | ✅ | El pipeline lee `telemetry_events` con un rol sin escritura; `services/telemetry/` no cambió en la rama |
 | Dashboard en `uis/backoffice/` con cada KPI etiquetado, desde `services/reporting/` | ✅ | `/reporte-semanal`: los cinco KPIs con su nombre del briefing, el período en palabras, vía `GET /reporting/weekly-location-performance` |
 | Legible para un stakeholder no técnico | ✅ | Resumen por país, una sección por KPI con lo que mide, importes con su moneda, avisos en lenguaje llano; revisado por el desarrollador |
+
+## Script nocturno de telemetría
+
+Ticket #DEV-53, en la rama `feature/nightly-export`. `scripts/nightly_export.py` se ejecuta cada noche fuera de la API: exporta a CSV los `telemetry_events` del día anterior en UTC (o de `TARGET_DATE`), lanza el pipeline del Hito 6 como subproceso y registra cada ejecución en `job_runs` (`pending → processing → completed | failed`), con `processing` como único lock e idempotencia por `(job_name, target_date)`. `job_runs` no sustituye a `reporting.pipeline_runs`: el script registra la orquestación y el pipeline sigue registrando su ETL.
+
+Las decisiones (N1 a N11) se tomaron con el desarrollador el 24 de noviembre de 2026.
+
+> **Estado:** en curso. Decisiones tomadas; implementación pendiente.
+
+| Qué | Briefing o enunciado | Implementación | Motivo principal |
+| --- | --- | --- | --- |
+| Ruta del CSV | `data/raw/telemetry_YYYY-MM-DD.csv` | `data/raw/telemetry_exports/telemetry_YYYY-MM-DD.csv`, fuera de Git | Mantener ordenada `data/raw/` |
+| Comando del pipeline | `python -m data.pipelines.telemetry_kpi_daily.run --no-prefect` "o tu entry point CLI del Hito 6" | `python data/pipelines/pipeline.py --week-from … --week-to …`, con Prefect | Es el entry point del Hito 6; no existe un pipeline diario ni un modo sin Prefect |
+| Disparo programado del pipeline | Ejecución programada de los lunes (Partes 2 y 3) | Solo el job nocturno; la ejecución de Prefect se conserva sin horario | Un único programador para el mismo pipeline |
+
+### 1. Los CSV van en `data/raw/telemetry_exports/`
+
+El ticket deja el archivo directamente en `data/raw/` (`telemetry_2025-01-15.csv`). Como se genera uno por noche, en pocas semanas `data/raw/` acumularía decenas de archivos junto a los datos fuente (`incidents-brasaland.csv`). Una subcarpeta propia mantiene `data/raw/` ordenada, como ya hace `data/raw/telemetry_events/` con las extracciones del pipeline. El nombre del archivo es el del ticket. La subcarpeta está fuera de Git: la columna `tags` lleva `user_id`, `session_id` y `request_id` seudonimizados, y un archivo diario haría crecer el repositorio sin límite.
+
+**Coste:** la ruta no coincide con el ejemplo del ticket, y el respaldo solo existe en la máquina que ejecuta el script.
+
+### 2. El pipeline se lanza con su CLI del Hito 6
+
+El comando de referencia del ticket supone un pipeline diario con un modo sin Prefect. El del Hito 6 es semanal y siempre corre con Prefect. El script lo lanza como subproceso con `python data/pipelines/pipeline.py` y le pasa las 4 semanas ISO cerradas a fecha de `target_date + 1`: sin `TARGET_DATE` equivale a la corrida por defecto, y con `TARGET_DATE` la ventana es siempre la misma para la misma fecha. Nunca escribe semanas incompletas en `reporting.weekly_location_performance`. El resultado se lee del código de salida: el pipeline cierra su `pipeline_runs` en `failed` y termina con error. Sin `PREFECT_API_URL`, cada ejecución arranca un servidor temporal de Prefect.
+
+**Coste:** casi todas las noches se recalculan semanas que no cambiaron (es idempotente), y el servidor temporal añade unos segundos.
+
+### 3. El job nocturno es el único disparador programado
+
+Las Partes 2 y 3 dejaron una ejecución programada de Prefect los lunes a las 06:00 (America/Bogota) sobre las mismas 4 semanas que ahora recalcula el job nocturno. Mantener las dos habría duplicado el cálculo de los lunes y repartido las ejecuciones programadas entre `job_runs` y Prefect. Además, si coincidieran, la segunda fallaría (una sola corrida activa por pipeline). Se quita solo el horario: la ejecución de Prefect sigue existiendo para `POST /reporting/pipeline-runs` y el disparo manual del backoffice. El lunes por la mañana los datos están igual de frescos, porque la corrida de la noche anterior ya incluye la semana cerrada el domingo.
+
+**Coste:** cambia un detalle de las Partes 2 y 3, y hay que actualizar `PIPELINE_DESIGN.md` y los README del pipeline.
