@@ -494,6 +494,8 @@ Aplicación Next.js 16 con App Router, en el puerto 3000. Sustituye a las págin
 
 6. **Pipeline de datos** — Poblar `data/` con datasets realistas de Brasaland y crear pipelines ETL básicos. Ya hay un primer dataset (`data/raw/incidents-brasaland.csv`) con su procesador en `scripts/incident-report/`; sus reglas de validación servirán de referencia para la ingesta de incidentes del dashboard operativo.
 
+- **Linter de Python** (decisión del desarrollador, 2026-11-24; tarea propia al cerrar la cadena de PR, junto a la actualización de Next): un `ruff.toml` en la raíz (no necesita entorno; los ocho proyectos Python tienen entornos separados), decidir las reglas más allá de las de por defecto, corregir los 4 avisos actuales (3 imports sin usar en `scripts/incident-report/analyze.py`, que hay que comprobar si se mantienen a propósito para sus pruebas, y una variable sin usar en `tests/auth/test_register.py`) y documentar `uvx ruff check .` en los README. Mientras tanto, el código nuevo pasa `uvx ruff check` sin configuración en cada fase.
+
 ### Mediano Plazo
 
 7. **Agente de formación y recetario** — Desarrollar el agente principal enfocado en el área de Formación y Estándares de Calidad (prioridad personal del proyecto), integrando el skill del paso 2.

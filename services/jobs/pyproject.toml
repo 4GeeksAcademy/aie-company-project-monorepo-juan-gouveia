@@ -12,7 +12,22 @@ dependencies = [
 ]
 
 [dependency-groups]
+# El entorno de scripts/nightly_export.py (uv run --project services/jobs ...): no viaja a quien instala
+# el paquete. El script usa compute_weeks de brasaland_pipelines.runs (sin Prefect) y lanza el pipeline
+# del Hito 6 como subproceso con este mismo intérprete, así que el entorno necesita también Prefect y
+# python-dotenv. Prefect, en la versión del servidor de docker-compose.yml y de data/pipelines/uv.lock.
+script = [
+    "brasaland-pipelines",
+    "prefect==3.9.4",
+    "python-dotenv>=1.0",
+]
 dev = ["pytest>=8"]
+
+[tool.uv]
+default-groups = ["script", "dev"]
+
+[tool.uv.sources]
+brasaland-pipelines = { path = "../../data/pipelines", editable = true }
 
 [build-system]
 requires = ["setuptools>=68"]
