@@ -33,7 +33,7 @@ class PipelineRunRead(BaseModel):
 
     id: UUID = Field(description="Id de la corrida")
     pipeline: str = Field(description="Pipeline que corrió (`weekly_location_performance`)")
-    trigger: Literal["scheduled", "manual"] = Field(description="Corrida programada de los lunes o pedida a mano")
+    trigger: Literal["scheduled", "manual"] = Field(description="Corrida programada (la lanza el script nocturno) o pedida a mano")
     status: Literal["pending", "running", "completed", "failed"] = Field(description="Estado de la corrida")
     week_from: date = Field(description="Primera semana (lunes) que recalcula")
     week_to: date = Field(description="Última semana (lunes) que recalcula")

@@ -9,7 +9,9 @@ Estructura (diseño, §5): el flow principal `weekly_location_performance_flow` 
 KPI) y `load_weekly_location_performance`, y dos opcionales, `archive_weekly_location_performance_extract`
 y `export_weekly_location_performance_eval`. Cada subflow se puede ejecutar por separado.
 
-Frecuencia: los lunes a las 06:00 America/Bogota (11:00 UTC), sobre las 4 últimas semanas cerradas.
+Frecuencia: cada noche, sobre las 4 últimas semanas cerradas. La programa el script nocturno
+(`scripts/nightly_export.py`, ticket #DEV-53), que lo lanza por CLI con `--trigger scheduled`; el
+deployment de Prefect ya no tiene horario propio (un solo disparador programado).
 
 Ejecución (desde data/pipelines/, con su entorno de uv; o `python data/pipelines/pipeline.py` con ese
 entorno activado):
@@ -18,7 +20,7 @@ entorno activado):
     uv run python pipeline.py --week-from 2026-09-07 --week-to 2026-11-16   # backfill por rango
     uv run python pipeline.py --environment development --include-current-week   # verificación en local
     uv run python pipeline.py --register-blocks                 # registra los bloques de Prefect desde .env
-    uv run python pipeline.py --serve                           # deployment de los lunes (necesita PREFECT_API_URL)
+    uv run python pipeline.py --serve                           # corridas manuales de la API (necesita PREFECT_API_URL)
 
 La conexión sale del bloque `brasaland-reporting-db` o de `REPORTING_DATABASE_URL` (ver config.py).
 """
@@ -54,7 +56,6 @@ from prefect import flow, get_run_logger, task
 from prefect.context import TaskRunContext
 from prefect.runtime import flow_run as current_flow_run
 from prefect.runtime import task_run as prefect_task_run
-from prefect.schedules import Cron
 from sqlalchemy import Engine
 from sqlalchemy.exc import (
     DBAPIError,
@@ -63,8 +64,6 @@ from sqlalchemy.exc import (
     OperationalError,
 )
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
-
-SCHEDULE = Cron("0 6 * * 1", timezone="America/Bogota")
 
 DATA_DIR = Path(__file__).resolve().parent.parent
 # Entrada de cada corrida, sin datos personales (decisión I4). Fuera de Git.
@@ -692,17 +691,20 @@ def _close_failed(run_id: UUID, failed_task: str, error: BaseException) -> None:
 
 
 def serve() -> None:
-    """Deployment `weekly-location-performance/weekly`: los lunes a las 06:00 America/Bogota.
+    """Deployment `weekly-location-performance/weekly`, sin horario: las corridas manuales de la API.
 
-    Este mismo proceso ejecuta las corridas programadas y las que pide la API con `run_deployment`,
-    una a la vez (límite de concurrencia 1). Necesita un servidor de Prefect (`PREFECT_API_URL`).
+    Este proceso ejecuta las corridas que pide `POST /reporting/pipeline-runs` con `run_deployment`, una
+    a la vez (límite de concurrencia 1). Necesita un servidor de Prefect (`PREFECT_API_URL`). La corrida
+    programada la lanza cada noche el script nocturno (ticket #DEV-53), no este deployment.
     """
     weekly_location_performance_flow.serve(
         name=DEPLOYMENT_NAME,
-        schedules=[SCHEDULE],
         global_limit=1,
         tags=["reporting"],
-        description="Reporte Semanal de Costo y Merma por Local: lunes 06:00 America/Bogota, 4 últimas semanas cerradas.",
+        description=(
+            "Reporte Semanal de Costo y Merma por Local: corridas manuales de la API. "
+            "La programada la lanza el script nocturno."
+        ),
     )
 
 
@@ -723,10 +725,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--include-current-week",
         action="store_true",
-        help="Incluye la semana en curso, incompleta. Solo para verificar: la corrida del lunes la reescribe.",
+        help="Incluye la semana en curso, incompleta. Solo para verificar: la corrida programada la reescribe.",
+    )
+    parser.add_argument(
+        "--trigger",
+        choices=("manual", "scheduled"),
+        default="manual",
+        help="Origen que queda en pipeline_runs: manual (por defecto) o scheduled (lo pasa el script nocturno).",
     )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--serve", action="store_true", help="Sirve el deployment programado de los lunes.")
+    group.add_argument("--serve", action="store_true", help="Sirve el deployment de las corridas manuales de la API.")
     group.add_argument("--register-blocks", action="store_true", help="Registra los bloques de Prefect desde el entorno.")
     args = parser.parse_args(argv)
 
@@ -758,7 +766,7 @@ def main(argv: list[str] | None = None) -> int:
     summary = weekly_location_performance_flow(
         week_from=args.week_from,
         week_to=args.week_to,
-        trigger="manual",
+        trigger=args.trigger,
         environment=args.environment,
         include_current_week=args.include_current_week,
     )

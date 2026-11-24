@@ -393,8 +393,8 @@ En el orden en que corren:
 ### 5.4 Deployment
 
 - **Nombre:** `weekly-location-performance/weekly`.
-- **Programación:** cron `0 6 * * 1`, zona `America/Bogota`, que son las 11:00 UTC. Las semanas cierran el lunes a las 00:00 UTC, así que la corrida de las 06:00 de Bogotá deja el reporte listo cuando Mariana lo abre.
-- **Ejecución:** `python data/pipelines/pipeline.py --serve` (`flow.serve`) registra el deployment en el servidor de Prefect, programa el cron y ejecuta las corridas, programadas o pedidas por la API, en su propio proceso, sin work pool ni worker aparte. En el `docker-compose.yml` de la raíz es el servicio `reporting-pipeline`, junto al servidor `prefect-server` (imagen `prefecthq/prefect:3.9.4-python3.12`, interfaz en `http://localhost:4200`).
+- **Programación:** ninguna desde el ticket #DEV-53 (§13). El deployment se conserva sin horario para las corridas manuales; la corrida programada la lanza cada noche el script nocturno, a las 08:00 UTC. Hasta entonces era el cron `0 6 * * 1` en `America/Bogota`.
+- **Ejecución:** `python data/pipelines/pipeline.py --serve` (`flow.serve`) registra el deployment en el servidor de Prefect y ejecuta las corridas pedidas por la API en su propio proceso, sin work pool ni worker aparte. En el `docker-compose.yml` de la raíz es el servicio `reporting-pipeline`, junto al servidor `prefect-server` (imagen `prefecthq/prefect:3.9.4-python3.12`, interfaz en `http://localhost:4200`).
 - **Concurrencia:** límite de 1 (`global_limit=1`), además del índice único de la §4.3.
 
 ### 5.5 Bloques de configuración
@@ -554,7 +554,7 @@ Tomadas con el desarrollador el 2026-11-20 (ajuste de P5 el 2026-11-23). Las div
 
 ## 10. Ejecución: frecuencia y comandos
 
-**Frecuencia:** semanal. Los lunes a las 06:00 America/Bogota (11:00 UTC), cuando la semana ISO ya cerró a las 00:00 UTC, el deployment `weekly-location-performance/weekly` recalcula las 4 últimas semanas cerradas y deja el reporte listo para la mañana. Además, un administrador puede pedir una corrida manual o un backfill con `POST /reporting/pipeline-runs`.
+**Frecuencia:** diaria, sobre datos semanales (§13). Cada noche a las 08:00 UTC (03:00 en Bogotá), el script nocturno `scripts/nightly_export.py` lanza el pipeline con `--trigger scheduled` sobre las 4 semanas cerradas a esa fecha. La noche del domingo al lunes ya incluye la semana que acaba de cerrar, así que el reporte está listo antes de las 06:00 de Bogotá, como pide el objetivo (§1); las demás noches recalculan las mismas semanas y recogen los eventos que llegaron tarde. Además, un administrador puede pedir una corrida manual o un backfill con `POST /reporting/pipeline-runs`.
 
 **Preparación** (una vez): la migración 005 ejecutada en Supabase, con login para el rol `reporting_pipeline` (instrucciones en la cabecera de la migración), y el entorno del paquete:
 
@@ -571,7 +571,8 @@ cp .env.example .env          # y rellenar REPORTING_DATABASE_URL (cadena del Se
 | `python data/pipelines/pipeline.py` | Una corrida, ahora: las 4 últimas semanas cerradas de `production` (`trigger = manual`) |
 | `python data/pipelines/pipeline.py --week-from 2026-09-07 --week-to 2026-11-16` | Backfill de un rango de lunes (26 semanas como máximo, sin la semana en curso) |
 | `python data/pipelines/pipeline.py --environment development --include-current-week` | Verificación en desarrollo: los eventos del backoffice local, incluida la semana en curso |
-| `python data/pipelines/pipeline.py --serve` | Sirve el deployment de los lunes y ejecuta las corridas manuales (necesita `PREFECT_API_URL`) |
+| `python data/pipelines/pipeline.py --trigger scheduled` | Una corrida registrada como `scheduled` en `pipeline_runs`: la usa el script nocturno (§13). Sin la opción, `manual` |
+| `python data/pipelines/pipeline.py --serve` | Sirve el deployment, sin horario, y ejecuta las corridas manuales (necesita `PREFECT_API_URL`) |
 | `python data/pipelines/pipeline.py --register-blocks` | Crea los bloques `brasaland-reporting-db` y `weekly-location-performance-config` desde el entorno |
 
 La CLI imprime el resumen de la corrida en JSON y termina con código 0 si la corrida quedó en `completed`; si la corrida falla, Prefect muestra el error y el código es 1. Sin conexión configurada o con un rango no válido, termina con código 2 y un mensaje, sin abrir ninguna corrida.
@@ -688,3 +689,15 @@ La corrida sigue terminando en `completed`: cero puede ser real, y la señal es 
 - **Contra Supabase**, en el contenedor `reporting-pipeline`: los 5 subflows y sus tasks en Prefect; las 70 filas de una corrida (14 locales × 5 semanas) iguales a un cálculo independiente en SQL; `weeks_without_telemetry: 3` en las semanas anteriores a la captura.
 - **CLI:** `python data/pipelines/pipeline.py` desde la raíz, con el entorno de `data/pipelines`: código 0, 5 subflows, 56 filas.
 - **Dashboard:** revisado por el desarrollador con los datos de prueba registrados desde el backoffice: período, navegación entre semanas, avisos, resumen por país, KPIs y tabla.
+
+## 13. Corrida programada desde el script nocturno (ticket #DEV-53)
+
+Desde el ticket #DEV-53, la corrida programada ya no sale de Prefect: la lanza cada noche `scripts/nightly_export.py`, que exporta la telemetría del día anterior a CSV, lanza este pipeline como subproceso y registra la ejecución en `ops.job_runs` (migración 006). `job_runs` registra la orquestación (export, disparo, lock e idempotencia); `reporting.pipeline_runs` sigue registrando el ETL. No se duplican.
+
+- **Un solo disparador programado:** el deployment `weekly-location-performance/weekly` pierde su horario de los lunes (`SCHEDULE`), pero sigue existiendo para `POST /reporting/pipeline-runs`. Con dos programadores, los lunes se calcularía dos veces lo mismo y una de las dos corridas fallaría si coincidieran (§4.3).
+- **Qué semanas:** el script pasa `--week-from` y `--week-to` con las 4 semanas cerradas a fecha de su `target_date + 1`. Sin `TARGET_DATE` es la corrida por defecto (`target_date` es ayer en UTC); con `TARGET_DATE`, la ventana depende solo de esa fecha. Nunca incluye la semana en curso.
+- **`--trigger scheduled`:** opción nueva del CLI (`manual` por defecto, el comportamiento anterior), para que `pipeline_runs.trigger` siga distinguiendo la corrida programada de las manuales. Sin cambios en la migración 005 ni en `services/reporting`.
+- **Resultado:** el script lee el código de salida del pipeline (0 o distinto de 0) y deja su fila de `job_runs` en `completed` o `failed`.
+- **Cuándo:** cada día a las 08:00 UTC (`scripts/nightly_export.crontab`, servicio `nightly-scheduler` de `docker-compose.yml`). La noche del domingo al lunes recalcula la semana recién cerrada antes de las 06:00 de Bogotá; el resto de noches recalcula semanas sin cambios, lo que es idempotente (upsert) y recoge los eventos que llegan tarde.
+
+Las decisiones (N1 a N12) y las divergencias con el ticket están en la sección 22 de `docs/BRIEFING_DIVERGENCES.md`.

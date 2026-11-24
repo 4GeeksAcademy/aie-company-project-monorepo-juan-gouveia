@@ -136,7 +136,7 @@ class PipelineWeeksTests(unittest.TestCase):
         command = nightly.pipeline_command(date(2026, 10, 26), date(2026, 11, 16), None)
         self.assertEqual(command[0], sys.executable)
         self.assertEqual(Path(command[1]), nightly.REPO_ROOT / "data" / "pipelines" / "pipeline.py")
-        self.assertEqual(command[2:], ["--week-from", "2026-10-26", "--week-to", "2026-11-16"])
+        self.assertEqual(command[2:], ["--week-from", "2026-10-26", "--week-to", "2026-11-16", "--trigger", "scheduled"])
         self.assertEqual(nightly.pipeline_command(DAY, DAY, "development")[-2:], ["--environment", "development"])
 
 
@@ -272,7 +272,9 @@ class MainTests(unittest.TestCase):
         self.assertEqual((run["status"], run["target_date"]), ("completed", DAY))
         self.assertTrue((self.exports / "telemetry_2026-11-24.csv").exists())
         self.assertEqual(len(self.pipeline_calls), 1)
-        self.assertEqual(self.pipeline_calls[0][2:], ["--week-from", "2026-10-26", "--week-to", "2026-11-16"])
+        self.assertEqual(
+            self.pipeline_calls[0][2:], ["--week-from", "2026-10-26", "--week-to", "2026-11-16", "--trigger", "scheduled"]
+        )
         statuses = [record.status for record in records]
         self.assertEqual(statuses[0], "pending")
         self.assertEqual(statuses[-1], "completed")
@@ -298,7 +300,7 @@ class MainTests(unittest.TestCase):
         self.assertTrue((self.exports / "telemetry_2026-11-22.csv").exists())
         self.assertEqual(
             self.pipeline_calls[0][2:],
-            ["--week-from", "2026-10-26", "--week-to", "2026-11-16", "--environment", "development"],
+            ["--week-from", "2026-10-26", "--week-to", "2026-11-16", "--trigger", "scheduled", "--environment", "development"],
         )
 
     def test_fallo_del_pipeline_deja_failed_y_codigo_1(self):

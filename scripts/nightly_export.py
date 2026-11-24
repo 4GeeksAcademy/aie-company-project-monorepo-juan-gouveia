@@ -7,8 +7,8 @@ Cada noche, sin intervención manual y fuera de la API:
    `data/raw/telemetry_exports/telemetry_YYYY-MM-DD.csv`, solo si el archivo no existe. Es una copia de
    seguridad para auditoría: el pipeline sigue leyendo de la base, no de este archivo.
 3. Lanza el pipeline del Hito 6 como subproceso, con este mismo intérprete, sobre las 4 semanas ISO
-   cerradas a fecha de `target_date + 1` (decisiones N1 y N2):
-   `python data/pipelines/pipeline.py --week-from … --week-to …`.
+   cerradas a fecha de `target_date + 1` (decisiones N1, N2 y N12):
+   `python data/pipelines/pipeline.py --week-from … --week-to … --trigger scheduled`.
 4. Registra la ejecución en `ops.job_runs` (`pending → processing → completed | failed`) con
    `brasaland_jobs.job_runner.run_job`: el estado `processing` es el lock, la idempotencia es por
    `(nightly_export, target_date)` y ninguna fila se queda en `processing`.
@@ -210,6 +210,8 @@ def format_row(row: Mapping[str, Any]) -> list[str]:
 
 
 def pipeline_command(week_from: date, week_to: date, environment: str | None) -> list[str]:
+    # --trigger scheduled: este script es el disparador programado del pipeline (decisiones N3 y N12),
+    # así que su corrida queda como `scheduled` en reporting.pipeline_runs.
     command = [
         sys.executable,
         str(PIPELINE_SCRIPT),
@@ -217,6 +219,8 @@ def pipeline_command(week_from: date, week_to: date, environment: str | None) ->
         week_from.isoformat(),
         "--week-to",
         week_to.isoformat(),
+        "--trigger",
+        "scheduled",
     ]
     if environment:
         command += ["--environment", environment]

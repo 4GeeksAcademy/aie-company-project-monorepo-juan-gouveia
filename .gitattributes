@@ -1,3 +1,5 @@
 # Los scripts de shell se ejecutan dentro de contenedores Linux (uis/start.sh): siempre con LF,
 # aunque Git convierta los finales de línea en Windows (core.autocrlf=true).
 *.sh text eol=lf
+# El crontab del contenedor nightly-scheduler (scripts/nightly_export.crontab) lo lee supercronic en Linux.
+*.crontab text eol=lf
