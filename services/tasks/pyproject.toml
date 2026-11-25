@@ -10,6 +10,12 @@ dependencies = [
     "redis>=8.2.0",
     # Monitor web de la cola (servicio flower de docker-compose.yml, puerto 5555).
     "flower>=2.2.0",
+    # Tarea telemetry.report: las métricas del informe técnico (services/telemetry/analysis.py, Pandas).
+    "brasaland-telemetry",
+    # Conexión del worker a Supabase con el rol task_worker (TASKS_DATABASE_URL): lectura de
+    # telemetry_events y escritura de la Dead Letter Queue (ops.task_dead_letters, migración 007).
+    "sqlalchemy>=2.1.9",
+    "psycopg2-binary>=2.9.13",
 ]
 
 [build-system]
@@ -25,6 +31,10 @@ packages = ["brasaland_tasks"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+# Paquete local del monorepo, en modo editable, como en services/brasaland-api.
+brasaland-telemetry = { path = "../telemetry", editable = true }
 
 [dependency-groups]
 dev = [

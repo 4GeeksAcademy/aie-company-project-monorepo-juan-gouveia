@@ -37,6 +37,12 @@ APP_NAME = "brasaland"
 DEFAULT_QUEUE = "default"
 DEAD_LETTER_QUEUE = "dead_letter"
 
+# Nombres registrados de las tareas (`tasks.py`). La API encola por nombre (`send_task`), sin importar el
+# código de las tareas: el módulo solo se carga en el worker (`include`).
+TELEMETRY_REPORT_TASK = "telemetry.report"
+RECORD_DEAD_LETTER_TASK = "dead_letters.record"
+TASKS_MODULE = "brasaland_tasks.tasks"
+
 SOFT_TIME_LIMIT_SECONDS = 60
 TIME_LIMIT_SECONDS = 90
 VISIBILITY_TIMEOUT_SECONDS = 300
@@ -72,7 +78,7 @@ def _queue(name: str) -> Queue:
 
 def create_app(url: str) -> Celery:
     """La aplicación de Celery con Redis en `url` como broker y como backend de resultados."""
-    app = Celery(APP_NAME, broker=url, backend=url)
+    app = Celery(APP_NAME, broker=url, backend=url, include=[TASKS_MODULE])
     transport_options = {"visibility_timeout": VISIBILITY_TIMEOUT_SECONDS}
     app.conf.update(
         # Serialización: solo JSON.
@@ -95,6 +101,8 @@ def create_app(url: str) -> Celery:
         # Colas.
         task_default_queue=DEFAULT_QUEUE,
         task_queues=[_queue(DEFAULT_QUEUE), _queue(DEAD_LETTER_QUEUE)],
+        # Los registros de la DLQ van a su cola, también si alguien los encola por nombre.
+        task_routes={RECORD_DEAD_LETTER_TASK: {"queue": DEAD_LETTER_QUEUE, "routing_key": DEAD_LETTER_QUEUE}},
         # Si Redis aún no está listo al arrancar, el worker espera en vez de caerse.
         broker_connection_retry_on_startup=True,
         # Eventos para Flower: tareas enviadas (en cola), en proceso y terminadas.
