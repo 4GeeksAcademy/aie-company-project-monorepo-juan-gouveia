@@ -10,17 +10,19 @@ import LatencyTable from "@/components/telemetria/LatencyTable";
 import ReportPeriodFilter from "@/components/telemetria/ReportPeriodFilter";
 import ReportSection from "@/components/telemetria/ReportSection";
 import { useTelemetryReport } from "@/hooks/useTelemetryReport";
-import { ADMIN_ONLY_MESSAGE, formatInstantUtc } from "@/lib/telemetry-report";
+import { ADMIN_ONLY_MESSAGE, formatInstantUtc, progressLabel } from "@/lib/telemetry-report";
 
 // Vista técnica del reporte de telemetría: el período y un bloque por métrica, sin métricas propias.
+// El reporte se calcula en segundo plano (ticket #DEV-55): mientras tanto se muestra si está en cola o
+// calculándose.
 export default function TelemetryReportPanel() {
-  const { fetchState, dates, apply, reload } = useTelemetryReport();
+  const { fetchState, progress, dates, apply, reload } = useTelemetryReport();
 
   return (
     <div className="flex flex-col gap-4">
       <ReportPeriodFilter applied={dates} onApply={apply} disabled={fetchState.status === "loading"} />
 
-      {fetchState.status === "loading" && <LoadingMessage>Calculando el reporte...</LoadingMessage>}
+      {fetchState.status === "loading" && <LoadingMessage>{progressLabel(progress)}</LoadingMessage>}
 
       {fetchState.status === "error" &&
         (fetchState.message === ADMIN_ONLY_MESSAGE ? (

@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 # El worker corre en un proceso propio, fuera de FastAPI: este paquete no depende de la API.
 dependencies = [
     # La cola: Celery con Redis como broker y como backend de resultados (cliente redis-py).
-    "celery>=5.7.0",
+    "celery[redis]>=5.7.0",
     "redis>=8.2.0",
     # Monitor web de la cola (servicio flower de docker-compose.yml, puerto 5555).
     "flower>=2.2.0",

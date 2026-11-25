@@ -1,5 +1,6 @@
-// Cliente y presentación del reporte técnico de telemetría (lib/telemetry-report.ts). `fetch` está
-// simulado: no hay red.
+// Cliente y presentación del reporte técnico de telemetría (lib/telemetry-report.ts): encolar con POST y
+// consultar GET /tasks/{task_id} hasta que termina (ticket #DEV-55). `fetch`, la espera y el reloj están
+// simulados: no hay red ni esperas reales.
 import { ApiError } from "@/lib/api-client";
 import {
   ADMIN_ONLY_MESSAGE,
@@ -11,7 +12,11 @@ import {
   getTelemetryReport,
   levelSegments,
   periodTotals,
-  reportQuery,
+  pollDelay,
+  POLL_TIMEOUT_MS,
+  progressLabel,
+  reportBody,
+  SLOW_REPORT_MESSAGE,
 } from "@/lib/telemetry-report";
 import type { TelemetryReport } from "@/types/telemetry-report";
 
@@ -47,22 +52,22 @@ const REPORT: TelemetryReport = {
 
 // --- Petición ---------------------------------------------------------------------------------------------
 
-describe("reportQuery", () => {
-  it("sin fechas no envía parámetros: la API usa los últimos 7 días", () => {
-    expect(reportQuery({ from: "", to: "" })).toBe("");
+describe("reportBody", () => {
+  it("sin fechas envía un cuerpo vacío: la API usa los últimos 7 días", () => {
+    expect(reportBody({ from: "", to: "" })).toEqual({});
   });
 
   it("envía el día siguiente a la fecha final, porque en la vista se incluye y en la API no", () => {
-    expect(reportQuery({ from: "2026-11-14", to: "2026-11-16" })).toBe("?start_date=2026-11-14&end_date=2026-11-17");
+    expect(reportBody({ from: "2026-11-14", to: "2026-11-16" })).toEqual({ start_date: "2026-11-14", end_date: "2026-11-17" });
   });
 
   it("cambia de mes y de año al sumar el día", () => {
-    expect(reportQuery({ from: "", to: "2026-11-30" })).toBe("?end_date=2026-12-01");
-    expect(reportQuery({ from: "", to: "2026-12-31" })).toBe("?end_date=2027-01-01");
+    expect(reportBody({ from: "", to: "2026-11-30" })).toEqual({ end_date: "2026-12-01" });
+    expect(reportBody({ from: "", to: "2026-12-31" })).toEqual({ end_date: "2027-01-01" });
   });
 
   it("puede enviar solo una de las dos fechas", () => {
-    expect(reportQuery({ from: "2026-11-14", to: "" })).toBe("?start_date=2026-11-14");
+    expect(reportBody({ from: "2026-11-14", to: "" })).toEqual({ start_date: "2026-11-14" });
   });
 });
 
@@ -79,18 +84,126 @@ describe("datesError", () => {
   });
 });
 
-describe("getTelemetryReport", () => {
-  it("pide el reporte al intermediario con el token y devuelve el JSON", async () => {
-    fetchMock.mockResolvedValue(jsonResponse(REPORT));
-
-    await expect(getTelemetryReport({ from: "2026-11-14", to: "2026-11-16" })).resolves.toEqual(REPORT);
-
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/telemetry/report?start_date=2026-11-14&end_date=2026-11-17");
-    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer jwt-de-la-sesion");
+describe("pollDelay y progressLabel", () => {
+  it("consulta cada 1 s los primeros 10 s y después cada 2 s", () => {
+    expect([0, 9_999, 10_000, 60_000].map(pollDelay)).toEqual([1_000, 1_000, 2_000, 2_000]);
   });
 
-  it("un 403 muestra que el reporte es solo para administradores y no cierra la sesión", async () => {
+  it("dice si el reporte se está pidiendo, está en cola o se está calculando", () => {
+    expect(progressLabel(null)).toMatch(/Pidiendo/);
+    expect(progressLabel("pending")).toMatch(/En cola/);
+    expect(progressLabel("started")).toMatch(/Calculando/);
+  });
+});
+
+describe("getTelemetryReport", () => {
+  const TASK_ID = "8c88f901-da18-4fe1-ae9a-61e335c0be19";
+  const accepted = () => jsonResponse({ task_id: TASK_ID }, 202);
+  const task = (status: string, result: unknown = null) => jsonResponse({ task_id: TASK_ID, status, result });
+
+  // Reloj y espera simulados: cada espera avanza el reloj lo que se pidió, sin esperar de verdad.
+  function fakeClock() {
+    let time = 0;
+    const waits: number[] = [];
+    return {
+      waits,
+      now: () => time,
+      wait: async (ms: number) => {
+        waits.push(ms);
+        time += ms;
+      },
+    };
+  }
+
+  it("encola con POST y el token, y consulta la tarea hasta que termina: pending → started → success", async () => {
+    fetchMock
+      .mockResolvedValueOnce(accepted())
+      .mockResolvedValueOnce(task("pending"))
+      .mockResolvedValueOnce(task("started"))
+      .mockResolvedValueOnce(task("success", REPORT));
+    const clock = fakeClock();
+    const progress: string[] = [];
+
+    const report = await getTelemetryReport(
+      { from: "2026-11-14", to: "2026-11-16" },
+      { onProgress: (p) => progress.push(p), wait: clock.wait, now: clock.now },
+    );
+
+    expect(report).toEqual(REPORT);
+    expect(progress).toEqual(["pending", "started"]);
+    expect(clock.waits).toEqual([1_000, 1_000]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/telemetry/report");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ start_date: "2026-11-14", end_date: "2026-11-17" });
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer jwt-de-la-sesion");
+    expect(fetchMock.mock.calls.slice(1).map(([u]) => u)).toEqual(Array(3).fill(`/api/tasks/${TASK_ID}`));
+  });
+
+  it("si la tarea ya terminó (la misma petición hace menos de 60 s), la primera consulta trae el reporte", async () => {
+    fetchMock.mockResolvedValueOnce(accepted()).mockResolvedValueOnce(task("success", REPORT));
+    const clock = fakeClock();
+
+    await expect(getTelemetryReport({ from: "", to: "" }, { wait: clock.wait, now: clock.now })).resolves.toEqual(REPORT);
+    expect(clock.waits).toEqual([]);
+  });
+
+  it("pasados 10 s consulta cada 2 s", async () => {
+    fetchMock.mockResolvedValueOnce(accepted());
+    for (let i = 0; i < 12; i += 1) fetchMock.mockResolvedValueOnce(task("started"));
+    fetchMock.mockResolvedValueOnce(task("success", REPORT));
+    const clock = fakeClock();
+
+    await getTelemetryReport({ from: "", to: "" }, { wait: clock.wait, now: clock.now });
+
+    expect(clock.waits.slice(0, 10)).toEqual(Array(10).fill(1_000));
+    expect(clock.waits.slice(10)).toEqual([2_000, 2_000]);
+  });
+
+  it("una tarea fallida muestra el error de la API", async () => {
+    fetchMock
+      .mockResolvedValueOnce(accepted())
+      .mockResolvedValueOnce(task("failure", { error: "OperationalError: connection refused" }));
+    const clock = fakeClock();
+
+    const error = await getTelemetryReport({ from: "", to: "" }, { wait: clock.wait, now: clock.now }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.code).toBe("report_failed");
+    expect(error.message).toMatch(/No se pudo calcular el reporte técnico \(OperationalError: connection refused\)/);
+    expect(clearToken).not.toHaveBeenCalled();
+  });
+
+  it("a los 3 minutos sin terminar deja de consultar y avisa de que tarda más de lo normal", async () => {
+    fetchMock.mockResolvedValueOnce(accepted());
+    // Una respuesta nueva en cada consulta: el cuerpo de un Response solo se puede leer una vez.
+    fetchMock.mockImplementation(async () => task("pending"));
+    const clock = fakeClock();
+
+    const error = await getTelemetryReport({ from: "", to: "" }, { wait: clock.wait, now: clock.now }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.message).toBe(SLOW_REPORT_MESSAGE);
+    expect(clock.now()).toBe(POLL_TIMEOUT_MS);
+  });
+
+  it("se cancela al cambiar las fechas o salir de la vista: no hace más consultas", async () => {
+    const controller = new AbortController();
+    fetchMock.mockResolvedValueOnce(accepted()).mockResolvedValue(task("pending"));
+    const wait = async () => {
+      controller.abort();
+    };
+
+    const error = await getTelemetryReport({ from: "", to: "" }, { signal: controller.signal, wait, now: () => 0 }).catch(
+      (e) => e,
+    );
+
+    expect(error).toBeInstanceOf(DOMException);
+    expect(error.name).toBe("AbortError");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("un 403 al encolar muestra que el reporte es solo para administradores y no cierra la sesión", async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ error: { code: "forbidden", message: "Solo un administrador puede hacer esta operación." } }, 403),
     );
@@ -100,9 +213,10 @@ describe("getTelemetryReport", () => {
       status: 403,
     });
     expect(clearToken).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("los demás errores llegan con el mensaje de la API (por ejemplo, un período demasiado largo)", async () => {
+  it("los errores al encolar llegan con el mensaje de la API (por ejemplo, un período demasiado largo)", async () => {
     const message = "El período no puede pasar de 90 días.";
     fetchMock.mockResolvedValue(jsonResponse({ error: { code: "period_too_long", message } }, 422));
 
@@ -110,6 +224,13 @@ describe("getTelemetryReport", () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.message).toBe(message);
+  });
+
+  it("la cola no disponible (503) llega con el mensaje de la API", async () => {
+    const message = "La cola de tareas no está disponible en este momento. Vuelve a intentarlo.";
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: "task_queue_unavailable", message } }, 503));
+
+    await expect(getTelemetryReport({ from: "", to: "" })).rejects.toMatchObject({ message });
   });
 });
 

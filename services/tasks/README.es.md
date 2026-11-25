@@ -53,6 +53,10 @@ uv run --env-file .env celery -A brasaland_tasks.celery_app worker -Q default,de
 
 En Windows, añade `--pool=solo`: el pool por defecto de Celery (prefork) no funciona ahí. Comprueba que el worker está conectado con `uv run --env-file .env celery -A brasaland_tasks.celery_app inspect ping` y detenlo con `Ctrl+C` (parada ordenada: antes termina la tarea en curso).
 
+## En Docker
+
+Desde la raíz del repositorio, `docker compose up -d celery-worker flower` levanta el worker y Flower (y Redis, del que dependen) con la imagen de [`Dockerfile`](./Dockerfile). Compose fija `REDIS_URL=redis://redis:6379/0` y el worker lee `TASKS_DATABASE_URL` (y `TASKS_FAULT_INJECTION`, si se define) de este `.env`. Flower queda en http://localhost:5555. `docker compose stop celery-worker` es una parada ordenada: el worker termina la tarea en curso (hasta 100 s) y los mensajes pendientes esperan en Redis. Detener la API no detiene el worker.
+
 ## Pruebas
 
 ```bash

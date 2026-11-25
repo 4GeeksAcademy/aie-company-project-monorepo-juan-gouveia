@@ -35,11 +35,13 @@ services:
       - ./packages/shared:/repo/packages/shared
       - ./services/telemetry:/repo/services/telemetry
       - ./services/reporting:/repo/services/reporting
+      - ./services/tasks:/repo/services/tasks
       - ./data/process:/repo/data/process
       - ./data/pipelines:/repo/data/pipelines
       # Oculta el .venv del host (Windows): la imagen usa su propio Python y el sondeo de la
       # recarga no tiene que recorrerlo.
       - /repo/services/brasaland-api/.venv
+      - /repo/services/tasks/.venv
     environment:
       # Obligatorias: sin ellas, la API no arranca y Compose se detiene con este mensaje.
       SECRET_KEY: ${SECRET_KEY:?Falta SECRET_KEY en el .env de la raíz (copia .env.example a .env)}
@@ -53,6 +55,8 @@ services:
       TELEMETRY_ENDPOINT: ${TELEMETRY_ENDPOINT:-}
       # POST /reporting/pipeline-runs pide las corridas manuales a este servidor de Prefect.
       PREFECT_API_URL: http://prefect-server:4200/api
+      # Cola de tareas (#DEV-55): el mismo Redis que el worker y Flower, por el nombre del servicio.
+      REDIS_URL: redis://redis:6379/0
       # Recarga en caliente por sondeo (los bind mounts no propagan los eventos de archivos).
       WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
     healthcheck:
@@ -62,6 +66,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    depends_on:
+      # Al arrancar, la API abre las conexiones con Redis (el primer 202 no espera a conectarse).
+      redis:
+        condition: service_healthy
     networks:
       - brasaland-net
 
@@ -199,6 +207,56 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+    networks:
+      - brasaland-net
+
+  celery-worker:
+    # Consumidor de la cola de tareas (#DEV-55): un proceso aparte de la API. Detener la API no lo
+    # detiene, y los mensajes esperan en Redis mientras él está parado. Escucha las colas default
+    # (telemetry.report) y dead_letter (dead_letters.record, que escribe en ops.task_dead_letters).
+    build:
+      context: ./services
+      dockerfile: tasks/Dockerfile
+    command: ["celery", "-A", "brasaland_tasks.celery_app", "worker", "-Q", "default,dead_letter", "--loglevel=INFO", "--hostname=worker@%h"]
+    volumes:
+      # El código del host: un reinicio del worker basta para recoger los cambios.
+      - ./services/tasks:/repo/services/tasks
+      - ./services/telemetry:/repo/services/telemetry
+      # Oculta el .venv del host (Windows): la imagen usa /opt/venv.
+      - /repo/services/tasks/.venv
+    env_file:
+      # TASKS_DATABASE_URL: la cadena del rol task_worker (ver services/tasks/.env.example), y
+      # TASKS_FAULT_INJECTION si se quiere forzar un fallo. Su REDIS_URL local no se usa: la fija environment.
+      - path: ./services/tasks/.env
+        required: false
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Parada ordenada (docker compose stop): el worker deja de tomar mensajes y termina la tarea en curso.
+    # Más que el límite duro de una tarea (90 s), para que Docker no la mate antes con SIGKILL.
+    stop_grace_period: 100s
+    restart: unless-stopped
+    networks:
+      - brasaland-net
+
+  flower:
+    # Monitor de la cola (#DEV-55) en http://localhost:5555: tareas en cola, en proceso, completadas y
+    # fallidas, y las colas default y dead_letter. Misma imagen que el worker.
+    build:
+      context: ./services
+      dockerfile: tasks/Dockerfile
+    command: ["celery", "-A", "brasaland_tasks.celery_app", "flower", "--port=5555"]
+    ports:
+      # Solo en 127.0.0.1: Flower de desarrollo, sin autenticación.
+      - "127.0.0.1:5555:5555"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - brasaland-net

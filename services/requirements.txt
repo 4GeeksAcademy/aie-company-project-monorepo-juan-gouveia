@@ -92,6 +92,8 @@ numpy==2.5.5 ; python_full_version >= '3.12'
     # via pandas
 opentelemetry-api==1.45.2
     # via fastapi
+packaging==26.3
+    # via kombu
 pandas==3.1.1
     # via
     #   brasaland-pipelines
@@ -135,7 +137,9 @@ pytz==2026.6
 pyyaml==6.0.3
     # via uvicorn
 redis==8.2.0
-    # via brasaland-tasks
+    # via
+    #   brasaland-tasks
+    #   kombu
 requests==2.34.2
     # via resend
 resend==2.52.0
