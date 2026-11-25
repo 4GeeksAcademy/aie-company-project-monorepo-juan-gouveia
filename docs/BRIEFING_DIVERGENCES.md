@@ -2034,14 +2034,15 @@ Ticket #DEV-55, en la rama `feature/async-tasks`. El informe técnico de telemet
 
 Las decisiones (T1 a T14) se tomaron con el desarrollador el 24 de noviembre de 2026.
 
-> **Estado:** en curso. Esta sección se completa con la tabla de criterios al cerrar la tarea.
-
 | Qué | Briefing o enunciado | Implementación | Motivo principal |
 | --- | --- | --- | --- |
 | Método del endpoint convertido | "El endpoint que antes ejecutaba la operación pesada ahora encola la tarea" | `POST /telemetry/report` (mismo path), y el `GET` desaparece | Un `GET` que crea trabajo no es seguro en HTTP |
 | Módulo Celery | `services/celery_app.py` "o similar"; `uv add celery redis flower` | `services/tasks/celery_app.py`, que se importa como `brasaland_tasks.celery_app`, en el proyecto uv `brasaland-tasks` | Cada paquete de `services/` es un proyecto uv propio; no hay un proyecto en la raíz |
 | "Si una tarea falla hasta tres veces" | `max_retries=3` | `max_retries=3`: tres reintentos, es decir, cuatro ejecuciones; la DLQ registra `attempt=4` | El checklist fija el valor de `max_retries` |
 | Qué llega a la DLQ | Las tareas que superan `max_retries` | Esas, y también los fallos permanentes, que no se reintentan (con `attempt=1`) | Que ningún fallo final quede solo en el log |
+| Ruta y acceso de la consulta | `GET /tasks/{task_id}` | En la raíz, con token, solo para quien encoló la tarea o un admin; 404 para el resto | No revelar tareas ajenas; Celery respondería `pending` a cualquier id |
+| Estados | `pending`, `started`, `success`, `failure` | Los cuatro; `RETRY` y `RECEIVED` → `pending`, `REVOKED` → `failure` | Son los únicos valores que admite el ticket |
+| Resultado de una tarea fallida | "El resultado cuando esté disponible" | `{"error": "<tipo>: <primera línea>"}` | El SQL y el traceback quedan en el log y en la DLQ |
 | Destino del PR | Sin especificar (`main` en los anteriores) | `feature/nightly-export` | Los PR #17 a #28 siguen abiertos |
 
 ### 1. El informe se pide con `POST`
@@ -2058,3 +2059,67 @@ En Celery, `max_retries=3` permite tres reintentos además de la ejecución orig
 
 **Coste:** el enunciado habla de "tres fallos" y el registro muestra el intento 4. El PR lo explica.
 
+### 3. Los fallos permanentes también llegan a la DLQ
+
+El ticket manda a la DLQ las tareas que superan `max_retries`. Un fallo que no se reintenta (falta la tabla, un error de datos, unos argumentos inválidos) nunca llega a superarlo, y solo quedaría en el log y en el resultado de Redis, que caduca a las 24 h. Por eso también se registra, con su intento real (1) y el motivo `non_retryable`; los que agotan los reintentos llevan `max_retries_exceeded`. La tabla distingue los dos con un `CHECK`.
+
+**Coste:** ninguno; la DLQ contiene más de lo que pide el ticket, sin contradecirlo.
+
+### 4. `GET /tasks/{task_id}` está en la raíz y solo responde a quien encoló la tarea
+
+La ruta es la literal del ticket, fuera de `/api/v1`, como `/telemetry` y `/reporting`, y exige token. Al encolar, la API guarda en Redis quién lo pidió; solo esa persona o un admin consultan la tarea, y cualquier otro usuario, o un id desconocido o caducado, recibe `404 task_not_found`, sin revelar si existe. Sin ese registro, Celery respondería `PENDING` a cualquier id inventado.
+
+**Coste:** una clave más en Redis por tarea (24 h, como los resultados).
+
+### 5. `RETRY` se muestra como `pending`
+
+El ticket fija cuatro estados (`pending`, `started`, `success`, `failure`). Celery tiene además `RETRY` (esperando el countdown de un reintento), `RECEIVED` y `REVOKED`. `RETRY` y `RECEIVED` se proyectan a `pending`, porque la tarea vuelve a estar en cola, y `REVOKED` a `failure`. Para que exista `started`, el worker registra ese estado (`task_track_started`).
+
+**Coste:** el cliente no distingue "en cola por primera vez" de "esperando un reintento"; el log del worker y Flower sí.
+
+### 6. Con `failure`, `result` lleva un resumen del error
+
+El ticket pide el resultado "cuando esté disponible". Con `failure` es `{"error": "<tipo>: <primera línea>"}`, sin el SQL ni el traceback, que podrían exponer detalles internos. El error completo, con traceback, queda en el log del worker y en `ops.task_dead_letters`.
+
+**Coste:** para diagnosticar hay que mirar el log o la DLQ, no la respuesta.
+
+### 7. El PR va contra la rama anterior
+
+Como los PR #17 a #28 siguen abiertos, el PR va contra `feature/nightly-export`, como el resto de la cadena, para que solo muestre los commits de este ticket.
+
+### Decisiones
+
+- **T1, operación:** `GET /telemetry/report`, medido como la más lenta y la única sin techo (crece con la telemetría acumulada).
+- **T2, endpoint:** `POST /telemetry/report` → `202 {"task_id"}`, con deduplicación por parámetros (apartado 1).
+- **T3, módulo:** paquete `services/tasks/` (`brasaland-tasks`, uv); la API encola por nombre con `send_task`.
+- **T4, consulta:** `GET /tasks/{task_id}` en la raíz, para el dueño o un admin (apartado 4).
+- **T5, estados:** proyección de los de Celery a los cuatro del ticket; `RETRY` → `pending` (apartado 5).
+- **T6, reintentos:** solo errores transitorios (base caída, conexión cortada, `statement_timeout`, límite suave), con `countdown` explícito de 10, 20 y 40 s.
+- **T7, conteo:** `max_retries=3`, cuatro ejecuciones (apartado 2); los permanentes también a la DLQ (apartado 3).
+- **T8, DLQ:** cola real `dead_letter`; la tarea `dead_letters.record` guarda cada mensaje con un INSERT idempotente y reintenta mientras la base no responde.
+- **T9, tabla y rol:** `ops.task_dead_letters` (migración 007) y el rol `task_worker`, que lee `telemetry_events` y solo lee e inserta en la DLQ (`TASKS_DATABASE_URL`).
+- **T10, garantías:** ACK tras éxito, `reject_on_worker_lost`, prefetch 1, límites de 60 y 90 s, `visibility_timeout` de 300 s, resultados de 24 h, solo JSON; Redis con AOF y `noeviction`.
+- **T11, Compose:** `redis`, `celery-worker` y `flower`, con los puertos publicados solo en `127.0.0.1`.
+- **T12, fallos forzados:** `TASKS_FAULT_INJECTION` (`transient`, `transient:N`, `permanent`), solo en el worker.
+- **T13, backoffice:** `/telemetria` encola y consulta cada 1 s (2 s pasados 10 s), con un tope de 3 min.
+- **T14, caché:** la deduplicación hace de caché (60 s tras un `success`); se retiran la caché en memoria y `X-Cache`.
+
+### Verificación de los criterios
+
+En Docker (`api`, `celery-worker`, `flower` y `redis`) contra Supabase, el 25 de noviembre de 2026. Las peticiones se hicieron con la API real dentro de su contenedor y un admin de prueba.
+
+| Criterio | Cumplimiento | Evidencia |
+| --- | --- | --- |
+| 1. Redis en Docker y los workers conectados sin errores | ✅ | `redis:8.10.3-alpine` (imagen oficial, `6379`, `noeviction`, AOF); el worker registra `Connected to redis://…@redis:6379/0` y `ready`, e `inspect ping` responde `pong` |
+| 2. `202 Accepted` con `task_id` en menos de 200 ms | ✅ | `api.timing`: 9–35 ms en caliente y 62–70 ms en la primera petición tras arrancar (el `lifespan` abre las conexiones con Redis; sin eso, 408 ms) |
+| 3. `GET /tasks/{task_id}` con el estado correcto en cada fase | ✅ | Con el worker parado, `pending`; después, `started` y `success` con el informe; con reintentos, `pending` durante las esperas; tras agotarlos, `failure` con el error. 404 para un id desconocido o de otra persona |
+| 4. Reintentos con backoff, no inmediatos | ✅ | `TASKS_FAULT_INJECTION=transient:2`: "Reintento en 10 s", "Reintento en 20 s" y éxito en el intento 3 |
+| 5. Tras tres fallos, la tarea en la DLQ con `task_id`, intento y error en base de datos | ✅ | `transient`: 4 ejecuciones (10, 20 y 40 s) y una fila en `ops.task_dead_letters` con `attempt=4`, `max_retries_exceeded`, error completo, traceback y `failed_at`. `permanent`: fila con `attempt=1`, `non_retryable` |
+| 6. Detener la API no detiene el worker ni pierde mensajes | ✅ | Con `docker compose stop api` y la tarea en cola, el worker la procesó y la cola quedó vacía. Además, tras un `SIGKILL` del worker a mitad de tarea, las dos interrumpidas volvieron solas a los 309 s (`visibility_timeout`) y terminaron bien |
+| 7. Mensajes en cola solo con referencias | ✅ | `LRANGE default`: 1240 bytes; `kwargs` = `start`, `end` (fechas ISO) y `requested_by` (un id) |
+| 8. Flower con al menos una tarea completada y una fallida | ✅ | Flower en `http://localhost:5555`: 6 `telemetry.report` `SUCCESS`, 2 `FAILURE` y 2 `dead_letters.record` `SUCCESS`; captura en el PR |
+| Instancia de Celery con Redis como broker y backend; `REDIS_URL` | ✅ | `services/tasks/celery_app.py`; la API, el worker y Flower leen `REDIS_URL` |
+| `max_retries=3` y `countdown` creciente | ✅ | `tasks.py`: `max_retries=3`, `countdown` 10/20/40 s; pruebas en `services/tasks/tests/test_tasks.py` |
+| Worker como proceso independiente, documentado en el README del monorepo | ✅ | Servicio `celery-worker` de Compose; la API nunca importa el código de las tareas. README raíz, "Cola de tareas: levantar y detener el worker" |
+| Log por tarea con `task_id`, intento, estado y duración; el error completo en los fallos | ✅ | `services/tasks/logs.py` (señales de Celery): una línea por estado con `task_id`, `attempt` y `duration_ms`, y el traceback en `failure`; nunca los argumentos |
+| Toda tarea tiene timeout; ACK solo tras éxito | ✅ | Límites de 60 y 90 s; `task_acks_late` y `reject_on_worker_lost` (la reentrega tras el `SIGKILL` lo demuestra) |

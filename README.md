@@ -63,6 +63,7 @@ This repository holds the **Brasaland** project. `CONTEXT.md` (and its Spanish v
 | Data | [`data/raw/`](./data/raw/README.md) | `incidents-brasaland.csv` (100 test incidents) |
 | Business pipeline | [`data/pipelines/`](./data/pipelines/README.md), [`data/process/`](./data/process/README.md) and [`services/reporting/`](./services/reporting/README.md) | Prefect flow that recomputes the weekly cost and waste report per location every night, launched by the [nightly script](./scripts/README.md), into `reporting.weekly_location_performance` (Supabase), in subflows; its three endpoints under `/reporting`; the backoffice dashboard [`/reporte-semanal`](./uis/backoffice/README.md#tools), and the unit tests of its tasks in [`tests/pipelines/`](./tests/pipelines/README.md) ([design](./data/pipelines/PIPELINE_DESIGN.md), in Spanish) |
 | Nightly telemetry script | [`scripts/nightly_export.py`](./scripts/README.md#nightly_exportpy) and [`services/jobs/`](./services/jobs/README.md) | Every night (`nightly-scheduler` service, `0 8 * * *` UTC) it exports the previous day's telemetry to CSV in `data/raw/telemetry_exports/`, launches the business pipeline and records the execution in `ops.job_runs` (`pending → processing → completed \| failed`), with `processing` as the lock and per-date idempotency |
+| Asynchronous task queue | [`services/tasks/`](./services/tasks/README.md) | Celery on Redis (ticket #DEV-55): the telemetry technical report is enqueued with `POST /telemetry/report` (`202` with a `task_id`) and read from `GET /tasks/{task_id}`; retries with 10, 20 and 40 s waits, a Dead Letter Queue in `ops.task_dead_letters` (Supabase) and Flower to follow the queue |
 | AI, automation and infrastructure | `agents/`, `skills/`, `mcps/`, `workflows/`, `infra/` | Template structure and examples only |
 
 - Instructions for coding agents are in the root [`AGENTS.md`](./AGENTS.md), with development rules and skills in `.agents/`.
@@ -72,7 +73,7 @@ This repository holds the **Brasaland** project. `CONTEXT.md` (and its Spanish v
 
 ## Running with Docker
 
-The development environment is defined in [`docker-compose.yml`](./docker-compose.yml) (ticket #infra-40): four containers on the `brasaland-net` network, with hot reload and the source code mounted from the host.
+The development environment is defined in [`docker-compose.yml`](./docker-compose.yml) (ticket #infra-40): the containers in the table, on the `brasaland-net` network, with hot reload and the source code mounted from the host.
 
 **Requirements:** Docker Desktop, or Docker Engine with the Compose v2 plugin. You do not need Node or Python on your machine.
 
@@ -90,6 +91,9 @@ Creating `.env` is the only manual step: secrets cannot live in Git. If `SECRET_
 | `prefect-server` | Prefect server (`prefecthq/prefect:3.9.4-python3.12`) | http://localhost:4200 |
 | `reporting-pipeline` | The business pipeline serving its deployment for the API's manual runs (`data/pipelines/pipeline.py --serve`). It reads its connection from `data/pipelines/.env` (optional: without it, runs fail for lack of a connection) | — |
 | `nightly-scheduler` | The nightly telemetry script ([`scripts/nightly_export.py`](./scripts/nightly_export.py)), launched by supercronic every day at 08:00 UTC ([`scripts/nightly_export.crontab`](./scripts/nightly_export.crontab)): it exports the previous day's telemetry to CSV and launches the pipeline's scheduled run. It reads `services/jobs/.env` and `data/pipelines/.env` (optional: without them, the run fails with a message) | — |
+| `redis` | Broker and result backend of the task queue (`redis:8.10.3-alpine`, AOF and `noeviction`) | `127.0.0.1:6379` |
+| `celery-worker` | The Celery worker of [`services/tasks`](./services/tasks/README.md) (`default` and `dead_letter` queues). It reads `services/tasks/.env` (`TASKS_DATABASE_URL`) | — |
+| `flower` | Task queue monitor | http://localhost:5555 |
 
 - **Service-to-service calls use the service name.** The backoffice proxy (BFF) calls `http://api:8000/api/v1` (`API_BASE_URL`). URLs used by the browser (`NEXT_PUBLIC_API_BASE_URL`, `FRONTEND_URL`) stay as `localhost` URLs.
 - **Hot reload:** the code is bind-mounted, so changes on the host show up without rebuilding. Docker Desktop does not forward file events from Windows or macOS, so both services poll for changes (`NEXT_WATCH_POLL_INTERVAL_MS`, `WATCHFILES_FORCE_POLLING`). In Docker, Next.js runs with webpack (`next dev --webpack`) because Turbopack does not detect changes on bind mounts; outside Docker, `npm run dev` still uses Turbopack.
@@ -107,6 +111,23 @@ Useful commands (from the repository root):
 | Seed the supplier directory | `docker compose exec api python -m app.domains.suppliers.seed` |
 | Create the first admin (interactive) | `docker compose exec api python -c "import sys; from app.domains.users.create_admin import run; sys.exit(run())"` |
 | Seed the inventory (Supabase) | `docker compose exec api python -c "import sys; from app.domains.inventory.seed import main; sys.exit(main())"` |
+
+### Task queue: starting and stopping the worker
+
+The telemetry technical report (`POST /telemetry/report`) is computed in the background (ticket #DEV-55): the API enqueues it in Redis and answers `202` with a `task_id`, the Celery worker computes it in its own container and `GET /tasks/{task_id}` returns its state. The worker is a separate process from the API: stopping the API does not stop it, and messages wait in Redis while the worker is stopped. Details in [`services/tasks/`](./services/tasks/README.md).
+
+Once: copy `services/tasks/.env.example` to `services/tasks/.env` and fill in `TASKS_DATABASE_URL` (the connection string of the `task_worker` role from migration 007). Compose sets `REDIS_URL` for the three services.
+
+| Task | Command |
+| --- | --- |
+| Start the worker and Flower (and Redis) | `docker compose up -d celery-worker flower` |
+| Check that the worker is connected | `docker compose exec celery-worker celery -A brasaland_tasks.celery_app inspect ping` → `pong` |
+| Follow its log (one line per state, with `task_id`, attempt and duration) | `docker compose logs -f celery-worker` |
+| Monitor the queue | Flower at http://localhost:5555 |
+| Stop the worker (warm shutdown: it finishes the running task, up to 100 s) | `docker compose stop celery-worker` |
+| Start it again (picks up changes in the mounted code) | `docker compose restart celery-worker` |
+
+Outside Docker, with Redis up: `uv run --env-file .env celery -A brasaland_tasks.celery_app worker -Q default,dead_letter --loglevel=INFO` from `services/tasks` (on Windows, add `--pool=solo`), and stop it with `Ctrl+C`. Final failures are recorded in `ops.task_dead_letters` (Supabase).
 
 The API image installs its dependencies from [`services/requirements.txt`](./services/requirements.txt), generated from `uv.lock`. After changing the API's dependencies, regenerate it as its header explains. The local packages `packages/shared` and `packages/brasa-core` reach the images as Compose `additional_contexts`. Deploying to a production server is out of scope: see [`docs/BRIEFING_DIVERGENCES.md`](./docs/BRIEFING_DIVERGENCES.md#contenedorización-del-monorepo).
 
