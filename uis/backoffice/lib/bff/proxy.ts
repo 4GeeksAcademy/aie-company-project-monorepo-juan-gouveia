@@ -3,7 +3,8 @@
 // de servidor y el navegador no necesita CORS. El token JWT lo envía el navegador en Authorization
 // (ticket AUTH-02) y se reenvía tal cual; la API es quien lo valida.
 //
-// Lo usan las rutas de app/api/: el catch-all (todo /api/v1) y la del reporte técnico de telemetría,
+// Lo usan las rutas de app/api/: el catch-all (todo /api/v1) y las del reporte técnico de telemetría,
+// del estado de las tareas (/tasks) y del reporte semanal (/reporting),
 // que la API sirve fuera de /api/v1. Solo se ejecuta en el servidor.
 
 // Si la API no responde en este tiempo, se corta la petición y se responde 504: el navegador no
@@ -12,7 +13,7 @@ const API_TIMEOUT_MS = 15_000;
 
 // Cabeceras que se copian en cada sentido; el resto (host, cookies…) no se reenvía.
 // x-request-id: correlación de la telemetría (el navegador lo crea, la API lo registra y lo devuelve).
-// x-cache: HIT o MISS de las cachés de la API (inventario y reporte), para `api_latency_recorded`.
+// x-cache: HIT o MISS de las cachés de la API (inventario, locales y reporte semanal), para `api_latency_recorded`.
 const REQUEST_HEADERS = ["content-type", "accept", "authorization", "x-request-id"];
 const RESPONSE_HEADERS = ["content-type", "content-disposition", "x-request-id", "x-cache"];
 

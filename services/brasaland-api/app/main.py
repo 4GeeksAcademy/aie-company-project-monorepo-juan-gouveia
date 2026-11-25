@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from app.core.config import API_PREFIX, frontend_origin, get_settings
 from app.core.cors import PathScopedCORSMiddleware
 from app.core.database import get_engine, init_db
-from app.core.errors import register_error_handlers
+from app.core.errors import ApiError, register_error_handlers
 from app.core.timing import register_timing_middleware
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.router import router as auth_router
@@ -24,6 +24,9 @@ from app.domains.profiles.router import router as profiles_router
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.router import router as suppliers_router
 from app.domains.suppliers.seed import seed_if_empty
+from app.domains.tasks.dependencies import get_task_queue, queue_configured
+from app.domains.tasks.queue import TaskQueueUnavailable
+from app.domains.tasks.router import router as tasks_router
 from app.domains.telemetry.router import router as telemetry_router
 from app.domains.users.router import router as users_router
 
@@ -40,6 +43,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Captura de telemetría: la URL del receptor se declara desde ya, aunque la API todavía no emite eventos.
     if settings.telemetry_endpoint:
         logger.info("Receptor de telemetría: %s (la API aún no envía eventos).", settings.telemetry_endpoint)
+    # Cola de tareas (#DEV-55): sin REDIS_URL la API funciona, pero no encola el reporte de telemetría
+    # ni consulta tareas (503 task_queue_unavailable).
+    if not queue_configured():
+        logger.warning("Cola de tareas desactivada: falta REDIS_URL. POST /telemetry/report y GET /tasks darán 503.")
+    elif get_task_queue not in app.dependency_overrides:
+        # Conexiones abiertas desde el arranque: el primer 202 no paga la conexión con Redis. Si Redis no
+        # responde, la API arranca igual y lo reintenta en cada petición a la cola.
+        try:
+            get_task_queue().warm_up()
+        except (ApiError, TaskQueueUnavailable) as error:
+            logger.warning("Cola de tareas sin conexión al arrancar: %s", error)
 
     # El directorio de proveedores nunca arranca vacío: si la tabla no tiene datos, se siembra.
     # Se respeta dependency_overrides para que las pruebas usen su propia base temporal.
@@ -81,6 +95,8 @@ app.include_router(telemetry_router)
 # Reporte de negocio (pipeline de desempeño, services/reporting): las tres rutas del briefing, fuera de
 # /api/v1 como las de telemetría. Lecturas para admin y manager; el disparo de corridas, solo admin.
 app.include_router(reporting_router)
+# Cola de tareas (#DEV-55): GET /tasks/{task_id}, en la raíz como /telemetry y /reporting, con token.
+app.include_router(tasks_router, dependencies=PROTECTED)
 app.add_middleware(
     PathScopedCORSMiddleware,
     path_prefix=telemetry_router.prefix,

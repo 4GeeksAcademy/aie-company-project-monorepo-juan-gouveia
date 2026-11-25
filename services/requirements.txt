@@ -1,11 +1,14 @@
 # Dependencias de la API (services/brasaland-api) para la imagen Docker (services/Dockerfile).
 # Generado desde uv.lock; no se edita a mano. Para regenerarlo, desde services/brasaland-api:
-#   uv export --frozen --no-dev --no-hashes --no-emit-project --no-emit-package brasaland-shared --no-emit-package brasaland-telemetry --no-emit-package brasaland-reporting --no-emit-package brasaland-pipelines --no-emit-package brasaland-process --no-header -o ../requirements.txt
+#   uv export --frozen --no-dev --no-hashes --no-emit-project --no-emit-package brasaland-shared --no-emit-package brasaland-telemetry --no-emit-package brasaland-reporting --no-emit-package brasaland-pipelines --no-emit-package brasaland-process --no-emit-package brasaland-tasks --no-header -o ../requirements.txt
 # y vuelve a poner esta cabecera. Los paquetes locales packages/shared (brasaland-shared),
 # services/telemetry (brasaland-telemetry), services/reporting (brasaland-reporting), data/pipelines
-# (brasaland-pipelines) y data/process (brasaland-process) no se incluyen: el Dockerfile los instala
-# aparte en modo editable. Sus dependencias de terceros, como pandas o httpx, van en esta lista; Prefect no (solo lo usa la imagen de data/pipelines).
+# (brasaland-pipelines), data/process (brasaland-process) y services/tasks (brasaland-tasks) no se incluyen:
+# el Dockerfile los instala aparte en modo editable. Sus dependencias de terceros, como pandas, httpx o
+# celery y redis, van en esta lista; Prefect no (solo lo usa la imagen de data/pipelines).
 
+amqp==5.4.2
+    # via kombu
 annotated-doc==0.0.5
     # via fastapi
 annotated-types==0.8.0
@@ -15,8 +18,16 @@ anyio==4.16.0
     #   httpx
     #   starlette
     #   watchfiles
+async-timeout==5.0.1 ; python_full_version < '3.11.3'
+    # via redis
 bcrypt==5.0.0
     # via libpass
+billiard==4.3.2
+    # via celery
+celery==5.7.0
+    # via
+    #   brasaland-tasks
+    #   flower
 certifi==2026.10.23
     # via
     #   httpcore
@@ -27,7 +38,18 @@ cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.5.2
     # via requests
 click==8.5.0
-    # via uvicorn
+    # via
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
+    #   uvicorn
+click-didyoumean==0.3.1
+    # via celery
+click-plugins==1.1.1.2
+    # via celery
+click-repl==0.4.1
+    # via celery
 cryptography==50.0.2
     # via python-jose
 dnspython==2.9.1
@@ -40,6 +62,8 @@ fastapi==0.162.0
     # via
     #   brasaland-api
     #   brasaland-reporting
+flower==2.2.0
+    # via brasaland-tasks
 h11==0.16.0
     # via
     #   httpcore
@@ -50,12 +74,16 @@ httptools==0.9.0
     # via uvicorn
 httpx==0.28.1
     # via brasaland-pipelines
+humanize==4.17.0
+    # via flower
 idna==3.20
     # via
     #   anyio
     #   email-validator
     #   httpx
     #   requests
+kombu==5.7.0
+    # via celery
 libpass==1.9.4
     # via brasaland-api
 numpy==2.4.6 ; python_full_version < '3.12'
@@ -64,15 +92,22 @@ numpy==2.5.5 ; python_full_version >= '3.12'
     # via pandas
 opentelemetry-api==1.45.2
     # via fastapi
+packaging==26.3
+    # via kombu
 pandas==3.1.1
     # via
     #   brasaland-pipelines
     #   brasaland-process
     #   brasaland-telemetry
+prometheus-client==0.26.0
+    # via flower
+prompt-toolkit==3.0.53
+    # via click-repl
 psycopg2-binary==2.9.13
     # via
     #   brasaland-api
     #   brasaland-pipelines
+    #   brasaland-tasks
 pyasn1==0.6.5
     # via
     #   python-jose
@@ -87,16 +122,24 @@ pydantic==2.14.2
     #   sqlmodel
 pydantic-core==2.50.2
     # via pydantic
-python-dateutil==4.0.0
-    # via pandas
+python-dateutil==2.9.0.post0
+    # via
+    #   celery
+    #   pandas
 python-dotenv==1.2.4
     # via uvicorn
 python-jose==3.5.0
     # via brasaland-api
 python-multipart==0.0.33
     # via brasaland-api
+pytz==2026.6
+    # via flower
 pyyaml==6.0.3
     # via uvicorn
+redis==8.2.0
+    # via
+    #   brasaland-tasks
+    #   kombu
 requests==2.34.2
     # via resend
 resend==2.52.0
@@ -104,10 +147,13 @@ resend==2.52.0
 rsa==4.9.1
     # via python-jose
 six==1.17.0
-    # via ecdsa
-sqlalchemy==2.1.8
+    # via
+    #   ecdsa
+    #   python-dateutil
+sqlalchemy==2.1.9
     # via
     #   brasaland-pipelines
+    #   brasaland-tasks
     #   brasaland-telemetry
     #   sqlmodel
 sqlmodel==0.0.50
@@ -116,9 +162,12 @@ starlette==1.10.0
     # via fastapi
 tinydb==4.9.0
     # via brasaland-api
+tornado==6.6.1
+    # via flower
 typing-extensions==4.16.0
     # via
     #   anyio
+    #   click-repl
     #   fastapi
     #   opentelemetry-api
     #   pydantic
@@ -132,17 +181,27 @@ typing-inspection==0.4.4
     # via
     #   fastapi
     #   pydantic
-tzdata==2026.6
+tzdata==2026.6 ; sys_platform == 'emscripten' or sys_platform == 'win32'
     # via
+    #   kombu
     #   pandas
-    #   python-dateutil
+    #   tzlocal
+tzlocal==5.4.5
+    # via celery
 urllib3==2.8.0
     # via requests
 uvicorn==0.54.0
     # via brasaland-api
 uvloop==0.23.0 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
     # via uvicorn
+vine==5.1.0
+    # via
+    #   amqp
+    #   celery
+    #   kombu
 watchfiles==1.3.0
     # via uvicorn
+wcwidth==0.9.5
+    # via prompt-toolkit
 websockets==17.4
     # via uvicorn

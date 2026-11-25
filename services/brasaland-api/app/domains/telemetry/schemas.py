@@ -82,7 +82,23 @@ class TelemetryReceipt(BaseModel):
     rejected: int = Field(ge=0, description="Eventos que no cumplen el contrato; no se guardan")
 
 
-# --- Reporte técnico (GET /telemetry/report, plan de telemetría, sección 16) -----------------------------
+# --- Reporte técnico (POST /telemetry/report, plan de telemetría, sección 16; ticket #DEV-55) -------------
+
+
+class TelemetryReportRequest(BaseModel):
+    """Cuerpo de `POST /telemetry/report`. Las dos fechas son opcionales; sin cuerpo, los últimos 7 días."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_date: str | None = Field(
+        None, description="Inicio inclusivo, ISO 8601 (`2026-11-14` o `2026-11-14T08:00:00Z`); sin zona = UTC"
+    )
+    end_date: str | None = Field(None, description="Fin exclusivo, ISO 8601; por defecto, ahora")
+
+
+# Contrato del resultado de la tarea `telemetry.report` (`services/tasks/report.py`), el `result` de
+# `GET /tasks/{task_id}` con `success`. El worker no depende de la API: la prueba de contrato
+# (`tests/telemetry/test_report_task_contract.py`) valida con estos modelos el informe que arma.
 
 Rate = Annotated[float, Field(ge=0, le=1, description="Fracción de 0 a 1, con 4 decimales")]
 
@@ -146,7 +162,7 @@ class ReportMetrics(BaseModel):
 
 
 class TelemetryReport(BaseModel):
-    """Respuesta de `GET /telemetry/report`."""
+    """El informe técnico: resultado de `telemetry.report` (antes, la respuesta de `GET /telemetry/report`)."""
 
     period: ReportPeriod
     metrics: ReportMetrics

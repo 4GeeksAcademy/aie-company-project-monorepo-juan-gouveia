@@ -1,0 +1,42 @@
+[project]
+name = "brasaland-tasks"
+version = "0.1.0"
+description = "Cola de tareas asíncronas de Brasaland (ticket #DEV-55): instancia de Celery sobre Redis, tareas y Dead Letter Queue."
+requires-python = ">=3.11"
+# El worker corre en un proceso propio, fuera de FastAPI: este paquete no depende de la API.
+dependencies = [
+    # La cola: Celery con Redis como broker y como backend de resultados (cliente redis-py).
+    "celery[redis]>=5.7.0",
+    "redis>=8.2.0",
+    # Monitor web de la cola (servicio flower de docker-compose.yml, puerto 5555).
+    "flower>=2.2.0",
+    # Tarea telemetry.report: las métricas del informe técnico (services/telemetry/analysis.py, Pandas).
+    "brasaland-telemetry",
+    # Conexión del worker a Supabase con el rol task_worker (TASKS_DATABASE_URL): lectura de
+    # telemetry_events y escritura de la Dead Letter Queue (ops.task_dead_letters, migración 007).
+    "sqlalchemy>=2.1.9",
+    "psycopg2-binary>=2.9.13",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Esta carpeta es el paquete: services/tasks/celery_app.py se importa como brasaland_tasks.celery_app,
+# lo más cerca posible del services/celery_app.py del enunciado (cada paquete de services/ es un
+# proyecto uv propio). Worker: celery -A brasaland_tasks.celery_app worker.
+[tool.setuptools]
+package-dir = { "brasaland_tasks" = "." }
+packages = ["brasaland_tasks"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+# Paquete local del monorepo, en modo editable, como en services/brasaland-api.
+brasaland-telemetry = { path = "../telemetry", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

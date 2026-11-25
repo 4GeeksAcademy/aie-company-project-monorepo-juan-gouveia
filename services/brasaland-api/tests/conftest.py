@@ -18,13 +18,15 @@ from app.domains.incidents.incident_repository import IncidentRepository
 from app.domains.incidents.repository import LastAnalysisRepository
 from app.domains.inventory.cache import invalidate_inventory
 from app.domains.locations.service import locations_cache
-from app.domains.telemetry.report import report_cache
 from app.domains.suppliers.dependencies import get_repository as get_supplier_repository
 from app.domains.suppliers.repository import SupplierRepository
+from app.domains.tasks.dependencies import get_task_queue
+from app.domains.tasks.queue import TaskQueue
 from app.domains.users.database import AuthStore
 from app.domains.users.dependencies import get_auth_store
 from app.main import app
 from tests.locations.helpers import seed_locations
+from tests.tasks.fakes import FakeCelery, FakeRedis
 
 SAMPLE = Path(__file__).resolve().parents[3] / "data" / "raw" / "incidents-brasaland.csv"
 
@@ -121,7 +123,7 @@ def inventory_engine(tmp_path):
     # Y las tablas de `reporting`, la 005: aquí, las mismas que define data/pipelines.
     reporting_metadata.create_all(engine)
     # Cada prueba tiene su propia base: las cachés en memoria del proceso (inventario, locales y reporte
-    # de telemetría) no pueden arrastrar respuestas de la prueba anterior.
+    # semanal) no pueden arrastrar respuestas de la prueba anterior.
     invalidate_caches()
     app.dependency_overrides[get_engine] = lambda: engine
     yield engine
@@ -133,8 +135,22 @@ def inventory_engine(tmp_path):
 def invalidate_caches() -> None:
     invalidate_inventory()
     locations_cache.invalidate()
-    report_cache.invalidate()
     weekly_cache.invalidate()
+
+
+@pytest.fixture(autouse=True)
+def task_queue():
+    """Cola de tareas real (`TaskQueue`) sobre Redis y Celery falsos: ninguna prueba toca Redis.
+
+    `task_queue.celery` encola sin worker (`sent`) y `finish` hace de worker; `task_queue.redis` guarda
+    los registros de dueño y de deduplicación.
+    """
+    celery, redis = FakeCelery(), FakeRedis()
+    queue = TaskQueue(celery, redis, registry_ttl_seconds=24 * 60 * 60)
+    queue.celery, queue.redis = celery, redis  # type: ignore[attr-defined]
+    app.dependency_overrides[get_task_queue] = lambda: queue
+    yield queue
+    app.dependency_overrides.pop(get_task_queue, None)
 
 
 @pytest.fixture

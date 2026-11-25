@@ -1,5 +1,6 @@
-// Respuesta de GET /telemetry/report (plan de telemetría, sección 16). Todas las filas son de un día UTC
-// (`date`, YYYY-MM-DD) y las tasas son fracciones de 0 a 1.
+// Reporte técnico de telemetría (plan de telemetría, sección 16): el `result` de GET /tasks/{task_id}
+// cuando la tarea que encola POST /telemetry/report termina bien (ticket #DEV-55). Todas las filas son de
+// un día UTC (`date`, YYYY-MM-DD) y las tasas son fracciones de 0 a 1.
 
 export type ReportLevel = "info" | "warn" | "error";
 

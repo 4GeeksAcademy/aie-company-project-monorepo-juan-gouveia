@@ -43,7 +43,13 @@ COPY --from=data pipelines/pyproject.toml pipelines/*.py /repo/data/pipelines/
 COPY reporting/ /repo/services/reporting/
 RUN uv pip install --system --no-cache --no-deps -e /repo/data/process -e /repo/data/pipelines -e /repo/services/reporting
 
-# 5. Código de la API. En desarrollo, el bind mount de docker-compose.yml lo sustituye por el del host.
+# 5. Cola de tareas (#DEV-55): services/tasks (brasaland-tasks), editable. La API solo usa su configuración
+#    de Celery para encolar por nombre y leer el estado de Redis; el worker corre en su propio servicio.
+#    Sus dependencias (celery, redis, kombu) van en requirements.txt.
+COPY tasks/ /repo/services/tasks/
+RUN uv pip install --system --no-cache --no-deps -e /repo/services/tasks
+
+# 6. Código de la API. En desarrollo, el bind mount de docker-compose.yml lo sustituye por el del host.
 COPY brasaland-api/ ./
 
 # Usuario sin privilegios; storage/ guarda las bases TinyDB y debe poder escribirse.

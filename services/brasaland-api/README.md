@@ -157,14 +157,19 @@ app/
     │   ├── schemas.py      # LocationRead
     │   ├── service.py      # Catalogue read, 10-minute cache and 503 if the table is missing
     │   └── router.py       # GET /locations
+    ├── tasks/
+    │   ├── queue.py        # TaskQueue: enqueue by name, owner and dedupe registry in Redis, states
+    │   ├── dependencies.py # get_task_queue (Redis from REDIS_URL, created on first use) and 503 without a queue
+    │   ├── schemas.py      # TaskAccepted (202) and TaskStatus
+    │   └── router.py       # GET /tasks/{task_id} (whoever enqueued it or an admin)
     ├── telemetry/
     │   ├── models.py       # telemetry_events table (SQLModel with its own registry, outside init_db)
     │   ├── schemas.py      # TelemetryEvent (envelope), TelemetryBatch (loose) and TelemetryReceipt
     │   ├── catalog.py      # GENERATED from event-schemas.json: allowlist, level, value and message per event
     │   ├── generate_catalog.py # `uv run telemetry-catalog`: regenerates catalog.py
     │   ├── service.py      # Per-event validation, event to row and bulk insert with ON CONFLICT
-    │   ├── report.py       # Technical report: period, 60 s cache and call to services/telemetry/analysis.py
-    │   └── router.py       # POST /telemetry/events (receiver) and GET /telemetry/report (admins only)
+    │   ├── report.py       # Technical report: period, dedupe key and task arguments
+    │   └── router.py       # POST /telemetry/events (receiver) and POST /telemetry/report (enqueues; admins only)
     └── suppliers/
         ├── models.py       # Pydantic models: Supplier, SupplierCreate, RateUpdate, StatusUpdate
         ├── database.py     # Suppliers table; path and opening come from core/storage.py
@@ -472,13 +477,14 @@ Events are stored in the Supabase `telemetry_events` table ([telemetry plan](../
 - **Insert only.** The API never updates or deletes events, and in the database a trigger rejects any `UPDATE`, `DELETE` or `TRUNCATE`. Exceptional purges (retention, right to erasure) are done by hand, as the migration itself explains.
 - **No access from the Supabase REST API.** RLS is enabled with no policies, and the `anon` and `authenticated` roles have no privileges. The API connects as `postgres`, which is not subject to RLS.
 
-## Telemetry technical report (`GET /telemetry/report`)
+## Telemetry technical report (`POST /telemetry/report`)
 
-Operational metrics computed over `telemetry_events` for the engineering team ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 16). The endpoint computes nothing itself: it resolves the period and calls the functions of the [`services/telemetry/analysis.py`](../telemetry/README.md) pipeline, which load only that window in SQL and aggregate with Pandas (`app/domains/telemetry/report.py`).
+Operational metrics computed over `telemetry_events` for the engineering team ([telemetry plan](../../docs/telemetry/telemetry-plan.md), section 16). Since ticket #DEV-55 it is an **asynchronous task**: the API validates and resolves the period (`app/domains/telemetry/report.py`), enqueues the `telemetry.report` task in Redis and answers `202 {"task_id"}` right away, with a `Location: /tasks/{task_id}` header. The [`services/tasks`](../tasks/README.md) worker calls the functions of [`services/telemetry/analysis.py`](../telemetry/README.md), which load only that window in SQL and aggregate with Pandas. The report is read from `GET /tasks/{task_id}`. It is `POST`, not `GET` as before, because it creates work.
 
-- **Access:** outside `/api/v1`, like the receiver, but **admins only**: 401 without a token and 403 with another role. The backoffice requests it through a dedicated route of its proxy; CORS on `/telemetry` is still limited to `POST`.
-- **Period:** optional `start_date` and `end_date`, in ISO 8601 (`2026-11-14` = 00:00 UTC; `2026-11-14T08:00:00Z`; no offset = UTC). Without parameters, the last 7 days until now; only `end_date`, the 7 days before it; only `start_date`, until now. Start inclusive, end exclusive. 422 errors: `invalid_date`, `invalid_period` (start not before end) and `period_too_long` (more than 90 days).
-- **Response (`TelemetryReport`):**
+- **Access:** outside `/api/v1`, like the receiver, but **admins only**: 401 without a token and 403 with another role. The backoffice requests it through a dedicated route of its proxy.
+- **Period:** optional JSON body with `start_date` and `end_date` (unknown keys → 422), in ISO 8601 (`2026-11-14` = 00:00 UTC; `2026-11-14T08:00:00Z`; no offset = UTC). Without dates, the last 7 days until now; only `end_date`, the 7 days before it; only `start_date`, until now. Start inclusive, end exclusive. Dates are validated before enqueueing, with 422 errors: `invalid_date`, `invalid_period` (start not before end) and `period_too_long` (more than 90 days).
+- **Queue message:** references only, `{"start", "end", "requested_by"}` (two ISO 8601 UTC dates and the requester's id).
+- **Result (`TelemetryReport`, in the `result` of `GET /tasks/{task_id}` on `success`):**
 
   ```json
   {
@@ -493,8 +499,17 @@ Operational metrics computed over `telemetry_events` for the engineering team ([
   ```
 
   `events_per_day` includes every day of the period, with zeros when there were no events. Rates are fractions from 0 to 1.
-- **Cache:** in memory, 60 s, per combination of parameters (`2026-11-14` and `2026-11-14T00:00:00Z` are the same). Without parameters, the period is resolved once and stored with the result, so two requests within the TTL get the same JSON. `X-Cache: HIT` or `MISS` header. The report may lag the table by up to 60 s.
-- **Database failures:** `503 telemetry_report_unavailable`, nothing cached, and an error line in `api.telemetry` (if the table is missing, it asks to run migration 002).
+- **Deduplication (acts as the cache):** the same request (`2026-11-14` and `2026-11-14T00:00:00Z` are the same; without dates, the key is `now`) returns the same `task_id` while its task is queued or running and for 60 s after it succeeds, so the first poll already carries the report. After a failure, or once those 60 s pass, a new task is enqueued. The registry lives in Redis, shared across processes. There is no in-memory cache or `X-Cache` header any more.
+- **Failures:** if Redis does not answer or `REDIS_URL` is missing, `503 task_queue_unavailable` and an error line in `api.telemetry`. Database failures are handled by the worker (retries and the Dead Letter Queue).
+
+## Task queue (`GET /tasks/{task_id}`)
+
+State of an enqueued task (ticket #DEV-55). The API is only the producer: it enqueues by name with `send_task` (the [`services/tasks`](../tasks/README.md) package, its configuration only) and reads the state from the Redis result backend; it never runs tasks.
+
+- **Response (`TaskStatus`):** `{"task_id", "status", "result"}`. `status` is `pending` (queued, also while waiting for a retry), `started`, `success` or `failure`. `result` is the result on `success`, `{"error": "<type>: <first line>"}` on `failure` (no SQL or traceback; the full error is in the worker log and in `ops.task_dead_letters`) and `null` otherwise.
+- **Access:** a token is required. Only whoever enqueued the task or an admin; for anyone else, and for an unknown or expired id (24 h), `404 task_not_found`, without revealing whether it exists.
+- **Redis registry:** on enqueue, `brasaland:tasks:owner:{task_id}` (owner) and, with deduplication, `brasaland:tasks:dedupe:{task}:{key}`, both for 24 h like the results.
+- **`REDIS_URL`:** optional at startup. Without it, the API warns in the log and these routes answer `503 task_queue_unavailable`; everything else works. With it, startup opens the Redis connections so the first `202` does not wait to connect (if Redis does not answer, it only warns).
 
 ## `reporting` schema (business performance pipeline)
 
