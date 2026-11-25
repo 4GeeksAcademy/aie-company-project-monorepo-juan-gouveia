@@ -1,4 +1,4 @@
-"""Las tablas de Supabase quedan cerradas a su API REST (migraciones 002 a 006).
+"""Las tablas de Supabase quedan cerradas a su API REST (migraciones 002 a 007).
 
 Supabase publica las tablas de `public` a los roles `anon` y `authenticated`. Cada tabla de la API
 necesita RLS activado y los permisos de esos roles retirados en alguna migración; si se añade un
@@ -52,7 +52,7 @@ def test_every_migration_table_is_closed_to_the_supabase_rest_roles():
     sql = all_migrations()
     revokes = [line for line in sql.splitlines() if line.startswith("REVOKE ALL ON ")]
     tables = migration_tables()
-    assert {"telemetry_events", "locations", "reporting.pipeline_runs", "ops.job_runs"} <= tables
+    assert {"telemetry_events", "locations", "reporting.pipeline_runs", "ops.job_runs", "ops.task_dead_letters"} <= tables
     for table in tables:
         assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;" in sql, table
         assert f"REVOKE ALL ON {table} FROM anon, authenticated;" in revokes, table
@@ -76,3 +76,22 @@ def test_job_runs_lock_is_the_processing_status():
     sql = " ".join(job_runs_sql().split())
     assert "CREATE UNIQUE INDEX IF NOT EXISTS uq_job_runs_one_processing ON ops.job_runs (job_name) WHERE status = 'processing';" in sql
     assert "CREATE INDEX IF NOT EXISTS idx_job_runs_job_name_target_date ON ops.job_runs (job_name, target_date);" in sql
+
+
+def task_dead_letters_sql() -> str:
+    return (MIGRATIONS / "007_task_dead_letters.sql").read_text(encoding="utf-8")
+
+
+def test_task_dead_letters_reasons_are_the_decided_ones():
+    # Los dos motivos de la decisión T9 y el task_id único que hace idempotente record_dead_letter (T8).
+    sql = " ".join(task_dead_letters_sql().split())
+    assert "CHECK (reason IN ('max_retries_exceeded', 'non_retryable'))" in sql
+    assert "CONSTRAINT uq_task_dead_letters_task_id UNIQUE (task_id)" in sql
+
+
+def test_task_worker_can_only_read_and_insert_the_dead_letters():
+    # Sin UPDATE ni DELETE en la DLQ (T9), y ningún permiso sobre ops.job_runs (es del script nocturno).
+    grants = [line for line in task_dead_letters_sql().splitlines() if line.startswith("GRANT ") and "task_worker" in line]
+    assert "GRANT SELECT, INSERT ON ops.task_dead_letters TO task_worker;" in grants
+    assert "GRANT SELECT ON public.telemetry_events TO task_worker;" in grants
+    assert not any("UPDATE" in line or "DELETE" in line or "job_runs" in line for line in grants)
