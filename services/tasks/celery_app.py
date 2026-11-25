@@ -28,25 +28,23 @@ from __future__ import annotations
 
 import os
 
+# Colas, nombres de las tareas y duración de los resultados: en `names.py`, que se importa sin REDIS_URL.
+from brasaland_tasks.names import (  # noqa: F401  (reexportados: tasks.py y las pruebas los usan desde aquí)
+    DEAD_LETTER_QUEUE,
+    DEFAULT_QUEUE,
+    RECORD_DEAD_LETTER_TASK,
+    RESULT_EXPIRES_SECONDS,
+    TASKS_MODULE,
+    TELEMETRY_REPORT_TASK,
+)
 from celery import Celery
 from kombu import Exchange, Queue
 
 APP_NAME = "brasaland"
 
-# Colas: `default` para las tareas de negocio y `dead_letter` para los fallos finales (decisión T8).
-DEFAULT_QUEUE = "default"
-DEAD_LETTER_QUEUE = "dead_letter"
-
-# Nombres registrados de las tareas (`tasks.py`). La API encola por nombre (`send_task`), sin importar el
-# código de las tareas: el módulo solo se carga en el worker (`include`).
-TELEMETRY_REPORT_TASK = "telemetry.report"
-RECORD_DEAD_LETTER_TASK = "dead_letters.record"
-TASKS_MODULE = "brasaland_tasks.tasks"
-
 SOFT_TIME_LIMIT_SECONDS = 60
 TIME_LIMIT_SECONDS = 90
 VISIBILITY_TIMEOUT_SECONDS = 300
-RESULT_EXPIRES_SECONDS = 24 * 60 * 60
 WORKER_CONCURRENCY = 2
 
 

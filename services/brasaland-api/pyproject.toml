@@ -28,6 +28,9 @@ dependencies = [
     # Endpoints del reporte de negocio (/reporting, services/reporting). Trae data/pipelines (lectura de
     # reporting.* y disparo de corridas con Prefect) y data/process.
     "brasaland-reporting",
+    # Cola de tareas (#DEV-55, services/tasks): solo la configuración de Celery para encolar por nombre
+    # (send_task) y leer el estado de Redis. El código de las tareas solo lo carga el worker.
+    "brasaland-tasks",
 ]
 
 [tool.uv.sources]
@@ -35,6 +38,7 @@ dependencies = [
 brasaland-shared = { path = "../../packages/shared", editable = true }
 brasaland-telemetry = { path = "../telemetry", editable = true }
 brasaland-reporting = { path = "../reporting", editable = true }
+brasaland-tasks = { path = "../tasks", editable = true }
 
 [project.scripts]
 # `uv run seed` carga los proveedores iniciales del briefing en TinyDB.

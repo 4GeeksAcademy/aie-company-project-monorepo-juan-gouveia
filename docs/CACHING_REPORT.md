@@ -270,6 +270,8 @@ Con volumen, `GET /incidents` cuesta 234 ms, `/incidents/summary` 43 ms y `/supp
 - **Migrar TinyDB a PostgreSQL** (§6.4) y volver a medir.
 - **Profiler de React:** el beneficio del `useMemo` está estimado con mediciones del cálculo, no con un perfil de renders en React DevTools.
 
+**Cambio posterior (cola de tareas, ticket #DEV-55, 2026-11-25).** El reporte técnico de telemetría, posterior a este informe, tenía su propia caché en memoria de 60 s por combinación de parámetros (`report_cache`, con `X-Cache`). Al convertirse en tarea asíncrona (`POST /telemetry/report` → `202` y `GET /tasks/{task_id}`), esa caché se retira: la sustituye la deduplicación en Redis, que con la misma clave (los parámetros recibidos, `now` para el que falte) devuelve el mismo `task_id` mientras la tarea vive y 60 s después de terminar bien. Es la primera pieza compartida entre procesos, en la línea de la opción 1 de arriba. Las cachés del inventario, de los locales y del reporte semanal no cambian. Detalle en `services/brasaland-api/README.md`, sección "Telemetry technical report".
+
 ## 8. Verificación
 
 | Comprobación | Resultado |

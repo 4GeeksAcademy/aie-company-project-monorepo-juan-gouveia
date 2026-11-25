@@ -17,16 +17,22 @@ Decisiones:
   para que el backoffice reintente (los reintentos no duplican filas).
 - El log nunca copia valores de los eventos: solo cantidades, tipos y el campo que falló.
 
-`GET /telemetry/report` (fase de reporte técnico, sección 16.3) sirve las métricas del pipeline de
-`services/telemetry/analysis.py` con una cache de 60 s (`report.py`). Al contrario que el receptor,
-exige token y rol `admin`: describe el estado interno del sistema. El backoffice lo pide por una ruta
-propia de su intermediario; el CORS de `/telemetry` sigue limitado a `POST`.
+`POST /telemetry/report` (fase de reporte técnico, sección 16.3; ticket #DEV-55) ya no calcula el
+informe: valida el período, encola la tarea `telemetry.report` y responde `202 {"task_id"}` al momento.
+El worker (`services/tasks`) calcula las métricas de `services/telemetry/analysis.py`, y el resultado se
+consulta en `GET /tasks/{task_id}`. Es `POST` y no `GET`, como antes, porque crea trabajo (decisión T2).
+La misma petición con su tarea viva, o hasta 60 s después de terminar bien, devuelve el mismo `task_id`
+(T14). Al contrario que el receptor, exige token y rol `admin`: describe el estado interno del sistema.
+El backoffice lo pide por una ruta propia de su intermediario, no desde el navegador.
 """
 
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+# Nombre registrado de la tarea en el worker: se encola por nombre, sin importar su código.
+# `brasaland_tasks.names` no crea la aplicación de Celery al importarse (no exige REDIS_URL).
+from brasaland_tasks.names import TELEMETRY_REPORT_TASK
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.routing import APIRoute
 from sqlmodel import Session
 
@@ -34,15 +40,13 @@ from app.core.database import get_db
 from app.core.errors import ApiError
 from app.core.logs import console_logger
 from app.domains.auth.dependencies import require_admin
-from app.domains.telemetry.report import (
-    MAX_WINDOW,
-    ReportRequest,
-    TelemetryReportUnavailable,
-    get_report,
-    parse_instant,
-)
-from app.domains.telemetry.schemas import MAX_BATCH_EVENTS, TelemetryBatch, TelemetryReceipt, TelemetryReport
+from app.domains.tasks.dependencies import get_task_queue, queue_unavailable
+from app.domains.tasks.queue import TaskQueue, TaskQueueUnavailable
+from app.domains.tasks.schemas import TaskAccepted
+from app.domains.telemetry.report import MAX_WINDOW, ReportRequest, parse_instant, resolve_period, task_kwargs, utc_now
+from app.domains.telemetry.schemas import MAX_BATCH_EVENTS, TelemetryBatch, TelemetryReceipt, TelemetryReportRequest
 from app.domains.telemetry.service import ParsedBatch, TelemetryStorageError, parse_batch, store_events
+from app.domains.users.models import User
 
 # Un lote de 100 eventos ocupa unos 100 KB; sendBeacon admite 64 KB. Más que esto no es un lote legítimo.
 MAX_BODY_BYTES = 256 * 1024
@@ -132,46 +136,45 @@ def receive_events(batch: TelemetryBatch, session: Session = Depends(get_db)) ->
     return TelemetryReceipt(received=received, stored=stored, rejected=len(parsed.rejections))
 
 
-@router.get(
+@router.post(
     "/report",
-    response_model=TelemetryReport,
-    summary="Reporte técnico de telemetría",
+    status_code=202,
+    response_model=TaskAccepted,
+    summary="Encolar el reporte técnico de telemetría",
     description=(
-        "Métricas operacionales por día UTC calculadas sobre `telemetry_events`: volumen por nivel "
-        "(`events_per_day`), peso de cada tipo de fallo (`error_rate_by_type`), latencia de la API por método "
-        "y ruta (`api_latency_by_route`) y tasa de fallos de login (`auth_failure_rate`). Sin parámetros, "
-        "los últimos 7 días hasta ahora. El resultado se guarda 60 s por combinación de parámetros "
-        f"(`X-Cache: HIT` o `MISS`). Solo administradores. Período máximo: {MAX_WINDOW.days} días."
+        "Encola el cálculo de las métricas operacionales por día UTC sobre `telemetry_events` (volumen por "
+        "nivel, peso de cada tipo de fallo, latencia de la API por método y ruta y tasa de fallos de login) y "
+        "responde al momento con el `task_id`. El informe se consulta en `GET /tasks/{task_id}`. Sin fechas, "
+        "los últimos 7 días hasta ahora. La misma petición con su tarea en cola o en curso, o hasta 60 s "
+        "después de terminar bien, devuelve el mismo `task_id`. Solo administradores. Período máximo: "
+        f"{MAX_WINDOW.days} días."
     ),
     responses={
-        200: {"headers": {"X-Cache": {"description": "`HIT` si salió de la cache; `MISS` si se calculó"}}},
+        202: {"headers": {"Location": {"description": "`/tasks/{task_id}`, donde se consulta el estado"}}},
         401: {"description": "Sin token o con un token no válido."},
         403: {"description": "El usuario no es administrador."},
         422: {"description": "Fecha mal formada (`invalid_date`), inicio no anterior al fin (`invalid_period`) o "
               f"más de {MAX_WINDOW.days} días (`period_too_long`)."},
-        503: {"description": "La base de datos no pudo responder (`telemetry_report_unavailable`)."},
+        503: {"description": "La cola de tareas no está disponible (`task_queue_unavailable`)."},
     },
 )
-def get_telemetry_report(
-    start_date: str | None = Query(
-        None, description="Inicio inclusivo, ISO 8601 (`2026-11-14` o `2026-11-14T08:00:00Z`); sin zona = UTC"
-    ),
-    end_date: str | None = Query(None, description="Fin exclusivo, ISO 8601; por defecto, ahora"),
-    session: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-) -> Response:
-    request = ReportRequest(start=parse_instant(start_date, "start_date"), end=parse_instant(end_date, "end_date"))
+def request_telemetry_report(
+    response: Response,
+    body: TelemetryReportRequest | None = None,
+    admin: User = Depends(require_admin),
+    queue: TaskQueue = Depends(get_task_queue),
+) -> TaskAccepted:
+    body = body or TelemetryReportRequest()
+    request = ReportRequest(
+        start=parse_instant(body.start_date, "start_date"), end=parse_instant(body.end_date, "end_date")
+    )
+    start, end = resolve_period(request, utc_now())
     try:
-        body, hit = get_report(request, session.connection)
-    except TelemetryReportUnavailable as error:
-        if error.missing_table:
-            logger.error(
-                "No se pudo calcular el reporte de telemetría: falta la tabla telemetry_events. "
-                "Ejecuta services/brasaland-api/migrations/002_telemetry_events.sql en Supabase."
-            )
-        else:
-            logger.error(f"No se pudo calcular el reporte de telemetría: {error.reason}")
-        raise ApiError(
-            503, "telemetry_report_unavailable", "No se pudo calcular el reporte de telemetría. Vuelve a intentarlo."
-        ) from error
-    return Response(content=body, media_type="application/json", headers={"X-Cache": "HIT" if hit else "MISS"})
+        task_id = queue.submit(
+            TELEMETRY_REPORT_TASK, task_kwargs(start, end, admin.id), owner_id=admin.id, dedupe_key=request.dedupe_key
+        )
+    except TaskQueueUnavailable as error:
+        logger.error(f"No se pudo encolar el reporte de telemetría: {error}")
+        raise queue_unavailable() from error
+    response.headers["Location"] = f"/tasks/{task_id}"
+    return TaskAccepted(task_id=task_id)

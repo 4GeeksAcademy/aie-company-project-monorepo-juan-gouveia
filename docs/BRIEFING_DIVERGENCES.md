@@ -2039,7 +2039,7 @@ Las decisiones (T1 a T14) se tomaron con el desarrollador el 24 de noviembre de 
 | Qué | Briefing o enunciado | Implementación | Motivo principal |
 | --- | --- | --- | --- |
 | Método del endpoint convertido | "El endpoint que antes ejecutaba la operación pesada ahora encola la tarea" | `POST /telemetry/report` (mismo path), y el `GET` desaparece | Un `GET` que crea trabajo no es seguro en HTTP |
-| Módulo Celery | `services/celery_app.py` "o similar"; `uv add celery redis flower` | `services/tasks/brasaland_tasks/celery_app.py`, en el proyecto uv `brasaland-tasks` | Cada paquete de `services/` es un proyecto uv propio; no hay un proyecto en la raíz |
+| Módulo Celery | `services/celery_app.py` "o similar"; `uv add celery redis flower` | `services/tasks/celery_app.py`, que se importa como `brasaland_tasks.celery_app`, en el proyecto uv `brasaland-tasks` | Cada paquete de `services/` es un proyecto uv propio; no hay un proyecto en la raíz |
 | "Si una tarea falla hasta tres veces" | `max_retries=3` | `max_retries=3`: tres reintentos, es decir, cuatro ejecuciones; la DLQ registra `attempt=4` | El checklist fija el valor de `max_retries` |
 | Qué llega a la DLQ | Las tareas que superan `max_retries` | Esas, y también los fallos permanentes, que no se reintentan (con `attempt=1`) | Que ningún fallo final quede solo en el log |
 | Destino del PR | Sin especificar (`main` en los anteriores) | `feature/nightly-export` | Los PR #17 a #28 siguen abiertos |

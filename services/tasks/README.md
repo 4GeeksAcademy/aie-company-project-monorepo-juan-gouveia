@@ -17,7 +17,8 @@ Client → API (producer) → Redis (broker) → Worker (consumer) → Result
   - JSON only;
   - the `STARTED` state is tracked and results last 24 h;
   - events on, so Flower can show queued, running and finished tasks;
-  - the task names (`telemetry.report`, `dead_letters.record`) that the API uses with `send_task`, with `dead_letters.record` routed to the `dead_letter` queue.
+  - `dead_letters.record` routed to the `dead_letter` queue.
+- **[`names.py`](./names.py):** the queues, the task names (`telemetry.report`, `dead_letters.record`) and how long results last, with no side effects on import. The API uses them without `REDIS_URL` (it enqueues by name with `send_task`); `celery_app` re-exports them.
 - **[`tasks.py`](./tasks.py):** the tasks; only the worker loads them.
   - `telemetry.report`: the technical telemetry report. It takes `start` and `end` (ISO 8601 UTC, already validated by the API) and `requested_by` as kwargs. It retries transient errors only, with `max_retries=3` and waits of 10, 20 and 40 s. Its final failure, after the retries run out or on a permanent error, publishes a message to the `dead_letter` queue from `on_failure`.
   - `dead_letters.record`: consumes the `dead_letter` queue and stores each message in `ops.task_dead_letters` (migration 007) with `INSERT … ON CONFLICT (task_id) DO NOTHING`. If the database does not answer, it retries with no limit, waiting 10 s to 2 min (less than the `visibility_timeout`).

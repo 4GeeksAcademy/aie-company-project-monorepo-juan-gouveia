@@ -17,7 +17,8 @@ Cliente → API (productor) → Redis (broker) → Worker (consumidor) → Resul
   - solo JSON;
   - se registra el estado `STARTED` y los resultados duran 24 h;
   - eventos activados, para que Flower muestre las tareas en cola, en proceso y terminadas;
-  - los nombres de las tareas (`telemetry.report`, `dead_letters.record`), que la API usa con `send_task`, y `dead_letters.record` enrutada a la cola `dead_letter`.
+  - `dead_letters.record` enrutada a la cola `dead_letter`.
+- **[`names.py`](./names.py):** las colas, los nombres de las tareas (`telemetry.report`, `dead_letters.record`) y la duración de los resultados, sin efectos al importar. La API los usa sin `REDIS_URL` (encola con `send_task` por nombre); `celery_app` los reexporta.
 - **[`tasks.py`](./tasks.py):** las tareas; solo las carga el worker.
   - `telemetry.report`: el informe técnico de telemetría. Recibe en kwargs `start` y `end` (ISO 8601 UTC, ya validados por la API) y `requested_by`. Reintenta solo los errores transitorios, con `max_retries=3` y esperas de 10, 20 y 40 s. Su fallo final, al agotar los reintentos o por un error permanente, publica un mensaje en la cola `dead_letter` desde `on_failure`.
   - `dead_letters.record`: consume la cola `dead_letter` y guarda cada mensaje en `ops.task_dead_letters` (migración 007) con `INSERT … ON CONFLICT (task_id) DO NOTHING`. Si la base no responde, reintenta sin límite, con esperas de 10 s a 2 min (menos que el `visibility_timeout`).
